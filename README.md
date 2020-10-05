@@ -6,9 +6,9 @@ get sorting networking from: https://pages.ripco.net/~jgamble/nw.html
 
 Choose an algorithm i.e Batcher's Merge Exchange and copy the output to a file named:
 
-- [anything without a dash]-[N]
+- [anything without a "-"]-[N]
 
-#### do not include a file extension (or make create_network.py more robust)
+a file extension may break things (code is split filename on "-" and take int(split("-")[1]) if you know python you probably know better than me)
 
 $> ./create_network [your file]
 
