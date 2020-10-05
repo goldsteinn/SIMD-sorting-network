@@ -6,7 +6,7 @@ get sorting networking from: https://pages.ripco.net/~jgamble/nw.html
 
 Choose an algorithm i.e Batcher's Merge Exchange and copy the output to a file named:
 
-- <anything without a "-">-<N>
+- <anything without a dash>-<N>
 
 #### do not include a file extension (or make create_network.py more robust)
 
