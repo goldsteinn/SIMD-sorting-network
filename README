@@ -1,0 +1,18 @@
+Creates sorting network using avx
+- epi8 / epi64 don't work (need to fix vec_sort_primitives.h blend at the very least)
+- if you specify a sorting network that has more bytes than __m512i register its UB
+
+get sorting networking from: https://pages.ripco.net/~jgamble/nw.html
+
+Choose an algorithm i.e Batcher's Merge Exchange and copy the output to a file named:
+
+- <anything without a "-">-<N>
+
+#### do not include a file extension (or make create_network.py more robust)
+
+$> ./create_network <your file>
+
+will output C++ code for the sorting network that uses moderately optimized SIMD instructions (if you really need it optimized a lot of the permutations can be replaced with shuffle)
+
+
+
