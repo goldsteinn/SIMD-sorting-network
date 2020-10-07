@@ -5,9 +5,11 @@
 #include <string.h>
 #include <algorithm>
 
-#include "cpp_attributes.h"
-#include "vec_sort.h"
+#include <util/constexpr_util.h>
+#include <util/cpp_attributes.h>
 #include "x86intrin.h"
+
+#include "vec_sort.h"
 
 template<typename T, uint32_t n>
 struct sarr {
@@ -42,23 +44,6 @@ struct sarr {
     }
 };
 
-constexpr uint32_t
-ulog2(uint32_t v) {
-    uint32_t r = 0, s = 0;
-    r = (v > 0xffff) << 4;
-    v >>= r;
-    s = (v > 0xff) << 3;
-    v >>= s;
-    r |= s;
-    s = (v > 0xf) << 2;
-    v >>= s;
-    r |= s;
-    s = (v > 0x3) << 1;
-    v >>= s;
-    r |= s;
-    return r | (v >> 1);
-}
-
 
 enum SORT { SSORT = 0, VSORT = 1 };
 template<typename T, uint32_t n, SORT s>
@@ -73,28 +58,16 @@ do_sort(T * arr) {
 }
 
 
-static constexpr uint32_t max_test_size = (1u) << 24;
+static constexpr uint32_t tsize = ((1u) << 24);
 template<typename T, uint32_t n>
 void
 corr_test() {
     sarr<T, n> s1;
     sarr<T, n> s2;
 
-    static constexpr uint32_t tsize =
-        (n == 8 || n == 4) ? (n * ulog2(n)) : max_test_size;
-
     for (uint32_t i = 0; i < tsize; ++i) {
-        if constexpr (tsize <= max_test_size) {
-            uint32_t imask = i;
-            for (uint32_t _i = 0; _i < n; ++_i) {
-                s1.arr[_i] = (T)(imask % n);
-                imask /= n;
-            }
-        }
-        else {
-            for (uint32_t _i = 0; _i < n; ++_i) {
-                s1.arr[_i] = (T)rand();
-            }
+        for (uint32_t _i = 0; _i < n; ++_i) {
+            s1.arr[_i] = (T)rand();
         }
         memcpy(s2.arr, s1.arr, n * sizeof(T));
         do_sort<T, n, SSORT>(s1.arr);
@@ -109,21 +82,11 @@ double
 inner_perf_test() {
     sarr<T, n> s1;
 
-    static constexpr uint32_t tsize = (n <= 8) ? (n * ulog2(n)) : max_test_size;
 
     uint64_t running_total = 0;
     for (uint32_t i = 0; i < tsize; ++i) {
-        if constexpr (tsize <= max_test_size) {
-            uint32_t imask = i;
-            for (uint32_t _i = 0; _i < n; ++_i) {
-                s1.arr[_i] = (T)(imask & (n - 1));
-                imask /= n;
-            }
-        }
-        else {
-            for (uint32_t _i = 0; _i < n; ++_i) {
-                s1.arr[_i] = (T)rand();
-            }
+        for (uint32_t _i = 0; _i < n; ++_i) {
+            s1.arr[_i] = (T)rand();
         }
         uint64_t start = _rdtsc();
         COMPILER_BARRIER()
