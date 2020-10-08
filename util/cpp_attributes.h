@@ -13,6 +13,8 @@
         }                                                                      \
     }
 
+#define CONSTEXPR_FAILURE(...) _UNREACHABLE_
+
 #define BRANCH_LIKELY(cond)   __builtin_expect(cond, 1)
 #define BRANCH_UNLIKELY(cond) __builtin_expect(cond, 0)
 

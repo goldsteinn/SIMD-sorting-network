@@ -17,7 +17,7 @@ v = compare_exchange<T, n,
 3, 4, 2, 0, 
 1
 // clang-format on
->(v, 0x9);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -25,7 +25,7 @@ v = compare_exchange<T, n,
 2, 3, 4, 1, 
 0
 // clang-format on
->(v, 0x4);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -33,7 +33,7 @@ v = compare_exchange<T, n,
 1, 2, 3, 4, 
 0
 // clang-format on
->(v, 0x6);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -41,7 +41,7 @@ v = compare_exchange<T, n,
 4, 0, 1, 2, 
 3
 // clang-format on
->(v, 0x3);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -49,7 +49,7 @@ v = compare_exchange<T, n,
 4, 2, 3, 0, 
 1
 // clang-format on
->(v, 0x5);
+>(v);
 
 vec_store<T, n>(arr, v);
 }

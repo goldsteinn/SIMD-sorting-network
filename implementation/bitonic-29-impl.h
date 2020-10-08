@@ -23,7 +23,7 @@ v = compare_exchange<T, n,
 3, 4, 1, 2, 
 0
 // clang-format on
->(v, 0xaaa952a);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -37,7 +37,7 @@ v = compare_exchange<T, n,
 5, 6, 2, 0, 
 1
 // clang-format on
->(v, 0x6664c99);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -51,7 +51,7 @@ v = compare_exchange<T, n,
 3, 4, 1, 2, 
 0
 // clang-format on
->(v, 0xaaa54aa);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -65,7 +65,7 @@ v = compare_exchange<T, n,
 2, 3, 4, 5, 
 6
 // clang-format on
->(v, 0x1e1c387);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -79,7 +79,7 @@ v = compare_exchange<T, n,
 6, 1, 0, 3, 
 2
 // clang-format on
->(v, 0x6664c93);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -93,7 +93,7 @@ v = compare_exchange<T, n,
 5, 2, 3, 0, 
 1
 // clang-format on
->(v, 0xaaa9515);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -107,7 +107,7 @@ v = compare_exchange<T, n,
 8, 9, 10, 11, 
 12
 // clang-format on
->(v, 0x1fc03f);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -121,7 +121,7 @@ v = compare_exchange<T, n,
 0, 3, 2, 5, 
 4
 // clang-format on
->(v, 0x1c3c3c3);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -135,7 +135,7 @@ v = compare_exchange<T, n,
 2, 5, 4, 0, 
 1
 // clang-format on
->(v, 0x4cccccd);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -149,7 +149,7 @@ v = compare_exchange<T, n,
 5, 2, 3, 28, 
 0
 // clang-format on
->(v, 0x5555556);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -163,7 +163,7 @@ v = compare_exchange<T, n,
 25, 26, 27, 1, 
 0
 // clang-format on
->(v, 0x3ffc);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -177,7 +177,7 @@ v = compare_exchange<T, n,
 12, 11, 10, 9, 
 8
 // clang-format on
->(v, 0x1f00ff);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -191,7 +191,7 @@ v = compare_exchange<T, n,
 0, 7, 6, 5, 
 4
 // clang-format on
->(v, 0x30f0f0f);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -205,7 +205,7 @@ v = compare_exchange<T, n,
 6, 1, 0, 3, 
 2
 // clang-format on
->(v, 0x1333333);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -219,7 +219,7 @@ v = compare_exchange<T, n,
 5, 2, 3, 0, 
 1
 // clang-format on
->(v, 0x5555555);
+>(v);
 
 vec_store<T, n>(arr, v);
 }

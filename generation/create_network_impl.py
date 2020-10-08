@@ -12,8 +12,6 @@ parser.add_argument('-f',
                     default="",
                     help='File with network specifier')
 
-
-
 args = parser.parse_args()
 
 network_file = args.network_file
@@ -25,11 +23,10 @@ network_algorithms = [
     "oddevenmerge", "oddeventrans"
 ]
 
-
 if os.access(network_file, os.R_OK) is False:
     print("Error unable to access network file")
     exit(-1)
-    
+
 assert len(network_file.split("-")) == 2, "Error invalid filename"
 network_alg = network_file.split("-")[0].split("/")
 network_alg = network_alg[len(network_alg) - 1].upper()
@@ -38,7 +35,6 @@ network_size = int(network_file.split("-")[1])
 if network_size < 2:
     print("Error invalid network size")
     exit(-1)
-
 
 prefix = [
     "#ifndef _[NETWORK_ALG]_[NETWORK_SIZE]_IMPL_H_",
@@ -53,18 +49,16 @@ prefix = [
 postfix = ["vec_store<T, n>(arr, v);", "}", "};", "", "#endif"]
 
 block = [
-    "\nv = compare_exchange<T, n, \n// clang-format off\n[INDEX_PLACEMENT]\n// clang-format on\n>(v, [MERGE_MASK]);\n"
+    "\nv = compare_exchange<T, n, \n// clang-format off\n[INDEX_PLACEMENT]\n// clang-format on\n>(v);\n"
 ]
 
 network_indexes = []
-network_masks = []
 
 
-def handle_replacements(line, indexes, mask):
+def handle_replacements(line, indexes):
     line = line.replace("[NETWORK_ALG]", network_alg)
     line = line.replace("[NETWORK_SIZE]", str(network_size))
     line = line.replace("[INDEX_PLACEMENT]", indexes)
-    line = line.replace("[MERGE_MASK]", str(mask))
     return line
 
 
@@ -80,19 +74,15 @@ def format_index_placement(index_arr):
     return index_str
 
 
-def print_arr(arr, indexes, mask):
+def print_arr(arr, indexes):
     for line in arr:
-        line = handle_replacements(line, indexes, mask)
+        line = handle_replacements(line, indexes)
         print(line)
 
 
 def print_network():
-    assert len(network_indexes) == len(
-        network_masks), "Error mask and indexes misaligned"
-
     for i in range(0, len(network_indexes)):
-        print_arr(block, format_index_placement(network_indexes[i]),
-                  str(hex(network_masks[i])))
+        print_arr(block, format_index_placement(network_indexes[i]))
 
 
 def process_file_line(line):
@@ -133,26 +123,15 @@ def create_index_arr(index_pairs):
     return index_arr
 
 
-def create_index_mask(index_pairs):
-    index_mask = 0
-    for index_pair in index_pairs:
-        idx0 = index_pair[0]
-        index_mask |= (1 << idx0)
-
-    return index_mask
-
-
 def create_network():
     for line in open(network_file):
         line = process_file_line(line)
         index_pairs = create_index_pairs(line)
         index_arr = create_index_arr(index_pairs)
-        index_mask = create_index_mask(index_pairs)
         network_indexes.append(index_arr)
-        network_masks.append(index_mask)
 
 
 create_network()
-print_arr(prefix, "", "")
+print_arr(prefix, "")
 print_network()
-print_arr(postfix, "", "")
+print_arr(postfix, "")

@@ -21,7 +21,7 @@ v = compare_exchange<T, n,
 3, 4, 2, 0, 
 1
 // clang-format on
->(v, 0x92529);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -33,7 +33,7 @@ v = compare_exchange<T, n,
 2, 3, 4, 1, 
 0
 // clang-format on
->(v, 0x49084);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -45,7 +45,7 @@ v = compare_exchange<T, n,
 1, 2, 3, 4, 
 0
 // clang-format on
->(v, 0x52526);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -57,7 +57,7 @@ v = compare_exchange<T, n,
 4, 0, 1, 2, 
 3
 // clang-format on
->(v, 0x318c3);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -69,7 +69,7 @@ v = compare_exchange<T, n,
 4, 2, 3, 0, 
 1
 // clang-format on
->(v, 0x9a945);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -81,7 +81,7 @@ v = compare_exchange<T, n,
 4, 7, 8, 5, 
 6
 // clang-format on
->(v, 0x2b00f);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -93,7 +93,7 @@ v = compare_exchange<T, n,
 6, 3, 2, 0, 
 1
 // clang-format on
->(v, 0x7831);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -105,7 +105,7 @@ v = compare_exchange<T, n,
 2, 5, 4, 1, 
 0
 // clang-format on
->(v, 0x48ccc);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -117,7 +117,7 @@ v = compare_exchange<T, n,
 5, 2, 3, 1, 
 0
 // clang-format on
->(v, 0x44554);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -129,7 +129,7 @@ v = compare_exchange<T, n,
 4, 3, 2, 1, 
 0
 // clang-format on
->(v, 0x154e0);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -141,7 +141,7 @@ v = compare_exchange<T, n,
 13, 14, 15, 1, 
 0
 // clang-format on
->(v, 0x3fc);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -153,7 +153,7 @@ v = compare_exchange<T, n,
 4, 7, 6, 9, 
 8
 // clang-format on
->(v, 0x30c0f);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -165,7 +165,7 @@ v = compare_exchange<T, n,
 0, 3, 2, 5, 
 4
 // clang-format on
->(v, 0x10303);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -177,7 +177,7 @@ v = compare_exchange<T, n,
 6, 1, 0, 3, 
 2
 // clang-format on
->(v, 0x53333);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -189,7 +189,7 @@ v = compare_exchange<T, n,
 5, 2, 3, 0, 
 1
 // clang-format on
->(v, 0x5555);
+>(v);
 
 vec_store<T, n>(arr, v);
 }

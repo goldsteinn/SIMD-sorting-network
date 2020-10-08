@@ -77,7 +77,6 @@ this.
 
 ## Shortcomings
 
-#### epi8 and epi64 have some bugs
 #### right now avx512 is required for many of the algorithms
 #### non power of 2 values won't work unless you specify an array with enough memory and manually set indexes outside of N to max
 

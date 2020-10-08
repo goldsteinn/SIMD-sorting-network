@@ -16,7 +16,7 @@ v = compare_exchange<T, n,
 // clang-format off
 0, 1
 // clang-format on
->(v, 0x1);
+>(v);
 
 vec_store<T, n>(arr, v);
 }

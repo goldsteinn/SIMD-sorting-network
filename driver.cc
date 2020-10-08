@@ -82,12 +82,12 @@ double
 inner_perf_test() {
     sarr<T, n> s1;
 
-
     uint64_t running_total = 0;
     for (uint32_t i = 0; i < tsize; ++i) {
         for (uint32_t _i = 0; _i < n; ++_i) {
             s1.arr[_i] = (T)rand();
         }
+
         uint64_t start = _rdtsc();
         COMPILER_BARRIER()
         do_sort<T, n, s>(s1.arr);
@@ -120,15 +120,22 @@ perf_test() {
 template<typename T, uint32_t n>
 void
 test() {
-    corr_test<T, n>();
+    //    corr_test<T, n>();
     perf_test<T, n>();
 }
 int
 main() {
-    test<uint16_t, 32>();
-    test<uint16_t, 16>();
-    test<uint16_t, 8>();
+    test<uint8_t, 16>();
+    test<uint8_t, 32>();
 
-    test<uint32_t, 16>();
+    test<uint16_t, 8>();
+    test<uint16_t, 16>();
+    test<uint16_t, 32>();
+
+    test<uint32_t, 4>();
     test<uint32_t, 8>();
+    test<uint32_t, 16>();
+
+    test<uint64_t, 4>();
+    test<uint64_t, 8>();
 }

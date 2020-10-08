@@ -20,7 +20,7 @@ v = compare_exchange<T, n,
 7, 5, 6, 3, 
 4, 2, 0, 1
 // clang-format on
->(v, 0x4a529);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -31,7 +31,7 @@ v = compare_exchange<T, n,
 8, 6, 5, 2, 
 3, 4, 1, 0
 // clang-format on
->(v, 0x21084);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -42,7 +42,7 @@ v = compare_exchange<T, n,
 5, 6, 7, 1, 
 2, 3, 4, 0
 // clang-format on
->(v, 0x32526);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -53,7 +53,7 @@ v = compare_exchange<T, n,
 9, 8, 5, 4, 
 0, 1, 2, 3
 // clang-format on
->(v, 0x198c3);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -64,7 +64,7 @@ v = compare_exchange<T, n,
 6, 7, 5, 4, 
 2, 3, 0, 1
 // clang-format on
->(v, 0x2a945);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -75,7 +75,7 @@ v = compare_exchange<T, n,
 3, 0, 1, 4, 
 7, 8, 5, 6
 // clang-format on
->(v, 0x780f);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -86,7 +86,7 @@ v = compare_exchange<T, n,
 7, 4, 9, 6, 
 3, 2, 0, 1
 // clang-format on
->(v, 0x42431);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -97,7 +97,7 @@ v = compare_exchange<T, n,
 9, 8, 3, 2, 
 5, 4, 1, 0
 // clang-format on
->(v, 0xcccc);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -108,7 +108,7 @@ v = compare_exchange<T, n,
 6, 7, 4, 5, 
 2, 3, 1, 0
 // clang-format on
->(v, 0x15554);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -119,7 +119,7 @@ v = compare_exchange<T, n,
 18, 19, 12, 13, 
 14, 15, 1, 0
 // clang-format on
->(v, 0x3fc);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -130,7 +130,7 @@ v = compare_exchange<T, n,
 10, 11, 5, 4, 
 3, 2, 9, 8
 // clang-format on
->(v, 0x300c3);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -141,7 +141,7 @@ v = compare_exchange<T, n,
 3, 2, 1, 0, 
 7, 6, 5, 4
 // clang-format on
->(v, 0x50f0f);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -152,7 +152,7 @@ v = compare_exchange<T, n,
 5, 4, 7, 6, 
 1, 0, 3, 2
 // clang-format on
->(v, 0x3333);
+>(v);
 
 
 v = compare_exchange<T, n, 
@@ -163,7 +163,7 @@ v = compare_exchange<T, n,
 6, 7, 4, 5, 
 2, 3, 0, 1
 // clang-format on
->(v, 0x5555);
+>(v);
 
 vec_store<T, n>(arr, v);
 }

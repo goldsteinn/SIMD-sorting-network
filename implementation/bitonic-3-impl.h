@@ -16,21 +16,21 @@ v = compare_exchange<T, n,
 // clang-format off
 1, 2, 0
 // clang-format on
->(v, 0x2);
+>(v);
 
 
 v = compare_exchange<T, n, 
 // clang-format off
 0, 1, 2
 // clang-format on
->(v, 0x1);
+>(v);
 
 
 v = compare_exchange<T, n, 
 // clang-format off
 2, 0, 1
 // clang-format on
->(v, 0x1);
+>(v);
 
 vec_store<T, n>(arr, v);
 }
