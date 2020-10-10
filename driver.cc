@@ -9,7 +9,9 @@
 #include <util/cpp_attributes.h>
 #include "x86intrin.h"
 
-#include "vec_sort.h"
+#include <algorithms/networks.h>
+#include <algorithms/vec_sort.h>
+
 
 template<typename T, uint32_t n>
 struct sarr {
@@ -125,10 +127,18 @@ test() {
 }
 int
 main() {
-    //    test<uint32_t, 8>();
-    show<>((vsort::bitonic<16>::network()));
-    //    show<>(group_pairs<32>(bitonic_sort<32>()));
-    //    show<>(group_pairs<64>(bitonic_sort<64>()));
-    //    show<>(bitonic_sort<32>());
-    //    show<>(bitonic_sort<64>());
+    sarr<uint32_t, 8> s;
+    s.finit();
+    vsort::vec_sort<uint32_t, 8, typename vsort::bitonic<8>::network>::sort(s.arr);
+    s.show();
+    
+    s.binit();
+    vsort::vec_sort<uint32_t, 8, typename vsort::bitonic<8>::network>::sort(s.arr);
+    s.show();
+
+    /*    show<>(typename vsort::bitonic<4>::network{});
+    show<>(typename vsort::bitonic<8>::network{});
+    show<>(typename vsort::bitonic<16>::network{});
+    show<>(typename vsort::bitonic<32>::network{});
+    show<>(typename vsort::bitonic<64>::network{});*/
 }

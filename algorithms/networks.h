@@ -76,8 +76,8 @@ struct bitonic_network {
         return bitonic_sort_kernel<0, n, 1>();
     }
 
-    using raw_network = decltype(bitonic_sort());
-    using network = typename transform::unidirectional<n, raw_network>::type;
+    using network =
+        typename transform::unidirectional<n, decltype(bitonic_sort())>::type;
 };
 
 
@@ -86,43 +86,63 @@ struct bitonic_network {
 
 template<uint32_t n>
 struct bitonic {
-    using network = typename internal::bitonic_network<n>::network;
+    using network = typename transform::
+        build<n, typename internal::bitonic_network<n>::network>::type;
 };
 
 static_assert(equal_sequences<>(
     std::integer_sequence<uint32_t, 0, 1, 2, 3, 1, 2, 0, 3, 0, 1, 2, 3>{},
-    bitonic<4>::network{}));
+    internal::bitonic_network<4>::network{}));
+
 
 static_assert(
     std::is_same<
-        std::integer_sequence<uint32_t, 0, 1, 2, 3, 1, 2, 0, 3, 0, 1, 2, 3>,
-        typename bitonic<4>::network>::value);
+        std::integer_sequence<uint32_t, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3, 0, 1>,
+        typename transform::build<
+            4,
+            typename internal::bitonic_network<4>::network>::type>::value);
 
 static_assert(equal_sequences<>(std::integer_sequence<uint32_t,
                                                       // clang-format off
-                                0, 1, 2, 3, 0, 3, 1, 2,
-                                2, 3, 0, 1, 4, 5, 6, 7,
-                                5, 6, 4, 7, 4, 5, 6, 7,
-                                3, 4, 2, 5, 1, 6, 0, 7,
-                                1, 3, 0, 2, 0, 1, 2, 3,
-                                4, 6, 5, 7, 4, 5, 6, 7
+                                    0, 1, 2, 3, 0, 3, 1, 2,
+                                    2, 3, 0, 1, 4, 5, 6, 7,
+                                    5, 6, 4, 7, 4, 5, 6, 7,
+                                    3, 4, 2, 5, 1, 6, 0, 7,
+                                    1, 3, 0, 2, 0, 1, 2, 3,
+                                    4, 6, 5, 7, 4, 5, 6, 7
                                                       // clang-format on
                                                       >{},
-                                bitonic<8>::network{}));
+                                internal::bitonic_network<8>::network{}));
 
 
 static_assert(equal_sequences<>(
     std::integer_sequence<uint32_t,
                           // clang-format off
-                                0, 1, 2, 3, 4, 5, 6, 7,
-                                0, 3, 1, 2, 5, 6, 4, 7,
-                                2, 3, 0, 1, 4, 5, 6, 7,
-                                3, 4, 2, 5, 1, 6, 0, 7,
-                                1, 3, 0, 2, 4, 6, 5, 7,
-                                0, 1, 2, 3, 4, 5, 6, 7
+                      0, 1, 2, 3, 4, 5, 6, 7,
+                      0, 3, 1, 2, 5, 6, 4, 7,
+                      2, 3, 0, 1, 4, 5, 6, 7,
+                      3, 4, 2, 5, 1, 6, 0, 7,
+                      1, 3, 0, 2, 4, 6, 5, 7,
+                      0, 1, 2, 3, 4, 5, 6, 7
                           // clang-format on
                           >{},
-    typename transform::group<8, typename bitonic<8>::network>::type{}));
+    typename transform::
+        group<8, typename internal::bitonic_network<8>::network>::type{}));
+
+static_assert(equal_sequences<>(
+    std::integer_sequence<uint32_t,
+                          // clang-format off
+                      6, 7, 4, 5, 2, 3, 0, 1,
+                      4, 5, 6, 7, 0, 1, 2, 3,
+                      6, 7, 4, 5, 2, 3, 0, 1,
+                      0, 1, 2, 3, 4, 5, 6, 7,
+                      5, 4, 7, 6, 1, 0, 3, 2,
+                      6, 7, 4, 5, 2, 3, 0, 1
+                          // clang-format on
+                          >{},
+    typename transform::
+        build<8, typename internal::bitonic_network<8>::network>::type{}));
+
 
 }  // namespace vsort
 

@@ -18,8 +18,8 @@ struct permutation_transform_impl {
             for (uint32_t j = 0; j < n; j += 2) {
                 uint32_t idx = i * n + j;
 
-                arr[idx + ((n - 1) - _pairs[idx])]     = _pairs[idx + 1];
-                arr[idx + ((n - 1) - _pairs[idx + 1])] = _pairs[idx];
+                arr[i * n + ((n - 1) - _pairs[idx])]     = _pairs[idx + 1];
+                arr[i * n + ((n - 1) - _pairs[idx + 1])] = _pairs[idx];
             }
         }
     }
@@ -142,6 +142,7 @@ struct transformer {
 
 }  // namespace internal
 
+
 template<uint32_t n, typename network>
 struct group {
     using type = decltype(
@@ -162,6 +163,12 @@ struct unidirectional {
         internal::transformer<n,
                               internal::impl::unidirectional_transform_impl>::
             transform(network{}));
+};
+
+template<uint32_t n, typename network>
+struct build {
+    using type =
+        typename permutation<n, typename group<n, network>::type>::type;
 };
 
 }  // namespace transform
