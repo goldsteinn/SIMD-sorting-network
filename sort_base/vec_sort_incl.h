@@ -7,9 +7,11 @@
 #include <sort_base/vec_sort_primitives.h>
 #include <util/cpp_attributes.h>
 
+namespace vsort {
+template<typename T, uint32_t n, typename algorithm>
+struct vec_sort;
 
-template<typename T, uint32_t n>
-struct vsort;
+}
 
 
 #endif

@@ -1,34 +1,93 @@
 #ifndef _VEC_SORT_H_
 #define _VEC_SORT_H_
-#include <implementation/bitonic-19-impl.h>
-#include <implementation/bitonic-8-impl.h>
-#include <implementation/bitonic-29-impl.h>
-#include <implementation/bitonic-11-impl.h>
-#include <implementation/bitonic-24-impl.h>
-#include <implementation/bitonic-10-impl.h>
-#include <implementation/bitonic-28-impl.h>
-#include <implementation/bitonic-32-impl.h>
-#include <implementation/bitonic-23-impl.h>
-#include <implementation/bitonic-21-impl.h>
-#include <implementation/bitonic-20-impl.h>
-#include <implementation/bitonic-30-impl.h>
-#include <implementation/bitonic-6-impl.h>
-#include <implementation/bitonic-18-impl.h>
-#include <implementation/bitonic-17-impl.h>
-#include <implementation/bitonic-25-impl.h>
-#include <implementation/bitonic-27-impl.h>
-#include <implementation/bitonic-22-impl.h>
-#include <implementation/bitonic-9-impl.h>
-#include <implementation/bitonic-13-impl.h>
-#include <implementation/bitonic-3-impl.h>
-#include <implementation/bitonic-5-impl.h>
-#include <implementation/bitonic-26-impl.h>
-#include <implementation/bitonic-4-impl.h>
-#include <implementation/bitonic-31-impl.h>
-#include <implementation/bitonic-12-impl.h>
-#include <implementation/bitonic-14-impl.h>
-#include <implementation/bitonic-7-impl.h>
-#include <implementation/bitonic-2-impl.h>
-#include <implementation/bitonic-16-impl.h>
-#include <implementation/bitonic-15-impl.h>
+
+#include <algorithms/networks.h>
+#include <sort_base/vec_sort_incl.h>
+#include <util/constexpr_util.h>
+/*
+template<uint32_t       n,
+         uint32_t       groups,
+         uint32_t       group_idx,
+         const uint32_t indexes[n * groups]>
+struct permutation_arr {
+    constexpr permutation_arr() : arr() {
+        for (uint32_t i = n * group_idx; i < n * (group_idx + 1); i += 2) {
+            arr[(n - 1) - indexes[i]]     = indexes[i + 1];
+            arr[(n - 1) - indexes[i + 1]] = indexes[i];
+        }
+    }
+
+    uint32_t arr[n];
+};
+
+template<typename T, uint32_t n, uint32_t... indexes>
+constexpr vec_t<T, n> ALWAYS_INLINE CONST_ATTR
+call_compare_exchange_impl(vec_t<T, n> v) {
+    return compare_exchange<T, n, indexes...>(v);
+}
+
+template<typename T,
+         uint32_t n,
+         uint32_t groups,
+         //         uint32_t       group_idx,
+         const uint32_t indexes[n * groups],
+         uint32_t... seq_indexes>
+constexpr vec_t<T, n> ALWAYS_INLINE CONST_ATTR
+call_compare_exchange0(vec_t<T, n> v,
+                       std::integer_sequence<uint32_t, seq_indexes...>) {
+    //    constexpr permutation_arr<n, groups, group_idx, indexes> perm_arr =
+      //    permutation_arr<n, groups, group_idx, indexes>();
+    return call_compare_exchange_impl<T, n, indexes[seq_indexes]...>(v);
+}
+
+template<typename T,
+         uint32_t       n,
+         uint32_t       groups,
+         uint32_t       group_idx,
+         const uint32_t indexes[n * groups]>
+constexpr vec_t<T, n> ALWAYS_INLINE CONST_ATTR
+call_compare_exchange(vec_t<T, n> v) {
+    return call_compare_exchange0<T, n, groups, indexes>(
+        v,
+        make_integer_range<uint32_t, n * group_idx, n *(group_idx + 1)>{});
+}
+
+
+template<typename T,
+         uint32_t       n,
+         uint32_t       groups,
+         uint32_t       group_idx,
+         const uint32_t indexes[n * groups]>
+constexpr vec_t<T, n> ALWAYS_INLINE CONST_ATTR
+make_group(vec_t<T, n> v) {
+    if constexpr (group_idx < (groups - 1)) {
+        v = call_compare_exchange<T, n, groups, group_idx, indexes>(v);
+        return make_group<T, n, groups, group_idx + 1, indexes>(v);
+    }
+    else {
+        return call_compare_exchange<T, n, groups, group_idx, indexes>(v);
+    }
+}
+
+template<typename T,
+         uint32_t       n,
+         uint32_t       groups,
+         const uint32_t indexes[n * groups]>
+vec_t<T, n>
+make_sort(vec_t<T, n> v) {
+    return make_group<T, n, groups, 0, indexes>(v);
+}
+
+template<typename T, uint32_t n, typename algorithm>
+struct vec_sort {
+
+    static void
+    sort(T * const arr) {
+        vec_t<T, n> v = vec_load<T, n>(arr);
+        v = make_sort<T, n, algorithm::groups, algorithm::indexes>(v);
+        vec_store<T, n>(arr, v);
+    }
+};*/
+
+
 #endif

@@ -24,8 +24,8 @@ v = compare_exchange<T, n,
 
 v = compare_exchange<T, n, 
 // clang-format off
-12, 13, 14, 15, 
-8, 9, 10, 11, 
+13, 12, 15, 14, 
+9, 8, 11, 10, 
 4, 5, 6, 7, 
 0, 1, 2, 3
 // clang-format on
@@ -34,8 +34,8 @@ v = compare_exchange<T, n,
 
 v = compare_exchange<T, n, 
 // clang-format off
-14, 15, 12, 13, 
-10, 11, 8, 9, 
+8, 9, 10, 11, 
+12, 13, 14, 15, 
 6, 7, 4, 5, 
 2, 3, 0, 1
 // clang-format on
@@ -44,8 +44,8 @@ v = compare_exchange<T, n,
 
 v = compare_exchange<T, n, 
 // clang-format off
-8, 9, 10, 11, 
-12, 13, 14, 15, 
+14, 15, 12, 13, 
+10, 11, 8, 9, 
 0, 1, 2, 3, 
 4, 5, 6, 7
 // clang-format on
@@ -54,10 +54,10 @@ v = compare_exchange<T, n,
 
 v = compare_exchange<T, n, 
 // clang-format off
-13, 12, 15, 14, 
-9, 8, 11, 10, 
+12, 13, 14, 15, 
+8, 9, 10, 11, 
 5, 4, 7, 6, 
-1, 0, 3, 2
+2, 3, 0, 1
 // clang-format on
 >(v);
 
@@ -67,7 +67,7 @@ v = compare_exchange<T, n,
 14, 15, 12, 13, 
 10, 11, 8, 9, 
 6, 7, 4, 5, 
-2, 3, 0, 1
+1, 0, 3, 2
 // clang-format on
 >(v);
 
@@ -84,8 +84,8 @@ v = compare_exchange<T, n,
 
 v = compare_exchange<T, n, 
 // clang-format off
-11, 10, 9, 8, 
-15, 14, 13, 12, 
+14, 15, 12, 13, 
+10, 11, 8, 9, 
 3, 2, 1, 0, 
 7, 6, 5, 4
 // clang-format on
@@ -96,7 +96,7 @@ v = compare_exchange<T, n,
 // clang-format off
 13, 12, 15, 14, 
 9, 8, 11, 10, 
-5, 4, 7, 6, 
+6, 7, 4, 5, 
 1, 0, 3, 2
 // clang-format on
 >(v);
@@ -104,9 +104,9 @@ v = compare_exchange<T, n,
 
 v = compare_exchange<T, n, 
 // clang-format off
-14, 15, 12, 13, 
-10, 11, 8, 9, 
-6, 7, 4, 5, 
+11, 10, 9, 8, 
+15, 14, 13, 12, 
+5, 4, 7, 6, 
 2, 3, 0, 1
 // clang-format on
 >(v);

@@ -1,0 +1,97 @@
+#ifndef _NETWORKS_H_
+#define _NETWORKS_H_
+
+namespace vsort {
+namespace internal {
+template<uint32_t n>
+struct bitonic_network {
+
+
+    template<uint32_t begin, uint32_t end, uint32_t offset, uint32_t order>
+    static constexpr decltype(auto)
+    bitonic_create_pairs() {
+        if constexpr (end != begin) {
+            if constexpr (order) {
+                return merge<uint32_t>(
+                    std::integer_sequence<uint32_t, begin, begin + offset>{},
+                    bitonic_create_pairs<begin + 1, end, offset, order>());
+            }
+            else {
+                return merge<uint32_t>(
+                    std::integer_sequence<uint32_t, begin + offset, begin>{},
+                    bitonic_create_pairs<begin + 1, end, offset, order>());
+            }
+        }
+        else {
+            return std::make_integer_sequence<uint32_t, 0>{};
+        }
+    }
+
+    template<uint32_t begin, uint32_t end, uint32_t order>
+    static constexpr decltype(auto)
+    bitonic_merge() {
+        if constexpr (end - begin > 1) {
+            constexpr auto _new_pairs =
+                bitonic_create_pairs<begin,
+                                     begin + ((end - begin) / 2),
+                                     (end - begin) / 2,
+                                     order>();
+            constexpr auto _pairs_lo =
+                bitonic_merge<begin, begin + ((end - begin) / 2), order>();
+            constexpr auto _pairs_hi =
+                bitonic_merge<begin + ((end - begin) / 2), end, order>();
+            return merge<uint32_t>(_new_pairs,
+                                   merge<uint32_t>(_pairs_lo, _pairs_hi));
+        }
+        else {
+            return std::make_integer_sequence<uint32_t, 0>{};
+        }
+    }
+
+    template<uint32_t begin, uint32_t end, uint32_t order>
+    static constexpr decltype(auto)
+    bitonic_sort_kernel() {
+        if constexpr (end - begin > 1) {
+            constexpr auto _pairs_lo =
+                bitonic_sort_kernel<begin,
+                                    begin + ((end - begin) / 2),
+                                    !order>();
+            constexpr auto _pairs_hi =
+                bitonic_sort_kernel<begin + ((end - begin) / 2), end, order>();
+            return merge<uint32_t>(merge<uint32_t>(_pairs_lo, _pairs_hi),
+                                   bitonic_merge<begin, end, order>());
+        }
+        else {
+            return std::make_integer_sequence<uint32_t, 0>{};
+        }
+    }
+
+
+    static constexpr decltype(auto)
+    bitonic_sort() {
+        return bitonic_sort_kernel<0, n, 1>();
+
+        // return bitonic_filter<0, get_size<uint32_t>(pairs)>(pairs);
+        return transform::internal::transformer<
+            n,
+            transform::internal::impl::unidirectional_transform_impl>::
+            transform(pairs);
+    }
+
+    using raw_network = decltype(bitonic_sort());
+    using network     = typename transform::unidirectional<n, raw_network>;
+};
+
+
+}  // namespace internal
+
+
+template<uint32_t n>
+bitonic {
+    using network = typename internal::bitonic_network<n>;
+};
+
+
+}  // namespace vsort
+
+#endif

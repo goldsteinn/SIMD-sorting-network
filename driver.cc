@@ -53,7 +53,7 @@ do_sort(T * arr) {
         std::sort(arr, arr + n);
     }
     else {
-        vsort<T, n>::sort(arr);
+        std::sort(arr, arr + n);
     }
 }
 
@@ -120,22 +120,15 @@ perf_test() {
 template<typename T, uint32_t n>
 void
 test() {
-    //    corr_test<T, n>();
+    corr_test<T, n>();
     perf_test<T, n>();
 }
 int
 main() {
-    test<uint8_t, 16>();
-    test<uint8_t, 32>();
-
-    test<uint16_t, 8>();
-    test<uint16_t, 16>();
-    test<uint16_t, 32>();
-
-    test<uint32_t, 4>();
-    test<uint32_t, 8>();
-    test<uint32_t, 16>();
-
-    test<uint64_t, 4>();
-    test<uint64_t, 8>();
+    //    test<uint32_t, 8>();
+    show<>((vsort::bitonic<16>::network()));
+    //    show<>(group_pairs<32>(bitonic_sort<32>()));
+    //    show<>(group_pairs<64>(bitonic_sort<64>()));
+    //    show<>(bitonic_sort<32>());
+    //    show<>(bitonic_sort<64>());
 }

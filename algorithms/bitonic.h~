@@ -1,0 +1,315 @@
+#ifndef _BITONIC_H_
+#define _BITONIC_H_
+
+#include <stdint.h>
+#include <util/integer_range.h>
+
+template<uint32_t n>
+struct bitonic;
+
+template<>
+struct bitonic<4> {
+    static constexpr uint32_t groups              = 3;
+    static constexpr uint32_t indexes[groups * 4] = {
+        // clang-format off
+        0, 1, 2, 3,
+        1, 2, 0, 3,
+        0, 1, 2, 3
+        // clang-format on
+    };
+};
+
+template<>
+struct bitonic<8> {
+    static constexpr uint32_t groups = 6;
+    /*    static constexpr uint32_t indexes[groups * 8] = {
+        // clang-format off
+        0, 1, 2, 3, 4, 5, 6, 7,
+        0, 3, 1, 2, 5, 6, 4, 7,
+        2, 3, 0, 1, 4, 5, 6, 7,
+        3, 4, 2, 5, 1, 6, 0, 7,
+        1, 3, 0 ,2, 4, 6, 5, 7,
+        0, 1, 2, 3, 4, 5, 6, 7
+        // clang-format on
+    };*/
+    static constexpr uint32_t indexes[groups * 8] = {
+        6, 7, 4, 5, 2, 3, 0, 1, 4, 5, 6, 7, 0, 1, 2, 3, 6, 7, 4, 5, 2, 3, 0, 1,
+        0, 1, 2, 3, 4, 5, 6, 7, 5, 4, 7, 6, 1, 0, 3, 2, 6, 7, 4, 5, 2, 3, 0, 1
+    };
+};
+
+template<uint32_t begin, uint32_t end, uint32_t offset, uint32_t order>
+constexpr decltype(auto)
+bitonic_create_pairs() {
+    if constexpr (end != begin) {
+        if constexpr (order) {
+            return merge<uint32_t>(
+                std::integer_sequence<uint32_t, begin, begin + offset>{},
+                bitonic_create_pairs<begin + 1, end, offset, order>());
+        }
+        else {
+            return merge<uint32_t>(
+                std::integer_sequence<uint32_t, begin + offset, begin>{},
+                bitonic_create_pairs<begin + 1, end, offset, order>());
+        }
+    }
+    else {
+        return std::make_integer_sequence<uint32_t, 0>{};
+    }
+}
+
+template<uint32_t begin, uint32_t end, uint32_t order>
+constexpr decltype(auto)
+bitonic_merge() {
+    if constexpr (end - begin > 1) {
+        constexpr auto _new_pairs =
+            bitonic_create_pairs<begin,
+                                 begin + ((end - begin) / 2),
+                                 (end - begin) / 2,
+                                 order>();
+        constexpr auto _pairs_lo =
+            bitonic_merge<begin, begin + ((end - begin) / 2), order>();
+        constexpr auto _pairs_hi =
+            bitonic_merge<begin + ((end - begin) / 2), end, order>();
+        return merge<uint32_t>(_new_pairs,
+                               merge<uint32_t>(_pairs_lo, _pairs_hi));
+    }
+    else {
+        return std::make_integer_sequence<uint32_t, 0>{};
+    }
+}
+
+template<uint32_t begin, uint32_t end, uint32_t order>
+constexpr decltype(auto)
+bitonic_sort_kernel() {
+    if constexpr (end - begin > 1) {
+        constexpr auto _pairs_lo =
+            bitonic_sort_kernel<begin, begin + ((end - begin) / 2), !order>();
+        constexpr auto _pairs_hi =
+            bitonic_sort_kernel<begin + ((end - begin) / 2), end, order>();
+        return merge<uint32_t>(merge<uint32_t>(_pairs_lo, _pairs_hi),
+                               bitonic_merge<begin, end, order>());
+    }
+    else {
+        return std::make_integer_sequence<uint32_t, 0>{};
+    }
+}
+
+template<uint32_t p1,
+         uint32_t p2,
+         uint32_t cur,
+         uint32_t end,
+         uint32_t... pairs>
+constexpr decltype(auto)
+filter(std::integer_sequence<uint32_t, pairs...> _pairs) {
+    if constexpr (cur < end) {
+        // p2 == get_pos<uint32_t, cur + 1>(_pairs)
+        //  uint32_t, cur + 1, p1
+        // p2 == get_pos<uint32_t, cur>(_pairs)
+        //  uint32_t, cur, p1
+        // p1 == get_pos<uint32_t, cur + 1>(_pairs)
+        //  uint32_t, cur + 1, p2
+        // p1 == get_pos<uint32_t, cur>(_pairs)
+        //  uint32_t, cur, p2
+        return filter<p1, p2, cur + 2, end>(replace_if<
+                                            p2 == get_pos<uint32_t, cur + 1>(
+                                                      _pairs),
+                                            uint32_t,
+                                            cur + 1,
+                                            p1>(
+            replace_if<p2 == get_pos<uint32_t, cur>(_pairs), uint32_t, cur, p1>(
+                replace_if<p1 == get_pos<uint32_t, cur + 1>(_pairs),
+                           uint32_t,
+                           cur + 1,
+                           p2>(replace_if<p1 == get_pos<uint32_t, cur>(_pairs),
+                                          uint32_t,
+                                          cur,
+                                          p2>(_pairs)))));
+    }
+    else {
+        return _pairs;
+    }
+}
+
+template<uint32_t cur, uint32_t end, uint32_t... pairs>
+constexpr decltype(auto)
+do_filter(std::integer_sequence<uint32_t, pairs...> _pairs) {
+    constexpr uint32_t p1 = get_pos<uint32_t, cur>(_pairs);
+    constexpr uint32_t p2 = get_pos<uint32_t, cur + 1>(_pairs);
+    if constexpr (p1 > p2) {
+        return replace_pos<uint32_t, cur + 1, p1>(
+            replace_pos<uint32_t, cur, p2>(
+                filter<p1, p2, cur + 2, end>(_pairs)));
+    }
+    else {
+        return _pairs;
+    }
+}
+
+template<uint32_t cur, uint32_t end, uint32_t... pairs>
+constexpr decltype(auto)
+bitonic_filter(std::integer_sequence<uint32_t, pairs...> _pairs) {
+    if constexpr (cur < end) {
+        return bitonic_filter<cur + 2, end>(do_filter<cur, end>(_pairs));
+    }
+    else {
+        return _pairs;
+    }
+}
+
+
+template<uint32_t end>
+constexpr decltype(auto)
+bitonic_sort() {
+    constexpr auto pairs = bitonic_sort_kernel<0, end, 1>();
+    return bitonic_filter<0, get_size<uint32_t>(pairs)>(pairs);
+}
+
+template<uint32_t idx, uint32_t group_size>
+constexpr decltype(auto)
+make_group_kernel() {
+    if constexpr (idx < group_size) {
+        return merge<uint32_t>(make_group_kernel<idx + 1, group_size>(),
+                               std::integer_sequence<uint32_t, group_size>{});
+    }
+    else {
+        return std::make_integer_sequence<uint32_t, 0>{};
+    }
+}
+
+template<uint32_t group_size>
+constexpr decltype(auto)
+make_group() {
+    return make_group_kernel<0, group_size>();
+}
+
+
+template<uint32_t idx,
+         uint32_t group_size,
+         uint32_t p1,
+         uint32_t p2,
+         uint32_t... grouped_pairs>
+constexpr decltype(auto)
+check_group(std::integer_sequence<uint32_t, grouped_pairs...> _grouped_pairs) {}
+
+template<uint32_t group_idx,
+         uint32_t group_size,
+         uint32_t p1,
+         uint32_t p2,
+         uint32_t... grouped_pairs>
+constexpr decltype(auto)
+group_pair(std::integer_sequence<uint32_t, grouped_pairs...> _grouped_pairs) {
+
+}
+
+template<uint32_t group_size,
+         uint32_t cur,
+         uint32_t end,
+         uint32_t... grouped_pairs,
+         uint32_t... pairs>
+constexpr decltype(auto)
+group_pairs_kernel(
+    std::integer_sequence<uint32_t, grouped_pairs...> _grouped_pairs,
+    std::integer_sequence<uint32_t, pairs...>         _pairs) {
+    return group_pairs_kernel<group_size, cur + 2, end>(
+        group_pairs<0,
+                    group_size,
+                    get_pos<uint32_t, cur>(_pairs),
+                    get_pos<uint32_t, cur + 1>(_pairs)>(_grouped_pairs),
+        _pairs);
+}
+
+template<uint32_t group_size, uint32_t... pairs>
+constexpr decltype(auto)
+group_pairs(std::integer_sequence<uint32_t, pairs...> _pairs) {
+    constexpr auto grouped_pairs = make_group<group_size>();
+    group_pairs_kernel<0,
+                       get_size<uint32_t>(grouped_pairs) / group_size,
+                       group_size,
+                       get_size<uint32_t>(pairs)>(grouped_pairs);
+}
+
+
+template<uint32_t... seq1, uint32_t... seq2>
+constexpr bool
+equal_sequences(std::integer_sequence<uint32_t, seq1...>,
+                std::integer_sequence<uint32_t, seq2...>) {
+    if constexpr (sizeof...(seq1) != sizeof...(seq2)) {
+        return false;
+    }
+    constexpr uint32_t seq_arr1[sizeof...(seq1)] = { seq1... };
+    constexpr uint32_t seq_arr2[sizeof...(seq2)] = { seq2... };
+    for (uint32_t i = 0; i < sizeof...(seq1); ++i) {
+        if (seq_arr1[i] != seq_arr2[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+template<uint32_t... seq>
+void
+show(std::integer_sequence<uint32_t, seq...> _seq) {
+    uint32_t arr[sizeof...(seq)] = { seq... };
+    fprintf(stderr, "seq(%zu): [%d", get_size<uint32_t>(_seq), arr[0]);
+    for (uint32_t i = 1; i < sizeof...(seq); ++i) {
+        fprintf(stderr, ", %d", arr[i]);
+    }
+    fprintf(stderr, "]\n");
+}
+
+static_assert(equal_sequences<>(
+    std::integer_sequence<uint32_t, 0, 1, 2, 3, 1, 2, 0, 3, 0, 1, 2, 3>{},
+    bitonic_sort<4>()));
+
+static_assert(equal_sequences<>(std::integer_sequence<uint32_t,
+                                                      0,
+                                                      1,
+                                                      2,
+                                                      3,
+                                                      0,
+                                                      3,
+                                                      1,
+                                                      2,
+                                                      2,
+                                                      3,
+                                                      0,
+                                                      1,
+                                                      4,
+                                                      5,
+                                                      6,
+                                                      7,
+                                                      5,
+                                                      6,
+                                                      4,
+                                                      7,
+                                                      4,
+                                                      5,
+                                                      6,
+                                                      7,
+                                                      3,
+                                                      4,
+                                                      2,
+                                                      5,
+                                                      1,
+                                                      6,
+                                                      0,
+                                                      7,
+                                                      1,
+                                                      3,
+                                                      0,
+                                                      2,
+                                                      0,
+                                                      1,
+                                                      2,
+                                                      3,
+                                                      4,
+                                                      6,
+                                                      5,
+                                                      7,
+                                                      4,
+                                                      5,
+                                                      6,
+                                                      7>{},
+                                bitonic_sort<8>()));
+#endif
