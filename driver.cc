@@ -127,9 +127,20 @@ test() {
 }
 int
 main() {
+    test<uint8_t, 64>();
+    test<uint16_t, 32>();
+    test<uint32_t, 16>();
+    test<uint64_t, 8>();
+    
+    test<uint8_t, 32>();
+    test<uint16_t, 16>();
+    test<uint32_t, 8>();
+    test<uint64_t, 4>();
+
     test<uint8_t, 16>();
-    test<uint32_t, 4>();
     test<uint16_t, 8>();
+    test<uint32_t, 4>();
+
 
     /*    sarr<uint32_t, 8> s;
     s.finit();

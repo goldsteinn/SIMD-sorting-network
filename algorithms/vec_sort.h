@@ -58,7 +58,6 @@ struct vec_sort {
 
     static void NEVER_INLINE
     sort(T * const arr) {
-
         vop::vec_t<T, n> v = vop::vec_load<T, n>(arr);
         v = internal::network_builder<T, n>::build(v, network{});
         vop::vec_store<T, n>(arr, v);
