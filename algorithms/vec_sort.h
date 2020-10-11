@@ -16,24 +16,24 @@ struct network_builder {
 
 
     template<uint32_t... perm_indexes_slice>
-    static constexpr vec_t<T, n> ALWAYS_INLINE CONST_ATTR
-    build_kernel(vec_t<T, n> v,
-                 std::integer_sequence<uint32_t, perm_indexes_slice...>
-                     _perm_indexes_slice) {
-        return compare_exchange<T, n, perm_indexes_slice...>(v);
+    static constexpr vop::vec_t<T, n> ALWAYS_INLINE CONST_ATTR
+    call_compare_exchange(vop::vec_t<T, n> v,
+                          std::integer_sequence<uint32_t, perm_indexes_slice...>
+                              _perm_indexes_slice) {
+        return vop::compare_exchange<T, n, perm_indexes_slice...>(v);
     }
 
     template<uint32_t group_idx, uint32_t ngroups, uint32_t... perm_indexes>
-    static constexpr vec_t<T, n> ALWAYS_INLINE CONST_ATTR
-    build_inner(
-        vec_t<T, n>                                      v,
+    static constexpr vop::vec_t<T, n> ALWAYS_INLINE CONST_ATTR
+    build_kernel(
+        vop::vec_t<T, n>                                 v,
         std::integer_sequence<uint32_t, perm_indexes...> _perm_indexes) {
         if constexpr (group_idx == ngroups) {
             return v;
         }
         else {
-            return build_inner<group_idx + 1, ngroups>(
-                build_kernel<>(
+            return build_kernel<group_idx + 1, ngroups>(
+                call_compare_exchange<>(
                     v,
                     slice<uint32_t, n * group_idx, n *(group_idx + 1)>(
                         _perm_indexes)),
@@ -42,11 +42,11 @@ struct network_builder {
     }
 
     template<uint32_t... perm_indexes>
-    static constexpr vec_t<T, n> ALWAYS_INLINE CONST_ATTR
-    build(vec_t<T, n>                                      v,
+    static constexpr vop::vec_t<T, n> ALWAYS_INLINE CONST_ATTR
+    build(vop::vec_t<T, n>                                 v,
           std::integer_sequence<uint32_t, perm_indexes...> _perm_indexes) {
         constexpr uint32_t ngroups = (sizeof...(perm_indexes)) / n;
-        return build_inner<0, ngroups>(v, _perm_indexes);
+        return build_kernel<0, ngroups>(v, _perm_indexes);
     }
 };
 
@@ -56,11 +56,12 @@ struct network_builder {
 template<typename T, uint32_t n, typename network>
 struct vec_sort {
 
-    static void
+    static void NEVER_INLINE
     sort(T * const arr) {
-        vec_t<T, n> v = vec_load<T, n>(arr);
-        v             = internal::network_builder<T, n>::build(v, network{});
-        vec_store<T, n>(arr, v);
+
+        vop::vec_t<T, n> v = vop::vec_load<T, n>(arr);
+        v = internal::network_builder<T, n>::build(v, network{});
+        vop::vec_store<T, n>(arr, v);
     }
 };
 

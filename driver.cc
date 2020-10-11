@@ -55,7 +55,7 @@ do_sort(T * arr) {
         std::sort(arr, arr + n);
     }
     else {
-        std::sort(arr, arr + n);
+        vsort::vec_sort<T, n, typename vsort::bitonic<n>::network>::sort(arr);
     }
 }
 
@@ -127,14 +127,18 @@ test() {
 }
 int
 main() {
-    sarr<uint32_t, 8> s;
+    test<uint8_t, 16>();
+    test<uint32_t, 4>();
+    test<uint16_t, 8>();
+
+    /*    sarr<uint32_t, 8> s;
     s.finit();
-    vsort::vec_sort<uint32_t, 8, typename vsort::bitonic<8>::network>::sort(s.arr);
-    s.show();
-    
+    vsort::vec_sort<uint32_t, 8, typename
+    vsort::bitonic<8>::network>::sort(s.arr); s.show();
+
     s.binit();
-    vsort::vec_sort<uint32_t, 8, typename vsort::bitonic<8>::network>::sort(s.arr);
-    s.show();
+    vsort::vec_sort<uint32_t, 8, typename
+    vsort::bitonic<8>::network>::sort(s.arr); s.show();*/
 
     /*    show<>(typename vsort::bitonic<4>::network{});
     show<>(typename vsort::bitonic<8>::network{});

@@ -4,7 +4,7 @@
 #include <immintrin.h>
 #include <stdint.h>
 
-#include <sort_base/vec_sort_primitives.h>
+#include <instructions/instructions.h>
 #include <util/cpp_attributes.h>
 
 namespace vsort {
