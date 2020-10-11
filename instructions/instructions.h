@@ -985,7 +985,7 @@ struct vector_ops<T, operations, sizeof(__m512i)> {
         else if constexpr (sizeof(T) == sizeof(uint32_t)) {
             if constexpr (shuffle_mask) {
                 // AVX512F
-                    return _mm512_shuffle_epi32(v, (_MM_PERM_ENUM)shuffle_mask);
+                return _mm512_shuffle_epi32(v, (_MM_PERM_ENUM)shuffle_mask);
             }
             else {
                 // AVX512F
