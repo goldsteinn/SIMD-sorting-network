@@ -11,7 +11,7 @@
 namespace vsort {
 namespace internal {
 
-template<typename T, uint32_t n>
+template<typename T, uint32_t n, vop::instruction_set operations>
 struct network_builder {
 
 
@@ -20,7 +20,8 @@ struct network_builder {
     call_compare_exchange(vop::vec_t<T, n> v,
                           std::integer_sequence<uint32_t, perm_indexes_slice...>
                               _perm_indexes_slice) {
-        return vop::compare_exchange<T, n, perm_indexes_slice...>(v);
+        return vop::compare_exchange<T, n, operations, perm_indexes_slice...>(
+            v);
     }
 
     template<uint32_t group_idx, uint32_t ngroups, uint32_t... perm_indexes>
@@ -53,13 +54,17 @@ struct network_builder {
 }  // namespace internal
 
 
-template<typename T, uint32_t n, typename network>
+template<typename T,
+         uint32_t n,
+         typename network,
+         vop::instruction_set operations =
+             vop::avail_instructions::instruction_set_default>
 struct vec_sort {
 
     static void NEVER_INLINE
     sort(T * const arr) {
         vop::vec_t<T, n> v = vop::vec_load<T, n>(arr);
-        v = internal::network_builder<T, n>::build(v, network{});
+        v = internal::network_builder<T, n, operations>::build(v, network{});
         vop::vec_store<T, n>(arr, v);
     }
 };

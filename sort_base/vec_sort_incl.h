@@ -8,7 +8,10 @@
 #include <util/cpp_attributes.h>
 
 namespace vsort {
-template<typename T, uint32_t n, typename algorithm>
+template<typename T,
+         uint32_t n,
+         typename network,
+         vop::instruction_set instructions>
 struct vec_sort;
 
 }

@@ -48,20 +48,29 @@ struct sarr {
 
 
 enum SORT { SSORT = 0, VSORT = 1 };
-template<typename T, uint32_t n, SORT s>
+template<typename T, uint32_t n, SORT s, uint32_t USE_AVX2 = 0>
 void NEVER_INLINE
 do_sort(T * arr) {
     if constexpr (s == SSORT) {
         std::sort(arr, arr + n);
     }
     else {
-        vsort::vec_sort<T, n, typename vsort::bitonic<n>::network>::sort(arr);
+        if constexpr (USE_AVX2) {
+            vsort::vec_sort<T, n, typename vsort::bitonic<n>::network>::sort(
+                arr);
+        }
+        else {
+            vsort::vec_sort<T,
+                            n,
+                            typename vsort::bitonic<n>::network,
+                            vop::instruction_set::AVX2>::sort(arr);
+        }
     }
 }
 
 
 static constexpr uint32_t tsize = ((1u) << 24);
-template<typename T, uint32_t n>
+template<typename T, uint32_t n, uint32_t USE_AVX2 = 0>
 void
 corr_test() {
     sarr<T, n> s1;
@@ -73,13 +82,13 @@ corr_test() {
         }
         memcpy(s2.arr, s1.arr, n * sizeof(T));
         do_sort<T, n, SSORT>(s1.arr);
-        do_sort<T, n, VSORT>(s2.arr);
+        do_sort<T, n, VSORT, USE_AVX2>(s2.arr);
         assert(!memcmp(s1.arr, s2.arr, n * sizeof(T)));
     }
 }
 
 
-template<typename T, uint32_t n, SORT s>
+template<typename T, uint32_t n, SORT s, uint32_t USE_AVX2 = 0>
 double
 inner_perf_test() {
     sarr<T, n> s1;
@@ -108,10 +117,10 @@ void
 perf_print(const char * const h, double cycles) {
     fprintf(stderr, "%-20s: %.3lf \"Cycles\"\n", h, cycles);
 }
-template<typename T, uint32_t n>
+template<typename T, uint32_t n, uint32_t USE_AVX2 = 0>
 void
 perf_test() {
-    double vsort_cycles = inner_perf_test<T, n, VSORT>();
+    double vsort_cycles = inner_perf_test<T, n, VSORT, USE_AVX2>();
     double ssort_cycles = inner_perf_test<T, n, SSORT>();
 
 
@@ -119,11 +128,11 @@ perf_test() {
     perf_print("std::sort", ssort_cycles);
 }
 
-template<typename T, uint32_t n>
+template<typename T, uint32_t n, uint32_t USE_AVX2 = 0>
 void
 test() {
-    corr_test<T, n>();
-    perf_test<T, n>();
+    corr_test<T, n, USE_AVX2>();
+    perf_test<T, n, USE_AVX2>();
 }
 int
 main() {
@@ -131,7 +140,7 @@ main() {
     test<uint16_t, 32>();
     test<uint32_t, 16>();
     test<uint64_t, 8>();
-    
+
     test<uint8_t, 32>();
     test<uint16_t, 16>();
     test<uint32_t, 8>();
@@ -142,18 +151,12 @@ main() {
     test<uint32_t, 4>();
 
 
-    /*    sarr<uint32_t, 8> s;
-    s.finit();
-    vsort::vec_sort<uint32_t, 8, typename
-    vsort::bitonic<8>::network>::sort(s.arr); s.show();
+    test<uint8_t, 32, 1>();
+    test<uint16_t, 16, 1>();
+    test<uint32_t, 8, 1>();
+    test<uint64_t, 4, 1>();
 
-    s.binit();
-    vsort::vec_sort<uint32_t, 8, typename
-    vsort::bitonic<8>::network>::sort(s.arr); s.show();*/
-
-    /*    show<>(typename vsort::bitonic<4>::network{});
-    show<>(typename vsort::bitonic<8>::network{});
-    show<>(typename vsort::bitonic<16>::network{});
-    show<>(typename vsort::bitonic<32>::network{});
-    show<>(typename vsort::bitonic<64>::network{});*/
+    test<uint8_t, 16, 1>();
+    test<uint16_t, 8, 1>();
+    test<uint32_t, 4, 1>();
 }
