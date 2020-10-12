@@ -104,9 +104,10 @@ struct vector_ops_support_impl {
         constexpr uint32_t perm[n] = { static_cast<uint32_t>(e)... };
 
         uint64_t blend_mask = 0;
-
+        
         for (uint32_t i = 0; i < n; ++i) {
-            if (perm[i] < (n - (i + 1))) {
+            //if (perm[i] < (n - (i + 1))) {
+            if (perm[(n - 1) - i] > i) {
                 if constexpr (sizeof(T) < sizeof(uint64_t) ||
                               // if we have mask_mov support then 1 - 1 mask for
                               // epi64
@@ -645,6 +646,7 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
 
     static __m256i ALWAYS_INLINE CONST_ATTR
     vec_min(__m256i v1, __m256i v2) {
+
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
             if constexpr (std::is_signed<T>::value) {
                 // AVX2
@@ -713,6 +715,7 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
 
     static __m256i ALWAYS_INLINE CONST_ATTR
     vec_max(__m256i v1, __m256i v2) {
+
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
             if constexpr (std::is_signed<T>::value) {
                 // AVX2
@@ -786,6 +789,9 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
         using vop_support = vector_ops_support<T, n, operations, e...>;
 
         constexpr uint64_t blend_mask = vop_support::blend_mask;
+        //        fprintf(stderr, "Blend Mask: %lx\n\t", blend_mask);
+        //        show(std::integer_sequence<uint32_t, e...>{});
+
 
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
             if constexpr (operations >= instruction_set::AVX512 &&
@@ -827,6 +833,7 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
         }
         else if constexpr (sizeof(T) == sizeof(uint32_t)) {
             // AVX2
+
             return _mm256_blend_epi32(v1, v2, blend_mask);
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
@@ -1203,7 +1210,13 @@ compare_exchange(vec_t<T, n> v) {
     vec_t<T, n> cmp   = vec_ops::template vec_permutate<e...>(v);
     vec_t<T, n> s_min = vec_ops::vec_min(v, cmp);
     vec_t<T, n> s_max = vec_ops::vec_max(v, cmp);
-    return vec_ops::template vec_blend<e...>(s_max, s_min);
+    vec_t<T, n> ret   = vec_ops::template vec_blend<e...>(s_max, s_min);
+    //    show(std::integer_sequence<uint32_t, e...>{});
+    //    show_vec<T>(cmp);
+    //    show_vec<T>(s_min);
+    //    show_vec<T>(s_max);
+    //    show_vec<T>(ret);
+    return ret;
 }
 
 

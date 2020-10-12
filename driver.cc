@@ -136,6 +136,14 @@ test() {
 }
 int
 main() {
+    test<uint32_t, 14>();
+    test<uint32_t, 13>();
+    test<uint32_t, 12>();
+    test<uint32_t, 11>();
+    test<uint32_t, 10>();
+    test<uint32_t, 9>();
+    test<uint32_t, 7>();
+    test<uint32_t, 6>();
     test<uint8_t, 64>();
     test<uint16_t, 32>();
     test<uint32_t, 16>();

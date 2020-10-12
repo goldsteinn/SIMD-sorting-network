@@ -34,30 +34,32 @@ operator==(idx_pair & lhs, idx_pair & rhs) {
 }
 
 
+
 void
 bitonic_merge(std::vector<idx_pair> & pairs,
-              uint32_t                start,
-              uint32_t                len,
-              uint32_t                b) {
-    if (len > 1) {
-        for (uint32_t i = start; i < (start + len / 2); ++i) {
-            pairs.push_back(b ? idx_pair(i, i + len / 2)
-                              : idx_pair(i + len / 2, i));
+              uint32_t                lo,
+              uint32_t                n,
+              uint32_t                dir) {
+    if (n > 1) {
+        uint32_t m = next_p2(n) >> 1;
+        for (uint32_t i = lo; i < (lo + n - (m)); ++i) {
+            pairs.push_back(dir ? idx_pair(i, i + m) : idx_pair(i + m, i));
         }
-        bitonic_merge(pairs, start, len / 2, b);
-        bitonic_merge(pairs, start + len / 2, len / 2, b);
+        bitonic_merge(pairs, lo, m, dir);
+        bitonic_merge(pairs, lo + m, n - m, dir);
     }
 }
 
 void
 bitonic_sort(std::vector<idx_pair> & pairs,
-             uint32_t                start,
-             uint32_t                len,
-             uint32_t                b) {
-    if (len > 1) {
-        bitonic_sort(pairs, start, len / 2, !b);
-        bitonic_sort(pairs, start + (len / 2), (len / 2), b);
-        bitonic_merge(pairs, start, len, b);
+             uint32_t                lo,
+             uint32_t                n,
+             uint32_t                dir) {
+    if (n > 1) {
+        uint32_t m = n >> 1;
+        bitonic_sort(pairs, lo, m, !dir);
+        bitonic_sort(pairs, lo + m, n - m, dir);
+        bitonic_merge(pairs, lo, n, dir);
     }
 }
 
