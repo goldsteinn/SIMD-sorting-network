@@ -48,14 +48,14 @@ struct sarr {
 
 
 enum SORT { SSORT = 0, VSORT = 1 };
-template<typename T, uint32_t n, SORT s, uint32_t USE_AVX2 = 0>
+template<typename T, uint32_t n, SORT s, uint32_t USE_AVX512 = 0>
 void NEVER_INLINE
 do_sort(T * arr) {
     if constexpr (s == SSORT) {
         std::sort(arr, arr + n);
     }
     else {
-        if constexpr (USE_AVX2) {
+        if constexpr (USE_AVX512) {
             vsort::vec_sort<T, n, typename vsort::bitonic<n>::network>::sort(
                 arr);
         }
@@ -70,25 +70,36 @@ do_sort(T * arr) {
 
 
 static constexpr uint32_t tsize = ((1u) << 24);
-template<typename T, uint32_t n, uint32_t USE_AVX2 = 0>
+template<typename T, uint32_t n, uint32_t USE_AVX512 = 0>
 void
 corr_test() {
     sarr<T, n> s1;
     sarr<T, n> s2;
 
-    for (uint32_t i = 0; i < tsize; ++i) {
+    uint32_t i = 0;
+    for (i = 0; i < tsize; ++i) {
         for (uint32_t _i = 0; _i < n; ++_i) {
             s1.arr[_i] = (T)rand();
         }
         memcpy(s2.arr, s1.arr, n * sizeof(T));
         do_sort<T, n, SSORT>(s1.arr);
-        do_sort<T, n, VSORT, USE_AVX2>(s2.arr);
-        assert(!memcmp(s1.arr, s2.arr, n * sizeof(T)));
+        do_sort<T, n, VSORT, USE_AVX512>(s2.arr);
+        if (!(!memcmp(s1.arr, s2.arr, n * sizeof(T)))) {
+            fprintf(stderr,
+                    "FAILED : [%zu][%d][%d]\n",
+                    sizeof(T),
+                    n,
+                    USE_AVX512);
+            break;
+        }
+    }
+    if (i == tsize) {
+        fprintf(stderr, "SUCCESS: [%zu][%d][%d]\n", sizeof(T), n, USE_AVX512);
     }
 }
 
 
-template<typename T, uint32_t n, SORT s, uint32_t USE_AVX2 = 0>
+template<typename T, uint32_t n, SORT s, uint32_t USE_AVX512 = 0>
 double
 inner_perf_test() {
     sarr<T, n> s1;
@@ -117,10 +128,10 @@ void
 perf_print(const char * const h, double cycles) {
     fprintf(stderr, "%-20s: %.3lf \"Cycles\"\n", h, cycles);
 }
-template<typename T, uint32_t n, uint32_t USE_AVX2 = 0>
+template<typename T, uint32_t n, uint32_t USE_AVX512 = 0>
 void
 perf_test() {
-    double vsort_cycles = inner_perf_test<T, n, VSORT, USE_AVX2>();
+    double vsort_cycles = inner_perf_test<T, n, VSORT, USE_AVX512>();
     double ssort_cycles = inner_perf_test<T, n, SSORT>();
 
 
@@ -128,43 +139,33 @@ perf_test() {
     perf_print("std::sort", ssort_cycles);
 }
 
-template<typename T, uint32_t n, uint32_t USE_AVX2 = 0>
+template<typename T, uint32_t n, uint32_t USE_AVX512 = 0>
 void
 test() {
-    corr_test<T, n, USE_AVX2>();
-    perf_test<T, n, USE_AVX2>();
+    corr_test<T, n, USE_AVX512>();
+    //    perf_test<T, n, USE_AVX512>();
+}
+template<typename T, uint32_t n>
+void
+test_all_kernel() {
+    if constexpr (sizeof(T) * n < 64) {
+        if constexpr (n >= 4 && n * sizeof(T) >= 16) {
+            test<T, n, 1>();
+            test<T, n, 0>();
+        }
+        test_all_kernel<T, n + 1>();
+    }
+}
+
+void
+test_all() {
+    test_all_kernel<uint8_t, 16>();
+    test_all_kernel<uint16_t, 8>();
+    test_all_kernel<uint32_t, 4>();
+    test_all_kernel<uint64_t, 4>();
 }
 int
 main() {
-    test<uint32_t, 14>();
-    test<uint32_t, 13>();
-    test<uint32_t, 12>();
-    test<uint32_t, 11>();
-    test<uint32_t, 10>();
-    test<uint32_t, 9>();
-    test<uint32_t, 7>();
-    test<uint32_t, 6>();
-    test<uint8_t, 64>();
-    test<uint16_t, 32>();
-    test<uint32_t, 16>();
-    test<uint64_t, 8>();
-
-    test<uint8_t, 32>();
-    test<uint16_t, 16>();
-    test<uint32_t, 8>();
-    test<uint64_t, 4>();
-
-    test<uint8_t, 16>();
-    test<uint16_t, 8>();
-    test<uint32_t, 4>();
-
-
-    test<uint8_t, 32, 1>();
-    test<uint16_t, 16, 1>();
-    test<uint32_t, 8, 1>();
-    test<uint64_t, 4, 1>();
-
-    test<uint8_t, 16, 1>();
-    test<uint16_t, 8, 1>();
-    test<uint32_t, 4, 1>();
+    test_all();
+    // test<uint16_t, 9, 0>();
 }

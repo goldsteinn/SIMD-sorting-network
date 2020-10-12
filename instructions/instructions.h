@@ -80,6 +80,42 @@ struct avail_instructions {
 
 namespace internal {
 
+#if defined(__clang__)
+typedef uint8_t vec16x1 __attribute__((ext_vector_type(16)));
+typedef uint8_t vec32x1 __attribute__((ext_vector_type(32)));
+typedef uint8_t vec64x1 __attribute__((ext_vector_type(64)));
+
+typedef uint16_t vec8x2 __attribute__((ext_vector_type(8)));
+typedef uint16_t vec16x2 __attribute__((ext_vector_type(16)));
+typedef uint16_t vec32x2 __attribute__((ext_vector_type(32)));
+
+typedef uint32_t vec4x4 __attribute__((ext_vector_type(4)));
+typedef uint32_t vec8x4 __attribute__((ext_vector_type(8)));
+typedef uint32_t vec16x4 __attribute__((ext_vector_type(16)));
+
+typedef uint32_t vec2x8 __attribute__((ext_vector_type(2)));
+typedef uint32_t vec4x8 __attribute__((ext_vector_type(4)));
+typedef uint32_t vec8x8 __attribute__((ext_vector_type(8)));
+
+#elif defined(__GNUC__)
+typedef uint8_t vec16x1 __attribute__((vector_size(16)));
+typedef uint8_t vec32x1 __attribute__((vector_size(32)));
+typedef uint8_t vec64x1 __attribute__((vector_size(64)));
+
+typedef uint16_t vec8x2 __attribute__((vector_size(16)));
+typedef uint16_t vec16x2 __attribute__((vector_size(32)));
+typedef uint16_t vec32x2 __attribute__((vector_size(64)));
+
+typedef uint32_t vec4x4 __attribute__((vector_size(16)));
+typedef uint32_t vec8x4 __attribute__((vector_size(32)));
+typedef uint32_t vec16x4 __attribute__((vector_size(64)));
+
+typedef uint32_t vec2x8 __attribute__((vector_size(16)));
+typedef uint32_t vec4x8 __attribute__((vector_size(32)));
+typedef uint32_t vec8x8 __attribute__((vector_size(64)));
+#endif
+
+
 template<typename T, uint32_t n, instruction_set operations, uint32_t... e>
 struct vector_ops_support_impl {
 
@@ -104,9 +140,9 @@ struct vector_ops_support_impl {
         constexpr uint32_t perm[n] = { static_cast<uint32_t>(e)... };
 
         uint64_t blend_mask = 0;
-        
+
         for (uint32_t i = 0; i < n; ++i) {
-            //if (perm[i] < (n - (i + 1))) {
+            // if (perm[i] < (n - (i + 1))) {
             if (perm[(n - 1) - i] > i) {
                 if constexpr (sizeof(T) < sizeof(uint64_t) ||
                               // if we have mask_mov support then 1 - 1 mask for
@@ -151,14 +187,16 @@ struct vector_ops_support_impl {
     template<uint32_t offset, uint32_t ele_per_lane, uint32_t lane_size>
     static constexpr uint64_t
     build_shuffle_mask_impl() {
-        constexpr uint32_t perms[n] = { static_cast<uint32_t>(e)... };
-        uint64_t           mask     = 0;
+        constexpr uint32_t perms[n]   = { static_cast<uint32_t>(e)... };
+        constexpr uint32_t ele_offset = offset == sizeof(T) * n ? 0 : offset;
+        constexpr uint32_t in_lanes_check = offset == sizeof(T) * n;
+        uint64_t           mask           = 0;
         for (uint32_t i = 0; i < n; i += lane_size) {
             uint64_t lane_mask   = 0;
-            uint32_t lower_bound = n - (i + ele_per_lane + offset);
-            uint32_t upper_bound = n - (i + offset);
+            uint32_t lower_bound = n - (i + ele_per_lane + ele_offset);
+            uint32_t upper_bound = n - (i + ele_offset);
             for (uint32_t j = 0; j < ele_per_lane; ++j) {
-                uint32_t p = perms[i + j + offset];
+                uint32_t p = perms[i + j + ele_offset];
                 if (p >= lower_bound && p < upper_bound) {
                     uint64_t idx = p - lower_bound;
                     uint32_t slot =
@@ -170,7 +208,7 @@ struct vector_ops_support_impl {
                     return 0;
                 }
             }
-            if (i && (mask != lane_mask)) {
+            if ((!in_lanes_check) && i && (mask != lane_mask)) {
                 return 0;
             }
             mask = lane_mask;
@@ -195,7 +233,12 @@ struct vector_ops_support_impl {
                 build_shuffle_mask_impl<0, 4, 8>();
             constexpr uint64_t shuffle_mask_hi =
                 build_shuffle_mask_impl<4, 4, 8>();
-            return shuffle_mask_lo | (shuffle_mask_hi << 32);
+            if constexpr (shuffle_mask_lo == 0 || shuffle_mask_hi == 0) {
+                return 0;
+            }
+            else {
+                return shuffle_mask_lo | (shuffle_mask_hi << 32);
+            }
         }
         else if constexpr (sizeof(T) == sizeof(uint32_t)) {
             return build_shuffle_mask_impl<0, 4, 4>();
@@ -208,16 +251,16 @@ struct vector_ops_support_impl {
     static constexpr uint64_t
     in_same_lanes() {
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
-            return build_shuffle_mask_impl<0, 16, 16>();
+            return build_shuffle_mask_impl<n * sizeof(T), 16, 16>();
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-            return build_shuffle_mask_impl<0, 8, 8>();
+            return build_shuffle_mask_impl<n * sizeof(T), 8, 8>();
         }
         else if constexpr (sizeof(T) == sizeof(uint32_t)) {
-            return build_shuffle_mask_impl<0, 4, 4>();
+            return build_shuffle_mask_impl<n * sizeof(T), 4, 4>();
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
-            return build_shuffle_mask_impl<0, 2, 2>();
+            return build_shuffle_mask_impl<n * sizeof(T), 2, 2>();
         }
     }
 
@@ -277,7 +320,7 @@ struct vector_ops_support_impl {
     across_lanes_mask() {
         if constexpr (sizeof(T) == sizeof(uint8_t) ||
                       sizeof(T) == sizeof(uint16_t)) {
-            return across_lanes_mask_impl<sizeof(__m128i),
+            return across_lanes_mask_impl<sizeof(__m128i)/ sizeof(T),
                                           sizeof(__m128i) / sizeof(T)>();
         }
         else /* sizeof(T) == sizeof(uint64_t) ||
@@ -420,7 +463,7 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
                         _mm_cmpgt_epi64(_mm_xor_si128(v1, sign_bits),
                                         _mm_xor_si128(v2, sign_bits));
                     // SSE4.1
-                    return _mm_blendv_epi8(v2, v1, cmp_mask);
+                    return _mm_blendv_epi8(v1, v2, cmp_mask);
                 }
             }
         }
@@ -478,7 +521,7 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
                     // SSE4.2
                     __m128i cmp_mask = _mm_cmpgt_epi64(v1, v2);
                     // SSE4.1
-                    return _mm_blendv_epi8(v1, v2, cmp_mask);
+                    return _mm_blendv_epi8(v2, v1, cmp_mask);
                 }
                 else {
                     // SSE2
@@ -488,7 +531,7 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
                         _mm_cmpgt_epi64(_mm_xor_si128(v1, sign_bits),
                                         _mm_xor_si128(v2, sign_bits));
                     // SSE4.1
-                    return _mm_blendv_epi8(v1, v2, cmp_mask);
+                    return _mm_blendv_epi8(v2, v1, cmp_mask);
                 }
             }
         }
@@ -789,10 +832,6 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
         using vop_support = vector_ops_support<T, n, operations, e...>;
 
         constexpr uint64_t blend_mask = vop_support::blend_mask;
-        //        fprintf(stderr, "Blend Mask: %lx\n\t", blend_mask);
-        //        show(std::integer_sequence<uint32_t, e...>{});
-
-
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
             if constexpr (operations >= instruction_set::AVX512 &&
                           avail_instructions::AVX512VL &&
@@ -862,14 +901,6 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
         constexpr uint64_t shuffle_mask = vop_support::shuffle_mask;
 
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
-
-            if constexpr (operations >= instruction_set::AVX512 &&
-                          avail_instructions::AVX512VL &&
-                          avail_instructions::AVX512VBMI) {
-                // AVX512VL & AVX512VBMI
-                return _mm256_permutexvar_epi8(_mm256_set_epi8(e...), v);
-            }
-            // this is true if all movement is within lane
             if constexpr (shuffle_mask) {
                 // AVX2
                 return _mm256_shuffle_epi8(
@@ -877,12 +908,29 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
                     build_set_vec_wrapper<0>(
                         typename vop_support::shuffle_vec_initialize{}));
             }
+            else if constexpr (operations >= instruction_set::AVX512 &&
+                               avail_instructions::AVX512VL &&
+                               avail_instructions::AVX512VBMI) {
+                // AVX512VL & AVX512VBMI
+                return _mm256_permutexvar_epi8(_mm256_set_epi8(e...), v);
+            }
+            // this is true if all movement is within lane
+
             else {
+#if defined(__clang__)
+                return (__m256i)__builtin_shufflevector((vec32x1)v,
+                                                        (vec32x1)v,
+                                                        e...);
+#elif defined(__GNUC__)
+                return (__m256i)__builtin_shuffle(
+                    (vec32x1)v,
+                    (vec32x1)build_set_vec<0, e...>());
+#else
                 // AVX2
                 __m256i lo_hi_swap = _mm256_permute4x64_epi64(v, 0x4e);
                 // AVX2
                 __m256i same_lane = _mm256_shuffle_epi8(
-                    lo_hi_swap,
+                    v,
                     build_set_vec_wrapper<0>(
                         typename vop_support::
                             across_lanes_same_vec_initialize{}));
@@ -893,16 +941,11 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
                             across_lanes_other_vec_initialize{}));
                 // AVX2
                 return _mm256_or_si256(same_lane, other_lane);
+#endif
             }
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-            if constexpr (operations >= instruction_set::AVX512 &&
-                          avail_instructions::AVX512VL &&
-                          avail_instructions::AVX512BW) {
-                // AVX512VL & AVX512BW
-                return _mm256_permutexvar_epi16(_mm256_set_epi16(e...), v);
-            }
-            else if constexpr (shuffle_mask) {
+            if constexpr (shuffle_mask) {
                 constexpr uint32_t shuffle_mask_lo = shuffle_mask;
                 constexpr uint32_t shuffle_mask_hi = (shuffle_mask >> 32);
 
@@ -918,13 +961,29 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
                     build_set_vec_wrapper<sizeof(uint8_t)>(
                         typename vop_support::shuffle_vec_initialize{}));
             }
+            else if constexpr (operations >= instruction_set::AVX512 &&
+                               avail_instructions::AVX512VL &&
+                               avail_instructions::AVX512BW) {
+                // AVX512VL & AVX512BW
+                return _mm256_permutexvar_epi16(_mm256_set_epi16(e...), v);
+            }
+
             else {
+#if defined(__clang__)
+                return (__m256i)__builtin_shufflevector((vec16x2)v,
+                                                        (vec16x2)v,
+                                                        e...);
+#elif defined(__GNUC__)
+                return (__m256i)__builtin_shuffle(
+                    (vec16x2)v,
+                    (vec16x2)build_set_vec<0, e...>());
+#else
                 // AVX2
                 __m256i lo_hi_swap = _mm256_permute4x64_epi64(v, 0x4e);
 
                 // AVX2
                 __m256i same_lane = _mm256_shuffle_epi8(
-                    lo_hi_swap,
+                    v,
                     build_set_vec_wrapper<sizeof(uint8_t)>(
                         typename vop_support::
                             across_lanes_same_vec_initialize{}));
@@ -934,8 +993,11 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
                         typename vop_support::
                             across_lanes_other_vec_initialize{}));
 
+
+
                 // AVX2
                 return _mm256_or_si256(same_lane, other_lane);
+#endif
             }
         }
         else if constexpr (sizeof(T) == sizeof(uint32_t)) {
