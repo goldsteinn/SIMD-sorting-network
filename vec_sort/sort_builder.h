@@ -1,18 +1,16 @@
-#ifndef _VEC_SORT_H_
-#define _VEC_SORT_H_
+#ifndef _SORT_BUILDER_H_
+#define _SORT_BUILDER_H_
 
-#include <sort_base/vec_sort_incl.h>
-
+#include <instructions/vector_operations.h>
 #include <util/constexpr_util.h>
 #include <util/cpp_attributes.h>
-#include <util/integer_range.h>
-
 
 namespace vsort {
+namespace sortgen {
 namespace internal {
 
-template<typename T, uint32_t n, vop::instruction_set operations>
-struct network_builder {
+template<typename T, uint32_t n, instruction_set operations>
+struct sort_builder {
 
 
     template<uint32_t... perm_indexes_slice>
@@ -53,22 +51,14 @@ struct network_builder {
 
 }  // namespace internal
 
+template<typename T, uint32_t n, typename network, instruction_set operations>
+vop::vec_t<T, n> ALWAYS_INLINE CONST_ATTR
+generate_sort(vop::vec_t<T, n> v) {
+    return internal::sort_builder<T, next_p2(n), operations>::build(v,
+                                                                    network{});
+}
 
-template<typename T,
-         uint32_t n,
-         typename network,
-         vop::instruction_set operations =
-             vop::avail_instructions::instruction_set_default>
-struct vec_sort {
-
-    static void NEVER_INLINE
-    sort(T * const arr) {
-        vop::vec_t<T, n> v = vop::vec_load<T, n>(arr);
-        v = internal::network_builder<T, next_p2(n), operations>::build(v, network{});
-        vop::vec_store<T, n>(arr, v);
-    }
-};
-
+}  // namespace sortgen
 }  // namespace vsort
 
 #endif

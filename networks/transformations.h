@@ -3,9 +3,9 @@
 
 #include <util/integer_range.h>
 
+namespace vsort {
 namespace transform {
 namespace internal {
-namespace impl {
 
 template<uint32_t n, uint32_t size, uint32_t... pairs>
 struct permutation_transform_impl {
@@ -32,7 +32,7 @@ struct permutation_transform_impl {
                 }
                 current_group |= ((1UL) << _pairs[idx]);
                 current_group |= ((1UL) << _pairs[idx + 1]);
-                
+
                 arr[i * rounded_n + ((rounded_n - 1) - _pairs[idx])] =
                     _pairs[idx + 1];
                 arr[i * rounded_n + ((rounded_n - 1) - _pairs[idx + 1])] =
@@ -141,8 +141,6 @@ struct unidirectional_transform_impl {
     uint32_t arr[size];
 };
 
-}  // namespace impl
-
 
 template<uint32_t n,
          uint32_t size,
@@ -185,7 +183,7 @@ struct group {
         decltype(internal::transformer<
                  n,
                  get_size<uint32_t>(network{}),
-                 internal::impl::group_transform_impl>::transform(network{}));
+                 internal::group_transform_impl>::transform(network{}));
 };
 
 template<uint32_t n,
@@ -193,28 +191,28 @@ template<uint32_t n,
          uint32_t size = get_size<uint32_t>(network{})>
 struct permutation {
     using type = decltype(
-        internal::transformer<
-            n,
-            size,
-            internal::impl::permutation_transform_impl>::transform(network{}));
+        internal::transformer<n, size, internal::permutation_transform_impl>::
+            transform(network{}));
 };
 
 template<uint32_t n, typename network>
 struct unidirectional {
     using type = decltype(
-        internal::transformer<n,
-                              get_size<uint32_t>(network{}),
-                              internal::impl::unidirectional_transform_impl>::
-            transform(network{}));
+        internal::transformer<
+            n,
+            get_size<uint32_t>(network{}),
+            internal::unidirectional_transform_impl>::transform(network{}));
 };
 
 template<uint32_t n, typename network>
 struct build {
-    using type = typename permutation<n,
-                                      typename group<n, network>::type,
-                                      internal::impl::get_network_size<n>(
-                                          network{})>::type;
+    using type =
+        typename permutation<n,
+                             typename group<n, network>::type,
+                             internal::get_network_size<n>(network{})>::type;
 };
 
 }  // namespace transform
+
+}  // namespace vsort
 #endif
