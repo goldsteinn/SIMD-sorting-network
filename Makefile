@@ -1,4 +1,4 @@
-CXX=g++
+
 
 INCLUDES=-I.
 CXXFLAGS=-O3 -std=c++17 -march=native -mtune=native -mavx2

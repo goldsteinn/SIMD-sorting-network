@@ -3,117 +3,148 @@
 
 #include <immintrin.h>
 #include <stdint.h>
-#include <testing.h>
 #include <utility>
 
 namespace vop {
 
 enum instruction_set { AVX = 0, AVX2 = 1, AVX512 = 2 };
 
-
 struct avail_instructions {
 #if defined __AVX512F__
     static constexpr uint32_t AVX512F = 1;
 #else
-    static constexpr uint32_t AVX512F    = 0;
+    static constexpr uint32_t AVX512F       = 0;
 #endif
 
 #if defined __AVX512VL__
     static constexpr uint32_t AVX512VL = 1;
 #else
-    static constexpr uint32_t AVX512VL   = 0;
+    static constexpr uint32_t AVX512VL      = 0;
 #endif
 
 #if defined __AVX512VBMI__
     static constexpr uint32_t AVX512VBMI = 1;
 #else
-    static constexpr uint32_t AVX512VBMI = 0;
+    static constexpr uint32_t AVX512VBMI    = 0;
 #endif
 
 #if defined __AVX512BW__
     static constexpr uint32_t AVX512BW = 1;
 #else
-    static constexpr uint32_t AVX512BW   = 0;
+    static constexpr uint32_t AVX512BW      = 0;
 #endif
 
 
 #if defined __AVX2__
     static constexpr uint32_t AVX2 = 1;
 #else
-    static constexpr uint32_t AVX2       = 0;
+    static constexpr uint32_t AVX2          = 0;
 #endif
 
 #if defined __AVX__
     static constexpr uint32_t AVX = 1;
 #else
-    static constexpr uint32_t AVX        = 0;
+    static constexpr uint32_t AVX           = 0;
 #endif
 
 #if defined __SSE2__
     static constexpr uint32_t SSE2 = 1;
 #else
-    static constexpr uint32_t SSE2       = 0;
+    static constexpr uint32_t SSE2          = 0;
 #endif
 
 #if defined __SSE3__
     static constexpr uint32_t SSE3 = 1;
 #else
-    static constexpr uint32_t SSE3       = 0;
+    static constexpr uint32_t SSE3          = 0;
 #endif
 
 #if defined __SSE4_1__
     static constexpr uint32_t SSE4_1 = 1;
 #else
-    static constexpr uint32_t SSE4_1     = 0;
+    static constexpr uint32_t SSE4_1        = 0;
 #endif
 
 #if defined __SSE4_2__
     static constexpr uint32_t SSE4_2 = 1;
 #else
-    static constexpr uint32_t SSE4_2     = 0;
+    static constexpr uint32_t SSE4_2        = 0;
 #endif
 
     static constexpr instruction_set instruction_set_default =
         (AVX512F | AVX512VL | AVX512VBMI | AVX512BW) ? instruction_set::AVX512
                                                      : instruction_set::AVX2;
+
+
+#if defined(__clang__)
+    static constexpr uint32_t CLANG_BUILTIN = 1;
+    static constexpr uint32_t GCC_BUILTIN   = 0;
+#elif defined(__GNUC__)
+    static constexpr uint32_t CLANG_BUILTIN = 0;
+    static constexpr uint32_t GCC_BUILTIN   = 1;
+#else
+    static constexpr uint32_t CLANG_BUILTIN = 0;
+    static constexpr uint32_t GCC_BUILTIN   = 0;
+#endif
 };
 
 namespace internal {
 
+struct vec_types {
 #if defined(__clang__)
-typedef uint8_t vec16x1 __attribute__((ext_vector_type(16)));
-typedef uint8_t vec32x1 __attribute__((ext_vector_type(32)));
-typedef uint8_t vec64x1 __attribute__((ext_vector_type(64)));
+    typedef uint8_t vec16x1 __attribute__((ext_vector_type(16)));
+    typedef uint8_t vec32x1 __attribute__((ext_vector_type(32)));
+    typedef uint8_t vec64x1 __attribute__((ext_vector_type(64)));
 
-typedef uint16_t vec8x2 __attribute__((ext_vector_type(8)));
-typedef uint16_t vec16x2 __attribute__((ext_vector_type(16)));
-typedef uint16_t vec32x2 __attribute__((ext_vector_type(32)));
+    typedef uint16_t vec8x2 __attribute__((ext_vector_type(8)));
+    typedef uint16_t vec16x2 __attribute__((ext_vector_type(16)));
+    typedef uint16_t vec32x2 __attribute__((ext_vector_type(32)));
 
-typedef uint32_t vec4x4 __attribute__((ext_vector_type(4)));
-typedef uint32_t vec8x4 __attribute__((ext_vector_type(8)));
-typedef uint32_t vec16x4 __attribute__((ext_vector_type(16)));
+    typedef uint32_t vec4x4 __attribute__((ext_vector_type(4)));
+    typedef uint32_t vec8x4 __attribute__((ext_vector_type(8)));
+    typedef uint32_t vec16x4 __attribute__((ext_vector_type(16)));
 
-typedef uint32_t vec2x8 __attribute__((ext_vector_type(2)));
-typedef uint32_t vec4x8 __attribute__((ext_vector_type(4)));
-typedef uint32_t vec8x8 __attribute__((ext_vector_type(8)));
+    typedef uint64_t vec2x8 __attribute__((ext_vector_type(2)));
+    typedef uint64_t vec4x8 __attribute__((ext_vector_type(4)));
+    typedef uint64_t vec8x8 __attribute__((ext_vector_type(8)));
 
 #elif defined(__GNUC__)
-typedef uint8_t vec16x1 __attribute__((vector_size(16)));
-typedef uint8_t vec32x1 __attribute__((vector_size(32)));
-typedef uint8_t vec64x1 __attribute__((vector_size(64)));
+    typedef uint8_t           vec16x1 __attribute__((vector_size(16)));
+    typedef uint8_t           vec32x1 __attribute__((vector_size(32)));
+    typedef uint8_t           vec64x1 __attribute__((vector_size(64)));
 
-typedef uint16_t vec8x2 __attribute__((vector_size(16)));
-typedef uint16_t vec16x2 __attribute__((vector_size(32)));
-typedef uint16_t vec32x2 __attribute__((vector_size(64)));
+    typedef uint16_t vec8x2 __attribute__((vector_size(16)));
+    typedef uint16_t vec16x2 __attribute__((vector_size(32)));
+    typedef uint16_t vec32x2 __attribute__((vector_size(64)));
 
-typedef uint32_t vec4x4 __attribute__((vector_size(16)));
-typedef uint32_t vec8x4 __attribute__((vector_size(32)));
-typedef uint32_t vec16x4 __attribute__((vector_size(64)));
+    typedef uint32_t vec4x4 __attribute__((vector_size(16)));
+    typedef uint32_t vec8x4 __attribute__((vector_size(32)));
+    typedef uint32_t vec16x4 __attribute__((vector_size(64)));
 
-typedef uint32_t vec2x8 __attribute__((vector_size(16)));
-typedef uint32_t vec4x8 __attribute__((vector_size(32)));
-typedef uint32_t vec8x8 __attribute__((vector_size(64)));
+    typedef uint64_t vec2x8 __attribute__((vector_size(16)));
+    typedef uint64_t vec4x8 __attribute__((vector_size(32)));
+    typedef uint64_t vec8x8 __attribute__((vector_size(64)));
 #endif
+
+    struct __m128_wrapper {
+        typedef __m128i type;
+    } ALIGN_ATTR(sizeof(__m128i));
+
+    struct __m256_wrapper {
+        typedef __m256i type;
+    } ALIGN_ATTR(sizeof(__m256i));
+
+    struct __m512_wrapper {
+        typedef __m512i type;
+    } ALIGN_ATTR(sizeof(__m512i));
+
+    template<typename T, uint32_t n>
+    using get_vec_t = typename std::conditional_t<
+        n * sizeof(T) <= 32,
+        typename std::
+            conditional_t<n * sizeof(T) <= 16, __m128_wrapper, __m256_wrapper>,
+        __m512_wrapper>;
+};
 
 
 template<typename T, uint32_t n, instruction_set operations, uint32_t... e>
@@ -145,18 +176,12 @@ struct vector_ops_support_impl {
             // if (perm[i] < (n - (i + 1))) {
             if (perm[(n - 1) - i] > i) {
                 if constexpr (sizeof(T) < sizeof(uint64_t) ||
-                              // if we have mask_mov support then 1 - 1 mask for
-                              // epi64
-                              (operations >= instruction_set::AVX512 &&
-                               avail_instructions::AVX512F &&
-                               avail_instructions::AVX512VL) ||
+                              // for __m512i use normal mask for epi64
                               (n * sizeof(T) > sizeof(__m256i))) {
                     blend_mask |= ((1UL) << i);
                 }
                 else /* sizeof(T) == sizeof(uint64_t) */ {
-
-                    // if we don't have mask_mov then need to scale mask to use
-                    // blend_epi32
+                    // blend_epi32 for epi64
                     blend_mask |= ((3UL) << (2 * i));
                 }
             }
@@ -230,9 +255,9 @@ struct vector_ops_support_impl {
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
             constexpr uint64_t shuffle_mask_lo =
-                build_shuffle_mask_impl<0, 4, 8>();
-            constexpr uint64_t shuffle_mask_hi =
                 build_shuffle_mask_impl<4, 4, 8>();
+            constexpr uint64_t shuffle_mask_hi =
+                build_shuffle_mask_impl<0, 4, 8>();
             if constexpr (shuffle_mask_lo == 0 || shuffle_mask_hi == 0) {
                 return 0;
             }
@@ -320,7 +345,7 @@ struct vector_ops_support_impl {
     across_lanes_mask() {
         if constexpr (sizeof(T) == sizeof(uint8_t) ||
                       sizeof(T) == sizeof(uint16_t)) {
-            return across_lanes_mask_impl<sizeof(__m128i)/ sizeof(T),
+            return across_lanes_mask_impl<sizeof(__m128i) / sizeof(T),
                                           sizeof(__m128i) / sizeof(T)>();
         }
         else /* sizeof(T) == sizeof(uint64_t) ||
@@ -370,6 +395,62 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
     static constexpr uint32_t vec_size = sizeof(__m128i);
     static constexpr uint32_t n        = vec_size / sizeof(T);
 
+    template<uint32_t... e>
+    static __m128i ALWAYS_INLINE CONST_ATTR
+    builtin_shuffle(__m128i v) {
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+#if defined(__clang__)
+            return (__m128i)__builtin_shufflevector((vec_types::vec16x1)v,
+                                                    (vec_types::vec16x1)v,
+                                                    e...);
+#elif defined(__GNUC__)
+            return (__m128i)__builtin_shuffle(
+                (vec_types::vec16x1)v,
+                (vec_types::vec16x1)_mm_set_epi8(e...));
+#else
+            return v;
+#endif
+        }
+        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+#if defined(__clang__)
+            return (__m128i)__builtin_shufflevector((vec_types::vec8x2)v,
+                                                    (vec_types::vec8x2)v,
+                                                    e...);
+#elif defined(__GNUC__)
+            return (__m128i)__builtin_shuffle(
+                (vec_types::vec8x2)v,
+                (vec_types::vec8x2)_mm_set_epi16(e...));
+#else
+            return v;
+#endif
+        }
+        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+#if defined(__clang__)
+            return (__m128i)__builtin_shufflevector((vec_types::vec4x4)v,
+                                                    (vec_types::vec4x4)v,
+                                                    e...);
+#elif defined(__GNUC__)
+            return (__m128i)__builtin_shuffle(
+                (vec_types::vec4x4)v,
+                (vec_types::vec4x4)_mm_set_epi32(e...));
+#else
+            return v;
+#endif
+        }
+        else /* sizeof(T) == sizeof(uint64_t) */ {
+#if defined(__clang__)
+            return (__m128i)__builtin_shufflevector((vec_types::vec2x8)v,
+                                                    (vec_types::vec2x8)v,
+                                                    e...);
+#elif defined(__GNUC__)
+            return (__m128i)__builtin_shuffle(
+                (vec_types::vec2x8)v,
+                (vec_types::vec2x8)_mm_set_epi64x(e...));
+#else
+            return v;
+#endif
+        }
+    }
 
     template<uint32_t size, uint32_t... e>
     static constexpr __m128i ALWAYS_INLINE CONST_ATTR
@@ -400,7 +481,6 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
     build_set_vec_wrapper(std::integer_sequence<uint32_t, e...> _e) {
         return build_set_vec<size, e...>();
     }
-
 
     static __m128i ALWAYS_INLINE CONST_ATTR
     vec_min(__m128i v1, __m128i v2) {
@@ -453,7 +533,7 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
                     // SSE4.2
                     __m128i cmp_mask = _mm_cmpgt_epi64(v1, v2);
                     // SSE4.1
-                    return _mm_blendv_epi8(v2, v1, cmp_mask);
+                    return _mm_blendv_epi8(v1, v2, cmp_mask);
                 }
                 else {
                     // SSE2
@@ -600,30 +680,18 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
 
         constexpr uint64_t shuffle_mask = vop_support::shuffle_mask;
 
-        if constexpr (sizeof(T) == sizeof(uint8_t)) {
-
-            if constexpr (operations >= instruction_set::AVX512 &&
-                          avail_instructions::AVX512VL &&
-                          avail_instructions::AVX512VBMI) {
-                // AVX512VL & AVX512VBMI
-                return _mm_permutexvar_epi8(_mm_set_epi8(e...), v);
-            }
-            else {
-                // SSE3
-                return _mm_shuffle_epi8(
-                    v,
-                    build_set_vec_wrapper<0>(
-                        typename vop_support::shuffle_vec_initialize{}));
-            }
+        if constexpr (avail_instructions::CLANG_BUILTIN) {
+            return builtin_shuffle<e...>(v);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            // SSE3
+            return _mm_shuffle_epi8(
+                v,
+                build_set_vec_wrapper<0>(
+                    typename vop_support::shuffle_vec_initialize{}));
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-            if constexpr (operations >= instruction_set::AVX512 &&
-                          avail_instructions::AVX512VL &&
-                          avail_instructions::AVX512BW) {
-                // AVX512VL & AVX512BW
-                return _mm_permutexvar_epi16(_mm_set_epi16(e...), v);
-            }
-            else if constexpr (shuffle_mask) {
+            if constexpr (shuffle_mask) {
                 constexpr uint32_t shuffle_mask_lo = shuffle_mask;
                 constexpr uint32_t shuffle_mask_hi = (shuffle_mask >> 32);
 
@@ -650,11 +718,70 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
     }
 };
 
+
 template<typename T, instruction_set operations>
 struct vector_ops<T, operations, sizeof(__m256i)> {
 
     static constexpr uint32_t vec_size = sizeof(__m256i);
     static constexpr uint32_t n        = vec_size / sizeof(T);
+
+
+    template<uint32_t... e>
+    static __m256i ALWAYS_INLINE CONST_ATTR
+    builtin_shuffle(__m256i v) {
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+#if defined(__clang__)
+            return (__m256i)__builtin_shufflevector((vec_types::vec32x1)v,
+                                                    (vec_types::vec32x1)v,
+                                                    e...);
+#elif defined(__GNUC__)
+            return (__m256i)__builtin_shuffle(
+                (vec_types::vec32x1)v,
+                (vec_types::vec32x1)_mm256_set_epi8(e...));
+#else
+            return v;
+#endif
+        }
+        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+#if defined(__clang__)
+            return (__m256i)__builtin_shufflevector((vec_types::vec16x2)v,
+                                                    (vec_types::vec16x2)v,
+                                                    e...);
+#elif defined(__GNUC__)
+            return (__m256i)__builtin_shuffle(
+                (vec_types::vec16x2)v,
+                (vec_types::vec16x2)_mm256_set_epi16(e...));
+#else
+            return v;
+#endif
+        }
+        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+#if defined(__clang__)
+            return (__m256i)__builtin_shufflevector((vec_types::vec8x4)v,
+                                                    (vec_types::vec8x4)v,
+                                                    e...);
+#elif defined(__GNUC__)
+            return (__m256i)__builtin_shuffle(
+                (vec_types::vec8x4)v,
+                (vec_types::vec8x4)_mm256_set_epi32(e...));
+#else
+            return v;
+#endif
+        }
+        else /* sizeof(T) == sizeof(uint64_t) */ {
+#if defined(__clang__)
+            return (__m256i)__builtin_shufflevector((vec_types::vec4x8)v,
+                                                    (vec_types::vec4x8)v,
+                                                    e...);
+#elif defined(__GNUC__)
+            return (__m256i)__builtin_shuffle(
+                (vec_types::vec4x8)v,
+                (vec_types::vec4x8)_mm256_set_epi64x(e...));
+#else
+            return v;
+#endif
+        }
+    }
 
     template<uint32_t size, uint32_t... e>
     static constexpr __m256i ALWAYS_INLINE CONST_ATTR
@@ -849,18 +976,19 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
             }
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-            if constexpr (operations >= instruction_set::AVX512 &&
-                          avail_instructions::AVX512VL &&
-                          avail_instructions::AVX512BW) {
+            if constexpr ((blend_mask & 0xff) == ((blend_mask >> 8) & 0xff)) {
+                // epi16 blend uses mask_index % 8 so needs to be mirror for
+                // this to work
+                // AVX2
+                return _mm256_blend_epi16(v1, v2, blend_mask & 0xff);
+            }
+            else if constexpr (operations >= instruction_set::AVX512 &&
+                               avail_instructions::AVX512VL &&
+                               avail_instructions::AVX512BW) {
                 // AVX512VL & AVX512BW
                 return _mm256_mask_mov_epi16(v1, blend_mask, v2);
             }
-            else if constexpr ((blend_mask & 0xff) ==
-                               ((blend_mask >> 8) & 0xff)) {
-                // epi16 blend uses mask_index % 8 so needs to be mirror for
-                // this to work
-                return _mm256_blend_epi16(v1, v2, blend_mask & 0xff);
-            }
+
             else {
                 // AVX2
                 return _mm256_blendv_epi8(
@@ -872,23 +1000,11 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
         }
         else if constexpr (sizeof(T) == sizeof(uint32_t)) {
             // AVX2
-
             return _mm256_blend_epi32(v1, v2, blend_mask);
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
-            if constexpr (operations >= instruction_set::AVX512 &&
-                          avail_instructions::AVX512F &&
-                          avail_instructions::AVX512VL) {
-                // AVX512F & AVX512VL
-                return _mm256_mask_mov_epi64(v1, blend_mask, v2);
-            }
-            else {
-                // build_blend_mask will create proper mask for epi64 if AVX512F
-                // and AVX512VL are not available
-
-                // AVX2
-                return _mm256_blend_epi32(v1, v2, blend_mask);
-            }
+            // AVX2
+            return _mm256_blend_epi32(v1, v2, blend_mask);
         }
     }
 
@@ -900,7 +1016,11 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
 
         constexpr uint64_t shuffle_mask = vop_support::shuffle_mask;
 
-        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+        if constexpr (avail_instructions::CLANG_BUILTIN) {
+            return builtin_shuffle<e...>(v);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            // gcc misses some optimizations
             if constexpr (shuffle_mask) {
                 // AVX2
                 return _mm256_shuffle_epi8(
@@ -916,16 +1036,14 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
             }
             // this is true if all movement is within lane
 
+            else if constexpr (avail_instructions::GCC_BUILTIN) {
+                return builtin_shuffle<e...>(v);
+            }
             else {
-#if defined(__clang__)
-                return (__m256i)__builtin_shufflevector((vec32x1)v,
-                                                        (vec32x1)v,
-                                                        e...);
-#elif defined(__GNUC__)
-                return (__m256i)__builtin_shuffle(
-                    (vec32x1)v,
-                    (vec32x1)build_set_vec<0, e...>());
-#else
+
+                // neither GCC, clang, or AVX512 so need to implement perm
+                // manually
+
                 // AVX2
                 __m256i lo_hi_swap = _mm256_permute4x64_epi64(v, 0x4e);
                 // AVX2
@@ -941,7 +1059,6 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
                             across_lanes_other_vec_initialize{}));
                 // AVX2
                 return _mm256_or_si256(same_lane, other_lane);
-#endif
             }
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
@@ -968,16 +1085,11 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
                 return _mm256_permutexvar_epi16(_mm256_set_epi16(e...), v);
             }
 
+
+            else if constexpr (avail_instructions::GCC_BUILTIN) {
+                return builtin_shuffle<e...>(v);
+            }
             else {
-#if defined(__clang__)
-                return (__m256i)__builtin_shufflevector((vec16x2)v,
-                                                        (vec16x2)v,
-                                                        e...);
-#elif defined(__GNUC__)
-                return (__m256i)__builtin_shuffle(
-                    (vec16x2)v,
-                    (vec16x2)build_set_vec<0, e...>());
-#else
                 // AVX2
                 __m256i lo_hi_swap = _mm256_permute4x64_epi64(v, 0x4e);
 
@@ -994,10 +1106,8 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
                             across_lanes_other_vec_initialize{}));
 
 
-
                 // AVX2
                 return _mm256_or_si256(same_lane, other_lane);
-#endif
             }
         }
         else if constexpr (sizeof(T) == sizeof(uint32_t)) {
@@ -1025,6 +1135,63 @@ struct vector_ops<T, operations, sizeof(__m512i)> {
 
     static constexpr uint32_t vec_size = sizeof(__m512i);
     static constexpr uint32_t n        = vec_size / sizeof(T);
+
+    template<uint32_t... e>
+    static __m512i ALWAYS_INLINE CONST_ATTR
+    builtin_shuffle(__m512i v) {
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+#if defined(__clang__)
+            return (__m512i)__builtin_shufflevector((vec_types::vec64x1)v,
+                                                    (vec_types::vec64x1)v,
+                                                    e...);
+#elif defined(__GNUC__)
+            return (__m512i)__builtin_shuffle(
+                (vec_types::vec64x1)v,
+                (vec_types::vec64x1)_mm512_set_epi8(e...));
+#else
+            return v;
+#endif
+        }
+        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+#if defined(__clang__)
+            return (__m512i)__builtin_shufflevector((vec_types::vec32x2)v,
+                                                    (vec_types::vec32x2)v,
+                                                    e...);
+#elif defined(__GNUC__)
+            return (__m512i)__builtin_shuffle(
+                (vec_types::vec32x2)v,
+                (vec_types::vec32x2)_mm512_set_epi16(e...));
+#else
+            return v;
+#endif
+        }
+        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+#if defined(__clang__)
+            return (__m512i)__builtin_shufflevector((vec_types::vec16x4)v,
+                                                    (vec_types::vec16x4)v,
+                                                    e...);
+#elif defined(__GNUC__)
+            return (__m512i)__builtin_shuffle(
+                (vec_types::vec16x4)v,
+                (vec_types::vec16x4)_mm512_set_epi32(e...));
+#else
+            return v;
+#endif
+        }
+        else /* sizeof(T) == sizeof(uint64_t) */ {
+#if defined(__clang__)
+            return (__m512i)__builtin_shufflevector((vec_types::vec8x8)v,
+                                                    (vec_types::vec8x8)v,
+                                                    e...);
+#elif defined(__GNUC__)
+            return (__m512i)__builtin_shuffle(
+                (vec_types::vec8x8)v,
+                (vec_types::vec8x8)_mm512_set_epi64x(e...));
+#else
+            return v;
+#endif
+        }
+    }
 
     template<uint32_t size, uint32_t... e>
     static constexpr __m512i ALWAYS_INLINE CONST_ATTR
@@ -1179,8 +1346,10 @@ struct vector_ops<T, operations, sizeof(__m512i)> {
         using vop_support = vector_ops_support<T, n, operations, e...>;
 
         constexpr uint64_t shuffle_mask = vop_support::shuffle_mask;
-
-        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+        if constexpr (avail_instructions::CLANG_BUILTIN) {
+            return builtin_shuffle<e...>(v);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint8_t)) {
             // AVX512VBMI
             return _mm512_permutexvar_epi8(_mm512_set_epi8(e...), v);
         }
@@ -1211,31 +1380,11 @@ struct vector_ops<T, operations, sizeof(__m512i)> {
     }
 };
 
-
 }  // namespace internal
 
-struct __m128_wrapper {
-    typedef __m128i type;
-} ALIGN_ATTR(sizeof(__m128i));
-
-struct __m256_wrapper {
-    typedef __m256i type;
-} ALIGN_ATTR(sizeof(__m256i));
-
-struct __m512_wrapper {
-    typedef __m512i type;
-} ALIGN_ATTR(sizeof(__m512i));
 
 template<typename T, uint32_t n>
-using get_vec_t =
-    typename std::conditional_t<n * sizeof(T) <= 32,
-                                typename std::conditional_t<n * sizeof(T) <= 16,
-                                                            __m128_wrapper,
-                                                            __m256_wrapper>,
-                                __m512_wrapper>;
-
-template<typename T, uint32_t n>
-using vec_t = typename get_vec_t<T, n>::type;
+using vec_t = typename internal::vec_types::get_vec_t<T, n>::type;
 
 template<typename T, uint32_t n>
 constexpr vec_t<T, n> ALWAYS_INLINE
@@ -1273,16 +1422,10 @@ compare_exchange(vec_t<T, n> v) {
     vec_t<T, n> s_min = vec_ops::vec_min(v, cmp);
     vec_t<T, n> s_max = vec_ops::vec_max(v, cmp);
     vec_t<T, n> ret   = vec_ops::template vec_blend<e...>(s_max, s_min);
-    //    show(std::integer_sequence<uint32_t, e...>{});
-    //    show_vec<T>(cmp);
-    //    show_vec<T>(s_min);
-    //    show_vec<T>(s_max);
-    //    show_vec<T>(ret);
     return ret;
 }
 
 
 }  // namespace vop
-
 
 #endif

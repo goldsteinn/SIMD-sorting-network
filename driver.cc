@@ -69,7 +69,7 @@ do_sort(T * arr) {
 }
 
 
-static constexpr uint32_t tsize = ((1u) << 24);
+static constexpr uint32_t tsize = ((1u) << 16);
 template<typename T, uint32_t n, uint32_t USE_AVX512 = 0>
 void
 corr_test() {
@@ -148,24 +148,23 @@ test() {
 template<typename T, uint32_t n>
 void
 test_all_kernel() {
-    if constexpr (sizeof(T) * n < 64) {
-        if constexpr (n >= 4 && n * sizeof(T) >= 16) {
+    if constexpr (sizeof(T) * n <= 64) {
+        if constexpr (n >= 4) {
             test<T, n, 1>();
             test<T, n, 0>();
         }
-        test_all_kernel<T, n + 1>();
+        test_all_kernel<T, n + 3>();
     }
 }
 
 void
 test_all() {
-    test_all_kernel<uint8_t, 16>();
-    test_all_kernel<uint16_t, 8>();
+    test_all_kernel<uint8_t, 9>();
+    test_all_kernel<uint16_t, 5>();
     test_all_kernel<uint32_t, 4>();
     test_all_kernel<uint64_t, 4>();
 }
 int
 main() {
     test_all();
-    // test<uint16_t, 9, 0>();
 }
