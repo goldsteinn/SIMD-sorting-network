@@ -10,25 +10,39 @@
 
 namespace vsort {
 
-enum instruction_set { AVX = 0, AVX2 = 1, AVX512 = 2 };
-
+enum simd_instructions { AVX = 0, AVX2 = 1, AVX512 = 2 };
+enum builtin_usage {
+    BUILTIN_FIRST    = 0,
+    BUILTIN_FALLBACK = 1,
+    BUILTIN_NONE     = 2
+};
 namespace vop {
 
-static constexpr instruction_set instruction_set_default =
+static constexpr simd_instructions simd_instructions_default =
     (internal::avail_instructions::AVX512F |
      internal::avail_instructions::AVX512VL |
      internal::avail_instructions::AVX512VBMI |
      internal::avail_instructions::AVX512BW)
-        ? instruction_set::AVX512
-        : instruction_set::AVX2;
+        ? simd_instructions::AVX512
+        : simd_instructions::AVX2;
+
+static constexpr builtin_usage builtin_perm_default =
+    (internal::avail_instructions::CLANG_BUILTIN
+         ? builtin_usage::BUILTIN_FIRST
+         : (internal::avail_instructions::GCC_BUILTIN
+                ? builtin_usage::BUILTIN_FALLBACK
+                : builtin_usage::BUILTIN_NONE));
 
 
 namespace internal {
-template<typename T, instruction_set operations, uint32_t vec_size>
+template<typename T,
+         simd_instructions simd_set,
+         builtin_usage     builtin_perm,
+         uint32_t          vec_size>
 struct vector_ops;
 
-template<typename T, instruction_set operations>
-struct vector_ops<T, operations, sizeof(__m128i)> {
+template<typename T, simd_instructions simd_set, builtin_usage builtin_perm>
+struct vector_ops<T, simd_set, builtin_perm, sizeof(__m128i)> {
     static constexpr uint32_t vec_size = sizeof(__m128i);
     static constexpr uint32_t n        = vec_size / sizeof(T);
 
@@ -157,7 +171,7 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
 
-            if constexpr (operations >= instruction_set::AVX512 &&
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
                           internal::avail_instructions::AVX512F &&
                           internal::avail_instructions::AVX512VL) {
                 if constexpr (std::is_signed<T>::value) {
@@ -225,7 +239,7 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
 
-            if constexpr (operations >= instruction_set::AVX512 &&
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
                           internal::avail_instructions::AVX512F &&
                           internal::avail_instructions::AVX512VL) {
                 if constexpr (std::is_signed<T>::value) {
@@ -261,12 +275,12 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
     template<uint32_t... e>
     static __m128i ALWAYS_INLINE CONST_ATTR
     vec_blend(__m128i v1, __m128i v2) {
-        using vop_support = internal::vector_ops_support<T, n, e...>;
+        using vop_support = internal::blend_support<T, n, e...>;
 
         constexpr uint64_t blend_mask = vop_support::blend_mask;
 
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
-            if constexpr (operations >= instruction_set::AVX512 &&
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
                           internal::avail_instructions::AVX512VL &&
                           internal::avail_instructions::AVX512BW) {
                 // AVX512VL & AVX512BW
@@ -282,7 +296,7 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
             }
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-            if constexpr (operations >= instruction_set::AVX512 &&
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
                           internal::avail_instructions::AVX512VL &&
                           internal::avail_instructions::AVX512BW) {
                 // AVX512VL & AVX512BW
@@ -298,7 +312,7 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
             return _mm_blend_epi32(v1, v2, blend_mask);
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
-            if constexpr (operations >= instruction_set::AVX512 &&
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
                           internal::avail_instructions::AVX512F &&
                           internal::avail_instructions::AVX512VL) {
                 // AVX512F & AVX512VL
@@ -316,15 +330,12 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
 
     template<uint32_t... e>
     static __m128i ALWAYS_INLINE CONST_ATTR
-    vec_permutate(__m128i v) {
-        using vop_support = internal::vector_ops_support<T, n, e...>;
+    vec_permutate_manual(__m128i v) {
+        using vop_support = internal::shuffle_support<T, n, e...>;
 
         constexpr uint64_t shuffle_mask = vop_support::shuffle_mask;
 
-        if constexpr (internal::avail_instructions::CLANG_BUILTIN) {
-            return builtin_shuffle<e...>(v);
-        }
-        else if constexpr (sizeof(T) == sizeof(uint8_t)) {
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
             // SSE3
             return _mm_shuffle_epi8(
                 v,
@@ -357,11 +368,23 @@ struct vector_ops<T, operations, sizeof(__m128i)> {
             return _mm_shuffle_epi32(v, shuffle_mask);
         }
     }
+
+    template<uint32_t... e>
+    static __m128i ALWAYS_INLINE CONST_ATTR
+    vec_permutate(__m128i v) {
+        if constexpr (avail_instructions::BUILTIN_SHUFFLE &&
+                      builtin_perm == builtin_usage::BUILTIN_FIRST) {
+            return builtin_shuffle<e...>(v);
+        }
+        else {
+            return vec_permutate_manual<e...>(v);
+        }
+    }
 };
 
 
-template<typename T, instruction_set operations>
-struct vector_ops<T, operations, sizeof(__m256i)> {
+template<typename T, simd_instructions simd_set, builtin_usage builtin_perm>
+struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
 
     static constexpr uint32_t vec_size = sizeof(__m256i);
     static constexpr uint32_t n        = vec_size / sizeof(T);
@@ -494,7 +517,7 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
 
-            if constexpr (operations >= instruction_set::AVX512 &&
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
                           internal::avail_instructions::AVX512F &&
                           internal::avail_instructions::AVX512VL) {
                 if constexpr (std::is_signed<T>::value) {
@@ -563,7 +586,7 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
 
-            if constexpr (operations >= instruction_set::AVX512 &&
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
                           internal::avail_instructions::AVX512F &&
                           internal::avail_instructions::AVX512VL) {
                 if constexpr (std::is_signed<T>::value) {
@@ -601,11 +624,11 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
     template<uint32_t... e>
     static __m256i ALWAYS_INLINE CONST_ATTR
     vec_blend(__m256i v1, __m256i v2) {
-        using vop_support = internal::vector_ops_support<T, n, e...>;
+        using vop_support = internal::blend_support<T, n, e...>;
 
         constexpr uint64_t blend_mask = vop_support::blend_mask;
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
-            if constexpr (operations >= instruction_set::AVX512 &&
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
                           internal::avail_instructions::AVX512VL &&
                           internal::avail_instructions::AVX512BW) {
                 // AVX512VL & AVX512BW
@@ -627,7 +650,7 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
                 // AVX2
                 return _mm256_blend_epi16(v1, v2, blend_mask & 0xff);
             }
-            else if constexpr (operations >= instruction_set::AVX512 &&
+            else if constexpr (simd_set >= simd_instructions::AVX512 &&
                                internal::avail_instructions::AVX512VL &&
                                internal::avail_instructions::AVX512BW) {
                 // AVX512VL & AVX512BW
@@ -656,15 +679,12 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
 
     template<uint32_t... e>
     static __m256i ALWAYS_INLINE CONST_ATTR
-    vec_permutate(__m256i v) {
-        using vop_support = internal::vector_ops_support<T, n, e...>;
+    vec_permutate_manual(__m256i v) {
+        using vop_support = internal::shuffle_support<T, n, e...>;
 
         constexpr uint64_t shuffle_mask = vop_support::shuffle_mask;
 
-        if constexpr (internal::avail_instructions::CLANG_BUILTIN) {
-            return builtin_shuffle<e...>(v);
-        }
-        else if constexpr (sizeof(T) == sizeof(uint8_t)) {
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
             // gcc misses some optimizations
             if constexpr (shuffle_mask) {
                 // AVX2
@@ -673,7 +693,7 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
                     build_set_vec_wrapper<0>(
                         typename vop_support::shuffle_vec_initialize{}));
             }
-            else if constexpr (operations >= instruction_set::AVX512 &&
+            else if constexpr (simd_set >= simd_instructions::AVX512 &&
                                internal::avail_instructions::AVX512VL &&
                                internal::avail_instructions::AVX512VBMI) {
                 // AVX512VL & AVX512VBMI
@@ -681,7 +701,8 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
             }
             // this is true if all movement is within lane
 
-            else if constexpr (internal::avail_instructions::GCC_BUILTIN) {
+            else if constexpr (internal::avail_instructions::BUILTIN_SHUFFLE &&
+                               builtin_perm == builtin_usage::BUILTIN_FALLBACK) {
                 return builtin_shuffle<e...>(v);
             }
             else {
@@ -723,7 +744,7 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
                     build_set_vec_wrapper<sizeof(uint8_t)>(
                         typename vop_support::shuffle_vec_initialize{}));
             }
-            else if constexpr (operations >= instruction_set::AVX512 &&
+            else if constexpr (simd_set >= simd_instructions::AVX512 &&
                                internal::avail_instructions::AVX512VL &&
                                internal::avail_instructions::AVX512BW) {
                 // AVX512VL & AVX512BW
@@ -731,7 +752,8 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
             }
 
 
-            else if constexpr (internal::avail_instructions::GCC_BUILTIN) {
+            else if constexpr (internal::avail_instructions::BUILTIN_SHUFFLE &&
+                               builtin_perm == builtin_usage::BUILTIN_FALLBACK) {
                 return builtin_shuffle<e...>(v);
             }
             else {
@@ -773,10 +795,22 @@ struct vector_ops<T, operations, sizeof(__m256i)> {
             return _mm256_permute4x64_epi64(v, shuffle_mask);
         }
     }
+
+    template<uint32_t... e>
+    static __m256i ALWAYS_INLINE CONST_ATTR
+    vec_permutate(__m256i v) {
+        if constexpr (avail_instructions::BUILTIN_SHUFFLE &&
+                      builtin_perm == builtin_usage::BUILTIN_FIRST) {
+            return builtin_shuffle<e...>(v);
+        }
+        else {
+            return vec_permutate_manual<e...>(v);
+        }
+    }
 };
 
-template<typename T, instruction_set operations>
-struct vector_ops<T, operations, sizeof(__m512i)> {
+template<typename T, simd_instructions simd_set, builtin_usage builtin_perm>
+struct vector_ops<T, simd_set, builtin_perm, sizeof(__m512i)> {
 
     static constexpr uint32_t vec_size = sizeof(__m512i);
     static constexpr uint32_t n        = vec_size / sizeof(T);
@@ -835,7 +869,7 @@ struct vector_ops<T, operations, sizeof(__m512i)> {
 #elif defined(__GNUC__)
             return (__m512i)__builtin_shuffle(
                 (internal::vec_types::vec8x8)v,
-                (internal::vec_types::vec8x8)_mm512_set_epi64x(e...));
+                (internal::vec_types::vec8x8)_mm512_set_epi64(e...));
 #else
             return v;
 #endif
@@ -966,7 +1000,7 @@ struct vector_ops<T, operations, sizeof(__m512i)> {
     template<uint32_t... e>
     static __m512i ALWAYS_INLINE CONST_ATTR
     vec_blend(__m512i v1, __m512i v2) {
-        using vop_support = internal::vector_ops_support<T, n, e...>;
+        using vop_support = internal::blend_support<T, n, e...>;
 
         constexpr uint64_t blend_mask = vop_support::blend_mask;
 
@@ -991,14 +1025,11 @@ struct vector_ops<T, operations, sizeof(__m512i)> {
 
     template<uint32_t... e>
     static __m512i ALWAYS_INLINE CONST_ATTR
-    vec_permutate(__m512i v) {
-        using vop_support = internal::vector_ops_support<T, n, e...>;
+    vec_permutate_manual(__m512i v) {
+        using vop_support = internal::shuffle_support<T, n, e...>;
 
         constexpr uint64_t shuffle_mask = vop_support::shuffle_mask;
-        if constexpr (internal::avail_instructions::CLANG_BUILTIN) {
-            return builtin_shuffle<e...>(v);
-        }
-        else if constexpr (sizeof(T) == sizeof(uint8_t)) {
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
             // AVX512VBMI
             return _mm512_permutexvar_epi8(_mm512_set_epi8(e...), v);
         }
@@ -1025,6 +1056,18 @@ struct vector_ops<T, operations, sizeof(__m512i)> {
                 // AVX512F
                 return _mm512_permutexvar_epi64(_mm512_set_epi64(e...), v);
             }
+        }
+    }
+
+    template<uint32_t... e>
+    static __m512i ALWAYS_INLINE CONST_ATTR
+    vec_permutate(__m512i v) {
+        if constexpr (avail_instructions::BUILTIN_SHUFFLE &&
+                      builtin_perm == builtin_usage::BUILTIN_FIRST) {
+            return builtin_shuffle<e...>(v);
+        }
+        else {
+            return vec_permutate_manual<e...>(v);
         }
     }
 };
@@ -1061,10 +1104,15 @@ vec_store(T * const arr, vec_t<T, n> v) {
     }
 }
 
-template<typename T, uint32_t n, instruction_set operations, uint32_t... e>
+template<typename T,
+         uint32_t          n,
+         simd_instructions simd_set,
+         builtin_usage     builtin_perm,
+         uint32_t... e>
 constexpr vec_t<T, n> ALWAYS_INLINE CONST_ATTR
 compare_exchange(vec_t<T, n> v) {
-    using vec_ops = typename internal::vector_ops<T, operations, sizeof(T) * n>;
+    using vec_ops =
+        typename internal::vector_ops<T, simd_set, builtin_perm, sizeof(T) * n>;
     vec_t<T, n> cmp   = vec_ops::template vec_permutate<e...>(v);
     vec_t<T, n> s_min = vec_ops::vec_min(v, cmp);
     vec_t<T, n> s_max = vec_ops::vec_max(v, cmp);

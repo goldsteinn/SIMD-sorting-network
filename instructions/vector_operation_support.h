@@ -281,7 +281,17 @@ struct vector_ops_support_impl {
 
 
 template<typename T, uint32_t n, uint32_t... e>
-struct vector_ops_support {
+struct blend_support {
+    using vop_support_impl = vector_ops_support_impl<T, n, e...>;
+
+    static constexpr uint64_t blend_mask = vop_support_impl::build_blend_mask();
+
+    using blend_vec_initialize = decltype(
+        vop_support_impl::template build_blend_vec_initializer<blend_mask>());
+};
+
+template<typename T, uint32_t n, uint32_t... e>
+struct shuffle_support {
     using vop_support_impl = vector_ops_support_impl<T, n, e...>;
 
     static constexpr uint64_t shuffle_mask =
@@ -290,8 +300,6 @@ struct vector_ops_support {
     static constexpr uint64_t in_same_lanes = vop_support_impl::in_same_lanes();
     static constexpr uint64_t across_lanes_mask =
         vop_support_impl::across_lanes_mask();
-
-    static constexpr uint64_t blend_mask = vop_support_impl::build_blend_mask();
 
     using across_lanes_other_vec_initialize =
         decltype(vop_support_impl::template build_across_lanes_vec_initializer<
@@ -304,9 +312,6 @@ struct vector_ops_support {
 
     using shuffle_vec_initialize =
         decltype(vop_support_impl::build_shuffle_vec_initializer());
-
-    using blend_vec_initialize = decltype(
-        vop_support_impl::template build_blend_vec_initializer<blend_mask>());
 };
 
 
@@ -383,6 +388,7 @@ struct avail_instructions {
     static constexpr uint32_t CLANG_BUILTIN = 0;
     static constexpr uint32_t GCC_BUILTIN   = 0;
 #endif
+    static constexpr uint32_t BUILTIN_SHUFFLE = CLANG_BUILTIN | GCC_BUILTIN;
 };
 
 }  // namespace internal

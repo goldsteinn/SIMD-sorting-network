@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <x86intrin.h>
 #include <algorithm>
 
 #include <vec_sort/vec_sort.h>
@@ -55,26 +56,26 @@ struct sarr {
 
 
 enum SORT { SSORT = 0, VSORT = 1 };
-template<typename T, uint32_t n, SORT s, uint32_t USE_AVX512>
+template<SORT s,
+         typename T,
+         uint32_t                 n,
+         vsort::simd_instructions simd_set,
+         vsort::builtin_usage     builtin_perm>
 void NEVER_INLINE
 do_sort(T * arr) {
     if constexpr (s == SSORT) {
         std::sort(arr, arr + n);
     }
     else {
-        if constexpr (USE_AVX512) {
-            vsort::sort<T, n, vsort::bitonic, vsort::instruction_set::AVX512>(
-                arr);
-        }
-        else {
-            vsort::sort<T, n, vsort::bitonic, vsort::instruction_set::AVX2>(
-                arr);
-        }
+        vsort::sort<T, n, vsort::bitonic, simd_set, builtin_perm>(arr);
     }
 }
 
 
-template<typename T, uint32_t n, uint32_t USE_AVX512>
+template<typename T,
+         uint32_t                 n,
+         vsort::simd_instructions simd_set,
+         vsort::builtin_usage     builtin_perm>
 void
 corr_test() {
     static constexpr uint32_t tsize = ((1u) << 20);
@@ -85,50 +86,124 @@ corr_test() {
     for (i = 0; i < tsize; ++i) {
         s1.randomize();
         memcpy(s2.arr, s1.arr, n * sizeof(T));
-        do_sort<T, n, SSORT, USE_AVX512>(s1.arr);
-        do_sort<T, n, VSORT, USE_AVX512>(s2.arr);
+        do_sort<SSORT, T, n, simd_set, builtin_perm>(s1.arr);
+        do_sort<VSORT, T, n, simd_set, builtin_perm>(s2.arr);
         if (!(!memcmp(s1.arr, s2.arr, n * sizeof(T)))) {
             fprintf(stderr,
-                    "FAILED : [%zu][%d][%d]\n",
+                    "FAILED : [%zu][%d][%d][%d]\n",
                     sizeof(T),
                     n,
-                    USE_AVX512);
+                    (uint32_t)simd_set,
+                    (uint32_t)builtin_perm);
             break;
         }
     }
     if (i == tsize) {
-        fprintf(stderr, "SUCCESS: [%zu][%d][%d]\n", sizeof(T), n, USE_AVX512);
+        fprintf(stderr,
+                "SUCCESS: [%zu][%d][%d][%d]\n",
+                sizeof(T),
+                n,
+                (uint32_t)simd_set,
+                (uint32_t)builtin_perm);
     }
 }
 
-template<typename T, uint32_t n, uint32_t USE_AVX512>
-void
-test() {
-    corr_test<T, n, USE_AVX512>();
+template<typename T,
+         uint32_t                 n,
+         vsort::simd_instructions simd_set,
+         vsort::builtin_usage     builtin_perm>
+double
+perf_test() {
+    static constexpr uint32_t tsize = ((1u) << 20);
+    sarr<T, n>                s;
+    uint64_t                  total_cycles = 0;
+    for (uint32_t i = 0; i < tsize; ++i) {
+        s.randomize();
+
+        uint64_t start = _rdtsc();
+        do_sort<VSORT, T, n, simd_set, builtin_perm>(s.arr);
+        uint64_t end = _rdtsc();
+        total_cycles += end - start;
+    }
+    double ret = total_cycles;
+    return ret / tsize;
 }
 
-template<typename T, uint32_t n>
+enum OPERATION { CORRECT = 0, PERFORMANCE = 1 };
+template<OPERATION op,
+         typename T,
+         uint32_t                 n,
+         vsort::simd_instructions simd_set,
+         vsort::builtin_usage     builtin_perm>
+void
+test() {
+    if constexpr (op == CORRECT) {
+        corr_test<T, n, simd_set, builtin_perm>();
+    }
+    else {
+        double r = perf_test<T, n, simd_set, builtin_perm>();
+        fprintf(stderr,
+                "[%zu][%d][%d][%d]: %.3lf\n",
+                sizeof(T),
+                n,
+                (uint32_t)simd_set,
+                (uint32_t)builtin_perm,
+                r);
+    }
+}
+
+template<OPERATION op, typename T, uint32_t n>
 void
 test_all_kernel() {
     if constexpr (sizeof(T) * n <= 64) {
         if constexpr (n >= 4) {
-            test<T, n, 1>();
-            test<T, n, 0>();
+            test<op,
+                 T,
+                 n,
+                 vsort::simd_instructions::AVX2,
+                 vsort::builtin_usage::BUILTIN_FIRST>();
+            test<op,
+                 T,
+                 n,
+                 vsort::simd_instructions::AVX2,
+                 vsort::builtin_usage::BUILTIN_FALLBACK>();
+            test<op,
+                 T,
+                 n,
+                 vsort::simd_instructions::AVX2,
+                 vsort::builtin_usage::BUILTIN_NONE>();
+
+            test<op,
+                 T,
+                 n,
+                 vsort::simd_instructions::AVX512,
+                 vsort::builtin_usage::BUILTIN_FIRST>();
+            test<op,
+                 T,
+                 n,
+                 vsort::simd_instructions::AVX512,
+                 vsort::builtin_usage::BUILTIN_FALLBACK>();
+            test<op,
+                 T,
+                 n,
+                 vsort::simd_instructions::AVX512,
+                 vsort::builtin_usage::BUILTIN_NONE>();
         }
-        test_all_kernel<T, n + 1>();
+        test_all_kernel<op, T, n + 1>();
     }
 }
 
+template<OPERATION op>
 void
 test_all() {
-    test_all_kernel<uint8_t, 9>();
-    test_all_kernel<uint16_t, 5>();
-    test_all_kernel<uint32_t, 4>();
-    test_all_kernel<uint64_t, 4>();
+    test_all_kernel<op, uint8_t, 9>();
+    test_all_kernel<op, uint16_t, 5>();
+    test_all_kernel<op, uint32_t, 4>();
+    test_all_kernel<op, uint64_t, 4>();
 }
 
 
 int
 main() {
-    test_all();
+    test_all<PERFORMANCE>();
 }

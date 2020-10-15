@@ -9,7 +9,10 @@ namespace vsort {
 namespace sortgen {
 namespace internal {
 
-template<typename T, uint32_t n, instruction_set operations>
+template<typename T,
+         uint32_t          n,
+         simd_instructions simd_set,
+         builtin_usage     builtin_perm>
 struct sort_builder {
 
 
@@ -18,8 +21,11 @@ struct sort_builder {
     call_compare_exchange(vop::vec_t<T, n> v,
                           std::integer_sequence<uint32_t, perm_indexes_slice...>
                               _perm_indexes_slice) {
-        return vop::compare_exchange<T, n, operations, perm_indexes_slice...>(
-            v);
+        return vop::compare_exchange<T,
+                                     n,
+                                     simd_set,
+                                     builtin_perm,
+                                     perm_indexes_slice...>(v);
     }
 
     template<uint32_t group_idx, uint32_t ngroups, uint32_t... perm_indexes>
@@ -51,11 +57,16 @@ struct sort_builder {
 
 }  // namespace internal
 
-template<typename T, uint32_t n, typename network, instruction_set operations>
+template<typename T,
+         uint32_t n,
+         typename network,
+         simd_instructions simd_set,
+         builtin_usage     builtin_perm>
 vop::vec_t<T, n> ALWAYS_INLINE CONST_ATTR
 generate_sort(vop::vec_t<T, n> v) {
-    return internal::sort_builder<T, next_p2(n), operations>::build(v,
-                                                                    network{});
+    return internal::sort_builder<T, next_p2(n), simd_set, builtin_perm>::build(
+        v,
+        network{});
 }
 
 }  // namespace sortgen
