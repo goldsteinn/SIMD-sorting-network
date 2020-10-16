@@ -48,7 +48,7 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m128i)> {
 
     template<uint32_t... e>
     static __m128i ALWAYS_INLINE CONST_ATTR
-    builtin_shuffle(__m128i v) {
+    builtin_shuffle_impl(__m128i v) {
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
 #if defined(__clang__)
             return (__m128i)__builtin_shufflevector(
@@ -105,6 +105,28 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m128i)> {
             return v;
 #endif
         }
+    }
+
+    template<uint32_t... e, uint32_t... seq>
+    static __m128i ALWAYS_INLINE CONST_ATTR
+    builtin_shuffle_reverse(__m128i                                 v,
+                            std::integer_sequence<uint32_t, seq...> _seq) {
+        constexpr uint32_t arr[n] = { static_cast<uint32_t>(e)... };
+        return builtin_shuffle_impl<arr[(n - 1) - seq]...>(v);
+    }
+
+    template<uint32_t... e>
+    static __m128i ALWAYS_INLINE CONST_ATTR
+    builtin_shuffle(__m128i v) {
+#if defined(__clang__)
+        return builtin_shuffle_reverse<e...>(
+            v,
+            std::make_integer_sequence<uint32_t, n>{});
+#elif defined(__GNUC__)
+        return builtin_shuffle_impl<e...>(v);
+#else
+        return v;
+#endif
     }
 
     template<uint32_t size, uint32_t... e>
@@ -392,7 +414,7 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
 
     template<uint32_t... e>
     static __m256i ALWAYS_INLINE CONST_ATTR
-    builtin_shuffle(__m256i v) {
+    builtin_shuffle_impl(__m256i v) {
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
 #if defined(__clang__)
             return (__m256i)__builtin_shufflevector(
@@ -449,6 +471,28 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
             return v;
 #endif
         }
+    }
+
+    template<uint32_t... e, uint32_t... seq>
+    static __m256i ALWAYS_INLINE CONST_ATTR
+    builtin_shuffle_reverse(__m256i                                 v,
+                            std::integer_sequence<uint32_t, seq...> _seq) {
+        constexpr uint32_t arr[n] = { static_cast<uint32_t>(e)... };
+        return builtin_shuffle_impl<arr[(n - 1) - seq]...>(v);
+    }
+
+    template<uint32_t... e>
+    static __m256i ALWAYS_INLINE CONST_ATTR
+    builtin_shuffle(__m256i v) {
+#if defined(__clang__)
+        return builtin_shuffle_reverse<e...>(
+            v,
+            std::make_integer_sequence<uint32_t, n>{});
+#elif defined(__GNUC__)
+        return builtin_shuffle_impl<e...>(v);
+#else
+        return v;
+#endif
     }
 
     template<uint32_t size, uint32_t... e>
@@ -702,7 +746,8 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
             // this is true if all movement is within lane
 
             else if constexpr (internal::avail_instructions::BUILTIN_SHUFFLE &&
-                               builtin_perm == builtin_usage::BUILTIN_FALLBACK) {
+                               builtin_perm ==
+                                   builtin_usage::BUILTIN_FALLBACK) {
                 return builtin_shuffle<e...>(v);
             }
             else {
@@ -753,7 +798,8 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
 
 
             else if constexpr (internal::avail_instructions::BUILTIN_SHUFFLE &&
-                               builtin_perm == builtin_usage::BUILTIN_FALLBACK) {
+                               builtin_perm ==
+                                   builtin_usage::BUILTIN_FALLBACK) {
                 return builtin_shuffle<e...>(v);
             }
             else {
@@ -817,7 +863,7 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m512i)> {
 
     template<uint32_t... e>
     static __m512i ALWAYS_INLINE CONST_ATTR
-    builtin_shuffle(__m512i v) {
+    builtin_shuffle_impl(__m512i v) {
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
 #if defined(__clang__)
             return (__m512i)__builtin_shufflevector(
@@ -874,6 +920,28 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m512i)> {
             return v;
 #endif
         }
+    }
+
+    template<uint32_t... e, uint32_t... seq>
+    static __m512i ALWAYS_INLINE CONST_ATTR
+    builtin_shuffle_reverse(__m512i                                 v,
+                            std::integer_sequence<uint32_t, seq...> _seq) {
+        constexpr uint32_t arr[n] = { static_cast<uint32_t>(e)... };
+        return builtin_shuffle_impl<arr[(n - 1) - seq]...>(v);
+    }
+
+    template<uint32_t... e>
+    static __m512i ALWAYS_INLINE CONST_ATTR
+    builtin_shuffle(__m512i v) {
+#if defined(__clang__)
+        return builtin_shuffle_reverse<e...>(
+            v,
+            std::make_integer_sequence<uint32_t, n>{});
+#elif defined(__GNUC__)
+        return builtin_shuffle_impl<e...>(v);
+#else
+        return v;
+#endif
     }
 
     template<uint32_t size, uint32_t... e>

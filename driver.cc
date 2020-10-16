@@ -6,6 +6,7 @@
 #include <x86intrin.h>
 #include <algorithm>
 
+#include <timing/stats.h>
 #include <vec_sort/vec_sort.h>
 
 template<typename T, uint32_t n>
@@ -202,8 +203,60 @@ test_all() {
     test_all_kernel<op, uint64_t, 4>();
 }
 
+#define v_to_string(X)  _v_to_string(X)
+#define _v_to_string(X) #X
+
+#ifndef NRUNS
+#define NRUNS 1000
+#endif
+
+#ifndef TEST_TYPE
+#define TEST_TYPE uint32_t
+#endif
+
+#ifndef TEST_N
+#define TEST_N 4
+#endif
+
+#ifndef TEST_SIMD
+#define TEST_SIMD 2
+#endif
+
+#ifndef TEST_BUILTIN
+#define TEST_BUILTIN 2
+#endif
+
 
 int
 main() {
-    test_all<PERFORMANCE>();
+    test_all<CORRECT>();
+    /*    const char * outfile  = "out.txt";
+    const char * hdr      = "type,test_n,simd,builtin";
+    char         buf[128] = "";
+    sprintf(buf,            "%s,%d,%d,%d",
+            v_to_string(TEST_TYPE),
+            TEST_N,
+            TEST_SIMD,
+            TEST_BUILTIN);
+
+    FILE * fp = fopen(outfile, "a");
+
+
+    double * results = (double *)calloc(NRUNS, sizeof(double));
+    perf_test<TEST_TYPE,
+              TEST_N,
+              (vsort::simd_instructions)TEST_SIMD,
+              (vsort::builtin_usage)TEST_BUILTIN>();
+    for (uint32_t i = 0; i < NRUNS; ++i) {
+        results[i] = perf_test<TEST_TYPE,
+                               TEST_N,
+                               (vsort::simd_instructions)TEST_SIMD,
+                               (vsort::builtin_usage)TEST_BUILTIN>();
+    }
+
+    stats::stats_out so;
+    so.get_stats(results, NRUNS, timers::time_units::CYCLES);
+    so.print_csv(hdr, buf, fp);
+    fclose(fp);
+    free(results);*/
 }
