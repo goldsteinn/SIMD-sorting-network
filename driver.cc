@@ -259,36 +259,42 @@ test_all() {
 
 
 int
-main() {
-    //    test_all<CORRECT, vsort::bitonic>();
-    const char * hdr = "network_algorithm,type,test_n,simd,builtin";
-    char         test_fields[128] = "";
-    sprintf(test_fields,
-            "%s,%s,%d,%d,%d",
-            v_to_string(TEST_NETWORK_ALGORITHM),
-            v_to_string(TEST_TYPE),
-            TEST_N,
-            TEST_SIMD,
-            TEST_BUILTIN);
-
-    double * results = (double *)calloc(NRUNS, sizeof(double));
-    for (uint32_t i = 0; i < WARMUP; ++i) {
-        perf_test<TEST_TYPE,
-                  TEST_N,
-                  vsort::TEST_NETWORK_ALGORITHM,
-                  (vsort::simd_instructions)TEST_SIMD,
-                  (vsort::builtin_usage)TEST_BUILTIN>();
-    }
-    for (uint32_t i = 0; i < NRUNS; ++i) {
-        results[i] = perf_test<TEST_TYPE,
-                               TEST_N,
-                               vsort::TEST_NETWORK_ALGORITHM,
-                               (vsort::simd_instructions)TEST_SIMD,
-                               (vsort::builtin_usage)TEST_BUILTIN>();
-    }
-
+main(int argc, char ** argv) {
+    const char *     hdr = "network_algorithm,type,test_n,simd,builtin";
     stats::stats_out so;
-    so.get_stats(results, NRUNS, timers::time_units::CYCLES);
-    so.print_csv(stderr, stats::DONT_PRINT_HEADER, test_fields);
-    free(results);
+    if (argc > 1) {
+        so.export_hdr(stderr, hdr);
+    }
+    else {
+        //    test_all<CORRECT, vsort::bitonic>();
+        char test_fields[128] = "";
+        sprintf(test_fields,
+                "%s,%s,%d,%d,%d",
+                v_to_string(TEST_NETWORK_ALGORITHM),
+                v_to_string(TEST_TYPE),
+                TEST_N,
+                TEST_SIMD,
+                TEST_BUILTIN);
+
+        double * results = (double *)calloc(NRUNS, sizeof(double));
+        for (uint32_t i = 0; i < WARMUP; ++i) {
+            perf_test<TEST_TYPE,
+                      TEST_N,
+                      vsort::TEST_NETWORK_ALGORITHM,
+                      (vsort::simd_instructions)TEST_SIMD,
+                      (vsort::builtin_usage)TEST_BUILTIN>();
+        }
+        for (uint32_t i = 0; i < NRUNS; ++i) {
+            results[i] = perf_test<TEST_TYPE,
+                                   TEST_N,
+                                   vsort::TEST_NETWORK_ALGORITHM,
+                                   (vsort::simd_instructions)TEST_SIMD,
+                                   (vsort::builtin_usage)TEST_BUILTIN>();
+        }
+
+
+        so.get_stats(results, NRUNS, timers::time_units::CYCLES);
+        so.print_csv(stderr, stats::DONT_PRINT_HEADER, test_fields);
+        free(results);
+    }
 }

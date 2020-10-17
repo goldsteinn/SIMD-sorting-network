@@ -104,6 +104,14 @@ stats_out::print_hr(FILE *             outfile,
 }
 
 void
+stats_out::export_hdr(FILE * outfile, const char * const header) {
+    if (header != NULL) {
+        fprintf(outfile, "%s,", header);
+    }
+    fprintf(outfile, "n,median,mean,max,min,p99,p95,p90,stddev,variance\n");
+}
+    
+void
 stats_out::print_csv(FILE *             outfile,
                      const char * const header,
                      const char *       header_fields) {
@@ -153,9 +161,14 @@ stats_out::sorted_array_to_stats(double *           data,
         N = n;
         median =
             (n % 2) ? (data[n / 2]) : ((data[n / 2] + data[(n / 2) + 1]) / 2);
-        mean = std::accumulate(data, data + n, 0) / n;
-        max  = data[n - 1];
-        min  = data[0];
+        mean = 0.0;
+        for (uint32_t i = 0; i < n; ++i) {
+            mean += data[i];
+        }
+        mean /= n;
+
+        max = data[n - 1];
+        min = data[0];
 
         uint64_t p99_idx = .99 * ((double)n);
         uint64_t p95_idx = .95 * ((double)n);

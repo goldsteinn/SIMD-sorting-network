@@ -44,6 +44,8 @@ struct stats_out {
                   const char * const header        = NULL,
                   const char *       header_fields = NULL);
 
+    void export_hdr(FILE * outfile = stderr, const char * const header = NULL);
+
     void get_stats(uint64_t *         data,
                    uint32_t           n,
                    timers::time_units _units = timers::time_units::NSEC);
