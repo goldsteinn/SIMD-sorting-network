@@ -231,12 +231,7 @@ struct vector_ops_support_impl {
 
     static constexpr decltype(auto)
     build_shuffle_vec_initializer() {
-        if constexpr (sizeof(T) < sizeof(uint32_t)) {
-            return expand_seq();
-        }
-        else {
-            return 0;
-        }
+        return expand_seq();
     }
 
 
@@ -384,22 +379,19 @@ struct shuffle_support {
     static constexpr uint64_t shuffle_mask =
         vop_support_impl::build_shuffle_mask();
 
+    static constexpr uint64_t in_same_lanes = vop_support_impl::in_same_lanes();
 
     using shuffle_vec_initialize =
         decltype(vop_support_impl::build_shuffle_vec_initializer());
 };
 
-template<typename T, uint32_t n, uint32_t... e>
-struct shuffle_inlane_support {
-    using vop_support_impl = vector_ops_support_impl<T, n, e...>;
-    static constexpr uint64_t in_same_lanes = vop_support_impl::in_same_lanes();
-};
 
 template<typename T, uint32_t n, uint32_t... e>
 struct shuffle_across_lane_support {
     using vop_support_impl = vector_ops_support_impl<T, n, e...>;
     static constexpr uint64_t across_lanes_mask =
         vop_support_impl::across_lanes_mask();
+
 
     using across_lanes_other_vec_initialize =
         decltype(vop_support_impl::template build_across_lanes_vec_initializer<

@@ -68,7 +68,7 @@ do_sort(T * arr) {
         std::sort(arr, arr + n);
     }
     else {
-        vsort::sort<T, n, vsort::bitonic, simd_set, builtin_perm>(arr);
+        vsort::sort<T, n, vsort::oddeven, simd_set, builtin_perm>(arr);
     }
 }
 
@@ -232,14 +232,14 @@ test_all() {
 #endif
 
 
-#define N    64
-#define TYPE uint8_t
+#define N    9
+#define TYPE uint16_t
 int
 main() {
     test_all<CORRECT>();
-    /* sarr<TYPE, N> s;
+    /*        sarr<TYPE, N> s;
     s.binit();
-    vsort::sort<TYPE, N, vsort::bitonic>(s.arr);
+    vsort::sort<TYPE, N, vsort::oddeven>(s.arr);
     s.show();*/
 
     /*    const char * outfile  = "out.txt";

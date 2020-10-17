@@ -416,6 +416,72 @@ balanced_pairs(uint32_t n) {
     }
 }
 
+void
+add_elem(std::vector<idx_pair> & pairs,
+         uint32_t                inputs,
+         uint32_t                i,
+         uint32_t                j) {
+    if (i < inputs && j < inputs) {
+        pairs.push_back(idx_pair(i, j));
+    }
+}
+
+
+void
+merge(std::vector<idx_pair> & pairs,
+      uint32_t                inputs,
+      uint32_t                lo,
+      uint32_t                n,
+      uint32_t                r) {
+    uint32_t m = 2 * r;
+    if (m < n) {
+        merge(pairs, inputs, lo, n, m);
+        merge(pairs, inputs, lo + r, n, m);
+        for (uint32_t i = lo + r; (i + r) < (lo + n); i += m) {
+            add_elem(pairs, inputs, i, i + r);
+        }
+    }
+    else {
+        add_elem(pairs, inputs, lo, lo + r);
+    }
+}
+
+void
+sort(std::vector<idx_pair> & pairs, uint32_t inputs, uint32_t lo, uint32_t n) {
+    if (n > 1) {
+        uint32_t m = n / 2;
+        sort(pairs, inputs, lo, m);
+        sort(pairs, inputs, lo + m, m);
+        merge(pairs, inputs, lo, n, 1);
+    }
+}
+
+
+void
+oddeven(std::vector<idx_pair> & pairs, uint32_t inputs) {
+    sort(pairs, inputs, 0, next_p2(inputs));
+}
+
+void
+oddeven_pairs(uint32_t n) {
+    std::vector<idx_pair> pairs;
+    std::vector<idx_pair> raw;
+
+    oddeven(pairs, n);
+
+    for (uint32_t i = 0; i < pairs.size(); ++i) {
+        raw.push_back(pairs[i]);
+    }
+
+    group(pairs);
+
+    group_to_string("Odd-Even", pairs);
+    if (verbose) {
+        vec_to_string("raw      ", raw);
+        vec_to_string("grouped  ", pairs);
+    }
+}
+
 
 int
 main(int argc, char ** argv) {
@@ -430,6 +496,9 @@ main(int argc, char ** argv) {
     }
     else if (todo == 2) {
         balanced_pairs(atoi(argv[1]));
+    }
+    else if (todo == 3) {
+        oddeven_pairs(atoi(argv[1]));
     }
     else {
         bitonic_pairs(atoi(argv[1]));

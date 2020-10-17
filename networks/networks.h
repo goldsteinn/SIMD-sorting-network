@@ -5,6 +5,7 @@
 #include <networks/implementation/batcher.h>
 #include <networks/implementation/bitonic.h>
 #include <networks/implementation/bosenelson.h>
+#include <networks/implementation/oddeven.h>
 #include <networks/transformations.h>
 
 namespace vsort {
@@ -26,6 +27,10 @@ using batcher = typename transform::
 template<uint32_t n>
 using balanced = typename transform::
     build<n, typename network::internal::balanced_network<n>::network>::type;
+
+template<uint32_t n>
+using oddeven = typename transform::
+    build<n, typename network::internal::oddeven_network<n>::network>::type;
 
 
 }  // namespace vsort

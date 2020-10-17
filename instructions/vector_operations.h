@@ -908,8 +908,7 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
                         shuffle_mask_hi);
                 }
             }
-            else if constexpr (shuffle_inlane_support<T, n, e...>::
-                                   in_same_lanes) {
+            else if constexpr (vop_support::in_same_lanes) {
                 // AVX2
                 return _mm256_shuffle_epi8(
                     v,
@@ -956,6 +955,12 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
 
                 return _mm256_shuffle_epi32(v, shuffle_mask);
             }
+            else if (vop_support::in_same_lanes) {
+                return _mm256_shuffle_epi8(
+                    v,
+                    build_set_vec_wrapper<1>(
+                        typename vop_support::shuffle_vec_initialize{}));
+            }
             else {
                 // AVX2
                 return _mm256_permutevar8x32_epi32(v, _mm256_set_epi32(e...));
@@ -964,7 +969,7 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
         else /* sizeof(T) == sizeof(uint64_t) */ {
             // permute4x64 can fully rearrange epi64
             static_assert(shuffle_mask);
-
+            // TODO use shuffle_epi32 if possible
             // AVX2
             return _mm256_permute4x64_epi64(v, shuffle_mask);
         }
@@ -1247,6 +1252,12 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m512i)> {
                 // AVX512F
                 return _mm512_shuffle_epi32(v, (_MM_PERM_ENUM)shuffle_mask);
             }
+            else if (vop_support::in_same_lanes) {
+                return _mm512_shuffle_epi8(
+                    v,
+                    build_set_vec_wrapper<1>(
+                        typename vop_support::shuffle_vec_initialize{}));
+            }
             else {
                 // AVX512F
                 return _mm512_permutexvar_epi32(_mm512_set_epi32(e...), v);
@@ -1256,6 +1267,12 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m512i)> {
             if constexpr (shuffle_mask) {
                 // AVX512F
                 return _mm512_permutex_epi64(v, shuffle_mask);
+            }
+            else if (vop_support::in_same_lanes) {
+                return _mm512_shuffle_epi8(
+                    v,
+                    build_set_vec_wrapper<1>(
+                        typename vop_support::shuffle_vec_initialize{}));
             }
             else {
                 // AVX512F
