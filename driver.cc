@@ -197,10 +197,10 @@ test_all_kernel() {
 template<OPERATION op>
 void
 test_all() {
-     test_all_kernel<op, uint8_t, 2>();
-    //    test_all_kernel<op, uint16_t, 2>();
-    //        test_all_kernel<op, uint32_t, 2>();
-    //        test_all_kernel<op, uint64_t, 2>();
+    test_all_kernel<op, uint8_t, 2>();
+    test_all_kernel<op, uint16_t, 2>();
+    test_all_kernel<op, uint32_t, 2>();
+    test_all_kernel<op, uint64_t, 2>();
 
     //    test_all_kernel<op, int8_t, 2>();
     //    test_all_kernel<op, int16_t, 2>();
@@ -232,14 +232,15 @@ test_all() {
 #endif
 
 
-#define N 10
+#define N    64
+#define TYPE uint8_t
 int
 main() {
     test_all<CORRECT>();
-    sarr<uint8_t, N> s;
+    /* sarr<TYPE, N> s;
     s.binit();
-    vsort::sort<uint8_t, N, vsort::bosenelson>(s.arr);
-    s.show();
+    vsort::sort<TYPE, N, vsort::bitonic>(s.arr);
+    s.show();*/
 
     /*    const char * outfile  = "out.txt";
     const char * hdr      = "type,test_n,simd,builtin";

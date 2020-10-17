@@ -9,6 +9,7 @@
 
 #include <instructions/vector_operation_support.h>
 #include <util/cpp_attributes.h>
+#include <util/display.h>
 
 namespace vsort {
 
@@ -463,20 +464,30 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m128i)> {
 
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
             // SSE3
-            return _mm_shuffle_epi8(
-                v,
-                build_set_vec_wrapper<0>(
-                    typename vop_support::shuffle_vec_initialize{}));
+            if constexpr (shuffle_mask && shuffle_mask != 1) {
+                return _mm_shuffle_epi32(v, shuffle_mask);
+            }
+            else {
+                return _mm_shuffle_epi8(
+                    v,
+                    build_set_vec_wrapper<0>(
+                        typename vop_support::shuffle_vec_initialize{}));
+            }
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
             if constexpr (shuffle_mask) {
                 constexpr uint32_t shuffle_mask_lo = shuffle_mask;
                 constexpr uint32_t shuffle_mask_hi = (shuffle_mask >> 32);
-
-                // SSE2
-                return _mm_shufflehi_epi16(
-                    _mm_shufflelo_epi16(v, shuffle_mask_lo),
-                    shuffle_mask_hi);
+                if constexpr (shuffle_mask_hi == 0) {
+                    // SSE2
+                    return _mm_shuffle_epi32(v, shuffle_mask);
+                }
+                else {
+                    // SSE2
+                    return _mm_shufflehi_epi16(
+                        _mm_shufflelo_epi16(v, shuffle_mask_lo),
+                        shuffle_mask_hi);
+                }
             }
             else {
                 return _mm_shuffle_epi8(
@@ -836,10 +847,15 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
             // gcc misses some optimizations
             if constexpr (shuffle_mask) {
                 // AVX2
-                return _mm256_shuffle_epi8(
-                    v,
-                    build_set_vec_wrapper<0>(
-                        typename vop_support::shuffle_vec_initialize{}));
+                if constexpr (shuffle_mask != 1) {
+                    return _mm256_shuffle_epi32(v, shuffle_mask);
+                }
+                else {
+                    return _mm256_shuffle_epi8(
+                        v,
+                        build_set_vec_wrapper<0>(
+                            typename vop_support::shuffle_vec_initialize{}));
+                }
             }
             else if constexpr (simd_set >= simd_instructions::AVX512 &&
                                internal::avail_instructions::AVX512VL &&
@@ -880,11 +896,17 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
             if constexpr (shuffle_mask) {
                 constexpr uint32_t shuffle_mask_lo = shuffle_mask;
                 constexpr uint32_t shuffle_mask_hi = (shuffle_mask >> 32);
+                if constexpr (shuffle_mask_hi == 0) {
+                    // AVX2
+                    return _mm256_shuffle_epi32(v, shuffle_mask);
+                }
+                else {
 
-                // AVX2
-                return _mm256_shufflehi_epi16(
-                    _mm256_shufflelo_epi16(v, shuffle_mask_lo),
-                    shuffle_mask_hi);
+                    // AVX2
+                    return _mm256_shufflehi_epi16(
+                        _mm256_shufflelo_epi16(v, shuffle_mask_lo),
+                        shuffle_mask_hi);
+                }
             }
             else if constexpr (shuffle_inlane_support<T, n, e...>::
                                    in_same_lanes) {
@@ -931,6 +953,7 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
         else if constexpr (sizeof(T) == sizeof(uint32_t)) {
             if constexpr (shuffle_mask) {
                 // AVX2
+
                 return _mm256_shuffle_epi32(v, shuffle_mask);
             }
             else {
@@ -1203,10 +1226,19 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m512i)> {
 
         constexpr uint64_t shuffle_mask = vop_support::shuffle_mask;
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
+
+            if constexpr (shuffle_mask && shuffle_mask != 1) {
+                // AVX512F
+                return _mm512_shuffle_epi32(v, (_MM_PERM_ENUM)shuffle_mask);
+            }
             // AVX512VBMI
             return _mm512_permutexvar_epi8(_mm512_set_epi8(e...), v);
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+            if constexpr (shuffle_mask &&
+                          (((shuffle_mask >> 32) & 0xffffffff) == 0)) {
+                return _mm512_shuffle_epi32(v, (_MM_PERM_ENUM)shuffle_mask);
+            }
             // AVX512BW
             return _mm512_permutexvar_epi16(_mm512_set_epi16(e...), v);
         }

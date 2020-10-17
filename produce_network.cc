@@ -181,10 +181,9 @@ vec_to_string(const char * const header, std::vector<idx_pair> & v) {
     char out_buf[16] = "";
 
     v[0].to_string(out_buf);
-    fprintf(stderr, "%s -> [%s", header, out_buf);
+    fprintf(stderr, "%s -> %d, %d", header, v[0].x, v[0].y);
     for (uint32_t i = 1; i < v.size(); ++i) {
-        v[i].to_string(out_buf);
-        fprintf(stderr, ", %s", out_buf);
+        fprintf(stderr, ", %d, %d", v[i].x, v[i].y);
     }
     fprintf(stderr, "]\n");
 }
@@ -268,14 +267,169 @@ bosenelson_pairs(uint32_t n) {
     }
 }
 
+void
+batcher_inner(std::vector<idx_pair> & pairs,
+              uint32_t                inputs,
+              uint32_t                q,
+              uint32_t                r,
+              uint32_t                d,
+              uint32_t                p) {
+    if (d > 0) {
+        for (uint32_t i = 0; i < (inputs - d); ++i) {
+            if ((i & p) == r) {
+                pairs.push_back(idx_pair(i, i + d));
+            }
+        }
+        batcher_inner(pairs, inputs, q >> 1, p, q - p, p);
+    }
+}
+void
+batcher_outer(std::vector<idx_pair> & pairs, uint32_t inputs, uint32_t p) {
+    if (p > 0) {
+        batcher_inner(pairs, inputs, next_p2(inputs) >> 1, 0, p, p);
+        batcher_outer(pairs, inputs, p >> 1);
+    }
+}
+
+void
+batcher_recursive(std::vector<idx_pair> & pairs, uint32_t inputs) {
+    batcher_outer(pairs, inputs, next_p2(inputs) >> 1);
+}
+void
+batcher(std::vector<idx_pair> & pairs, uint32_t inputs) {
+    int32_t p = next_p2(inputs) >> 1;
+
+    while (p > 0) {
+        uint32_t q = next_p2(inputs) >> 1;
+        uint32_t r = 0;
+        int32_t  d = p;
+        while (d > 0) {
+            for (uint32_t i = 0; i < (inputs - d); ++i) {
+                if ((i & p) == r) {
+                    pairs.push_back(idx_pair(i, i + d));
+                }
+            }
+
+            d = q - p;
+            q >>= 1;
+            r = p;
+        }
+        p >>= 1;
+    }
+}
+
+void
+batcher_pairs(uint32_t n) {
+    std::vector<idx_pair> pairs;
+    std::vector<idx_pair> pairs_recursive;
+    std::vector<idx_pair> raw;
+
+    batcher(pairs, n);
+    batcher_recursive(pairs_recursive, n);
+
+    assert(pairs.size() == pairs_recursive.size());
+    for (uint32_t i = 0; i < pairs.size(); ++i) {
+        assert(pairs[i].x == pairs_recursive[i].x);
+        assert(pairs[i].y == pairs_recursive[i].y);
+    }
+    for (uint32_t i = 0; i < pairs.size(); ++i) {
+        raw.push_back(pairs[i]);
+    }
+
+    group(pairs);
+
+    group_to_string("Batcher", pairs);
+    if (verbose) {
+        vec_to_string("raw      ", raw);
+        vec_to_string("grouped  ", pairs);
+    }
+}
+
+void
+balanced_inner(std::vector<idx_pair> & pairs, uint32_t inputs, uint32_t curr) {
+    for (uint32_t i = 0; i < next_p2(inputs); i += curr) {
+        for (uint32_t j = 0; j < (curr / 2); ++j) {
+            uint32_t wire1 = i + j;
+            uint32_t wire2 = (i + curr) - (j + 1);
+            if (wire1 < inputs && wire2 < inputs) {
+                pairs.push_back(idx_pair(wire1, wire2));
+            }
+        }
+    }
+}
+
+void
+balanced_outer(std::vector<idx_pair> & pairs, uint32_t inputs) {
+    for (uint32_t curr = next_p2(inputs); curr > 1; curr >>= 1) {
+        balanced_inner(pairs, inputs, curr);
+    }
+}
+void
+balanced_recursive(std::vector<idx_pair> & pairs, uint32_t inputs) {
+    for (uint32_t iter = next_p2(inputs); iter > 1; iter /= 2) {
+        balanced_outer(pairs, inputs);
+    }
+}
+
+
+void
+balanced(std::vector<idx_pair> & pairs, uint32_t inputs) {
+    for (uint32_t iter = next_p2(inputs); iter > 1; iter /= 2) {
+        for (uint32_t curr = next_p2(inputs); curr > 1; curr >>= 1) {
+            for (uint32_t i = 0; i < next_p2(inputs); i += curr) {
+                for (uint32_t j = 0; j < (curr / 2); ++j) {
+                    uint32_t wire1 = i + j;
+                    uint32_t wire2 = (i + curr) - (j + 1);
+                    if (wire1 < inputs && wire2 < inputs) {
+                        pairs.push_back(idx_pair(wire1, wire2));
+                    }
+                }
+            }
+        }
+    }
+}
+
+void
+balanced_pairs(uint32_t n) {
+    std::vector<idx_pair> pairs;
+    std::vector<idx_pair> pairs_recursive;
+    std::vector<idx_pair> raw;
+
+    balanced(pairs, n);
+    balanced_recursive(pairs_recursive, n);
+
+    assert(pairs.size() == pairs_recursive.size());
+    for (uint32_t i = 0; i < pairs.size(); ++i) {
+        assert(pairs[i].x == pairs_recursive[i].x);
+        assert(pairs[i].y == pairs_recursive[i].y);
+    }
+    for (uint32_t i = 0; i < pairs.size(); ++i) {
+        raw.push_back(pairs[i]);
+    }
+
+    group(pairs);
+
+    group_to_string("Balanced", pairs);
+    if (verbose) {
+        vec_to_string("raw      ", raw);
+        vec_to_string("grouped  ", pairs);
+    }
+}
+
 
 int
 main(int argc, char ** argv) {
     assert(argc >= 3);
-    uint32_t todo = argv[2][0] == 'A';
+    uint32_t todo = atoi(argv[2]);
     verbose       = argc > 3;
-    if (todo) {
+    if (todo == 0) {
         bosenelson_pairs(atoi(argv[1]));
+    }
+    else if (todo == 1) {
+        batcher_pairs(atoi(argv[1]));
+    }
+    else if (todo == 2) {
+        balanced_pairs(atoi(argv[1]));
     }
     else {
         bitonic_pairs(atoi(argv[1]));

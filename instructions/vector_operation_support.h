@@ -83,11 +83,11 @@ struct vector_ops_support_impl {
     template<uint32_t... seq>
     static constexpr decltype(auto)
     expand_seq_kernel(std::integer_sequence<uint32_t, seq...> _seq) {
-        constexpr auto _e = std::integer_sequence<uint32_t, e...>{};
-        return std::integer_sequence<
-            uint32_t,
-            sizeof(T) * get_pos<uint32_t, seq / sizeof(T)>(_e) +
-                ((sizeof(T) - 1) - (seq % sizeof(T)))...>{};
+        constexpr uint32_t _e[sizeof...(e)] = { static_cast<uint32_t>(e)... };
+        return std::integer_sequence<uint32_t,
+                                     sizeof(T) * _e[seq / sizeof(T)] +
+                                         ((sizeof(T) - 1) -
+                                          (seq % sizeof(T)))...>{};
     }
 
     static constexpr decltype(auto)
@@ -95,6 +95,21 @@ struct vector_ops_support_impl {
         return expand_seq_kernel(
             std::make_integer_sequence<uint32_t, n * sizeof(T)>{});
     }
+
+    template<uint32_t scale, uint32_t... seq>
+    static constexpr decltype(auto)
+    shrink_seq_kernel(std::integer_sequence<uint32_t, seq...> _seq) {
+        constexpr uint32_t _e[sizeof...(e)] = { static_cast<uint32_t>(e)... };
+        return std::integer_sequence<uint32_t, (_e[seq * scale] / scale)...>{};
+    }
+
+    template<uint32_t scale>
+    static constexpr decltype(auto)
+    shrink_seq() {
+        return shrink_seq_kernel<scale>(
+            std::make_integer_sequence<uint32_t, n / scale>{});
+    }
+
 
     static constexpr uint64_t
     build_blend_mask() {
@@ -151,17 +166,21 @@ struct vector_ops_support_impl {
         }
     }
 
-    template<uint32_t offset, uint32_t ele_per_lane, uint32_t lane_size>
+    template<uint32_t offset,
+             uint32_t ele_per_lane,
+             uint32_t lane_size,
+             uint32_t... _e>
     static constexpr uint64_t
     build_shuffle_mask_impl() {
-        constexpr uint32_t perms[n]   = { static_cast<uint32_t>(e)... };
-        constexpr uint32_t ele_offset = offset == sizeof(T) * n ? 0 : offset;
-        constexpr uint32_t in_lanes_check = offset == sizeof(T) * n;
+        constexpr uint32_t _n         = sizeof...(_e);
+        constexpr uint32_t perms[_n]  = { static_cast<uint32_t>(_e)... };
+        constexpr uint32_t ele_offset = offset == sizeof(T) * _n ? 0 : offset;
+        constexpr uint32_t in_lanes_check = offset == sizeof(T) * _n;
         uint64_t           mask           = 0;
-        for (uint32_t i = 0; i < n; i += lane_size) {
+        for (uint32_t i = 0; i < _n; i += lane_size) {
             uint64_t lane_mask   = 0;
-            uint32_t lower_bound = n - (i + ele_per_lane + ele_offset);
-            uint32_t upper_bound = n - (i + ele_offset);
+            uint32_t lower_bound = _n - (i + ele_per_lane + ele_offset);
+            uint32_t upper_bound = _n - (i + ele_offset);
             for (uint32_t j = 0; j < ele_per_lane; ++j) {
                 uint32_t p = perms[i + j + ele_offset];
                 if (p >= lower_bound && p < upper_bound) {
@@ -183,6 +202,32 @@ struct vector_ops_support_impl {
         return mask;
     }
 
+    template<uint32_t... shrunk_e>
+    static constexpr uint64_t
+    build_shuffle_mask_as_epi32_impl_wrapper(
+        std::integer_sequence<uint32_t, shrunk_e...> _shrunk_e) {
+        return build_shuffle_mask_impl<0, 4, 4, shrunk_e...>();
+    }
+
+    static constexpr uint64_t
+    build_shuffle_mask_as_epi32() {
+        constexpr uint32_t perms[n]  = { static_cast<uint32_t>(e)... };
+        constexpr uint32_t T_per_int = sizeof(uint32_t) / sizeof(T);
+        for (uint32_t i = 0; i < n; i += T_per_int) {
+            uint32_t base_ele = perms[i];
+            if ((base_ele % T_per_int) != (T_per_int - 1)) {
+                return 0;
+            }
+            for (uint32_t j = 1; j < (T_per_int); j++) {
+                if (perms[i + j] != (base_ele - j)) {
+                    return 0;
+                }
+            }
+        }
+        return build_shuffle_mask_as_epi32_impl_wrapper(
+            shrink_seq<T_per_int>());
+    }
+
 
     static constexpr decltype(auto)
     build_shuffle_vec_initializer() {
@@ -198,46 +243,59 @@ struct vector_ops_support_impl {
     static constexpr uint64_t
     build_shuffle_mask() {
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
-            return build_shuffle_mask_impl<0, 16, 16>();
+            constexpr uint64_t shuffle_mask_epi32 =
+                build_shuffle_mask_as_epi32();
+            if constexpr (shuffle_mask_epi32) {
+                return shuffle_mask_epi32;
+            }
+            return !!build_shuffle_mask_impl<0, 16, 16, e...>();
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
             if constexpr (n <= 4) {
-                return build_shuffle_mask_impl<0, 4, 4>();
+                return build_shuffle_mask_impl<0, 4, 4, e...>();
             }
             else {
-                constexpr uint64_t shuffle_mask_lo =
-                    build_shuffle_mask_impl<4, 4, 8>();
-                constexpr uint64_t shuffle_mask_hi =
-                    build_shuffle_mask_impl<0, 4, 8>();
-                if constexpr (shuffle_mask_lo == 0 || shuffle_mask_hi == 0) {
-                    return 0;
+                constexpr uint64_t shuffle_mask_epi32 =
+                    build_shuffle_mask_as_epi32();
+                if constexpr (shuffle_mask_epi32) {
+                    return shuffle_mask_epi32;
                 }
                 else {
-                    return shuffle_mask_lo | (shuffle_mask_hi << 32);
+                    constexpr uint64_t shuffle_mask_lo =
+                        build_shuffle_mask_impl<4, 4, 8, e...>();
+                    constexpr uint64_t shuffle_mask_hi =
+                        build_shuffle_mask_impl<0, 4, 8, e...>();
+                    if constexpr (shuffle_mask_lo == 0 ||
+                                  shuffle_mask_hi == 0) {
+                        return 0;
+                    }
+                    else {
+                        return shuffle_mask_lo | (shuffle_mask_hi << 32);
+                    }
                 }
             }
         }
         else if constexpr (sizeof(T) == sizeof(uint32_t)) {
-            return build_shuffle_mask_impl<0, 4, 4>();
+            return build_shuffle_mask_impl<0, 4, 4, e...>();
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
-            return build_shuffle_mask_impl<0, 4, 4>();
+            return build_shuffle_mask_impl<0, 4, 4, e...>();
         }
     }
 
     static constexpr uint64_t
     in_same_lanes() {
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
-            return build_shuffle_mask_impl<n * sizeof(T), 16, 16>();
+            return build_shuffle_mask_impl<n * sizeof(T), 16, 16, e...>();
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-            return build_shuffle_mask_impl<n * sizeof(T), 8, 8>();
+            return build_shuffle_mask_impl<n * sizeof(T), 8, 8, e...>();
         }
         else if constexpr (sizeof(T) == sizeof(uint32_t)) {
-            return build_shuffle_mask_impl<n * sizeof(T), 4, 4>();
+            return build_shuffle_mask_impl<n * sizeof(T), 4, 4, e...>();
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
-            return build_shuffle_mask_impl<n * sizeof(T), 2, 2>();
+            return build_shuffle_mask_impl<n * sizeof(T), 2, 2, e...>();
         }
     }
 
