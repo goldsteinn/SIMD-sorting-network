@@ -260,7 +260,7 @@ test_all() {
 
 int
 main(int argc, char ** argv) {
-    const char *     hdr = "network_algorithm,type,test_n,simd,builtin";
+    const char *     hdr = "type,test_n,network_algorithm,simd,builtin";
     stats::stats_out so;
     if (argc > 1) {
         so.export_hdr(stderr, hdr);
@@ -269,10 +269,10 @@ main(int argc, char ** argv) {
         //    test_all<CORRECT, vsort::bitonic>();
         char test_fields[128] = "";
         sprintf(test_fields,
-                "%s,%s,%d,%d,%d",
-                v_to_string(TEST_NETWORK_ALGORITHM),
+                "%s,%d,%s,%d,%d",
                 v_to_string(TEST_TYPE),
                 TEST_N,
+                v_to_string(TEST_NETWORK_ALGORITHM),
                 TEST_SIMD,
                 TEST_BUILTIN);
 

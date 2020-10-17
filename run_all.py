@@ -32,10 +32,10 @@ res_file = args.file
 verbosity = args.verbose
 
 types = ["uint8_t", "uint16_t", "uint32_t", "uint64_t"]
-n_min = 2
+n_min = 4
 algorithms = ["bitonic", "oddeven", "batcher", "balanced", "bosenelson"]
-simds = [1, 2]
-builtins = [0, 1, 2]
+simds = ["1", "2"]
+builtins = ["0", "1", "2"]
 
 
 def sig_exit(signum, empty):
@@ -132,12 +132,12 @@ class Trial():
 
         csv_data = csv_line.split(",")
         err_assert(
-            len(csv_data) >= 5,
+            len(csv_data) >= 6,
             "Error: initializing trial from invalid string: {}".format(
                 csv_line))
 
-        self.init(csv_data[0], csv_data[1], csv_data[2], csv_data[3],
-                  csv_data[4])
+        self.init(csv_data[1], csv_data[2], csv_data[3], csv_data[4],
+                  csv_data[5])
 
     def to_string(self):
         ret_str = ""
@@ -154,12 +154,12 @@ class Trial():
 
         counter = 0
         for f in field_arr:
-            if field == f:
+            if str(field) == str(f):
                 return counter
             counter += 1
         err_assert(
-            False,
-            "Error unknown field for trial: {}".format(self.to_string()))
+            False, "Error unknown field [{} in {}] for trial: {}".format(
+                str(field), str(field_arr), self.to_string()))
 
     def get_T_idx(self):
         return self.get_field(str(self.T), types)
@@ -242,13 +242,14 @@ def verify_access(fname, ACCESS):
 def output_data(use_file, ow_file, data):
     if use_file is True:
         try:
-            ow_file.write(data + "\n")
+            ow_file.write(data)
+            ow_file.flush()
         except IOError:
             err_assert(
                 False, "Error writing to file: {}\nLost line: {}".format(
                     res_file, data))
     else:
-        print(data)
+        print(data, end="")
 
 
 def get_last_trial():
@@ -260,7 +261,7 @@ def get_last_trial():
     try:
         last_line = ""
         for csv_lines in open(res_file):
-            if csv_lines != "":
+            if csv_lines != "" and "compile time" not in csv_lines:
                 last_line = csv_lines
                 if verbosity > 0:
                     t.from_str(last_line)
@@ -282,7 +283,9 @@ def runner():
     simd_start = start_trial.get_simd_idx()
     builtin_start = start_trial.get_builtin_idx()
 
-    use_file = verify_access(res_file, os.W_OK)
+    use_file = False
+    if res_file != "":
+        use_file = True
     ow_file = ""
     try:
         if use_file is True:
@@ -334,6 +337,9 @@ def runner():
                             output_data(use_file, ow_file, header)
 
                         output_data(use_file, ow_file, result)
+    if use_file is True:
+        ow_file.flush()
+        ow_file.close()
 
 
 signal.signal(signal.SIGINT, sig_exit)
