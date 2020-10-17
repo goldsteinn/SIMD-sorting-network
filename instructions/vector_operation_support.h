@@ -48,6 +48,9 @@ struct vec_types {
     typedef uint64_t          vec4x8 __attribute__((vector_size(32)));
     typedef uint64_t          vec8x8 __attribute__((vector_size(64)));
 #endif
+    struct __m64_wrapper {
+        typedef __m64 type;
+    } ALIGN_ATTR(sizeof(__m64));
 
     struct __m128_wrapper {
         typedef __m128i type;
@@ -64,8 +67,12 @@ struct vec_types {
     template<typename T, uint32_t n>
     using get_vec_t = typename std::conditional_t<
         n * sizeof(T) <= 32,
-        typename std::
-            conditional_t<n * sizeof(T) <= 16, __m128_wrapper, __m256_wrapper>,
+        typename std::conditional_t<
+            n * sizeof(T) <= 16,
+            typename std::conditional_t<n * sizeof(T) <= 8,
+                                        __m64_wrapper,
+                                        __m128_wrapper>,
+            __m256_wrapper>,
         __m512_wrapper>;
 };
 
@@ -101,7 +108,14 @@ struct vector_ops_support_impl {
                 if constexpr (sizeof(T) < sizeof(uint64_t) ||
                               // for __m512i use normal mask for epi64
                               (n * sizeof(T) > sizeof(__m256i))) {
-                    blend_mask |= ((1UL) << i);
+                    if constexpr (n * sizeof(T) <= sizeof(__m64)) {
+                        blend_mask |= ((1UL << (8 * sizeof(T))) - 1UL)
+                                      << (i * 8 * sizeof(T));
+                    }
+                    else {
+                        // blend_mask for x/y/zmm register
+                        blend_mask |= ((1UL) << i);
+                    }
                 }
                 else /* sizeof(T) == sizeof(uint64_t) */ {
                     // blend_epi32 for epi64
@@ -128,8 +142,13 @@ struct vector_ops_support_impl {
     build_blend_vec_initializer() {
         // will use blend_mask directly unless using epi8 blend in which case we
         // need to scale by sizeof(T)
-        return build_blend_vec_initializer_kernel<blend_mask>(
-            std::make_integer_sequence<uint32_t, sizeof(T) * n>{});
+        if constexpr (sizeof(T) < sizeof(uint32_t)) {
+            return build_blend_vec_initializer_kernel<blend_mask>(
+                std::make_integer_sequence<uint32_t, sizeof(T) * n>{});
+        }
+        else {
+            return 0;
+        }
     }
 
     template<uint32_t offset, uint32_t ele_per_lane, uint32_t lane_size>
@@ -167,7 +186,12 @@ struct vector_ops_support_impl {
 
     static constexpr decltype(auto)
     build_shuffle_vec_initializer() {
-        return expand_seq();
+        if constexpr (sizeof(T) < sizeof(uint32_t)) {
+            return expand_seq();
+        }
+        else {
+            return 0;
+        }
     }
 
 
@@ -177,15 +201,20 @@ struct vector_ops_support_impl {
             return build_shuffle_mask_impl<0, 16, 16>();
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-            constexpr uint64_t shuffle_mask_lo =
-                build_shuffle_mask_impl<4, 4, 8>();
-            constexpr uint64_t shuffle_mask_hi =
-                build_shuffle_mask_impl<0, 4, 8>();
-            if constexpr (shuffle_mask_lo == 0 || shuffle_mask_hi == 0) {
-                return 0;
+            if constexpr (n <= 4) {
+                return build_shuffle_mask_impl<0, 4, 4>();
             }
             else {
-                return shuffle_mask_lo | (shuffle_mask_hi << 32);
+                constexpr uint64_t shuffle_mask_lo =
+                    build_shuffle_mask_impl<4, 4, 8>();
+                constexpr uint64_t shuffle_mask_hi =
+                    build_shuffle_mask_impl<0, 4, 8>();
+                if constexpr (shuffle_mask_lo == 0 || shuffle_mask_hi == 0) {
+                    return 0;
+                }
+                else {
+                    return shuffle_mask_lo | (shuffle_mask_hi << 32);
+                }
             }
         }
         else if constexpr (sizeof(T) == sizeof(uint32_t)) {
@@ -277,7 +306,7 @@ struct vector_ops_support_impl {
             return 0;
         }
     }
-};
+};  // namespace internal
 
 
 template<typename T, uint32_t n, uint32_t... e>
@@ -297,7 +326,20 @@ struct shuffle_support {
     static constexpr uint64_t shuffle_mask =
         vop_support_impl::build_shuffle_mask();
 
+
+    using shuffle_vec_initialize =
+        decltype(vop_support_impl::build_shuffle_vec_initializer());
+};
+
+template<typename T, uint32_t n, uint32_t... e>
+struct shuffle_inlane_support {
+    using vop_support_impl = vector_ops_support_impl<T, n, e...>;
     static constexpr uint64_t in_same_lanes = vop_support_impl::in_same_lanes();
+};
+
+template<typename T, uint32_t n, uint32_t... e>
+struct shuffle_across_lane_support {
+    using vop_support_impl = vector_ops_support_impl<T, n, e...>;
     static constexpr uint64_t across_lanes_mask =
         vop_support_impl::across_lanes_mask();
 
@@ -309,9 +351,6 @@ struct shuffle_support {
         decltype(vop_support_impl::template build_across_lanes_vec_initializer<
                  0,
                  across_lanes_mask>());
-
-    using shuffle_vec_initialize =
-        decltype(vop_support_impl::build_shuffle_vec_initializer());
 };
 
 

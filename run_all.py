@@ -2,8 +2,8 @@
 
 import os
 
-types = ["uint32_t", "uint64_t", "uint16_t", "uint8_t"]
-sizes = [4, 8, 2, 1]
+types = ["uint8_t"]
+sizes = [1]
 builtin_status = [0, 1, 2]
 simd_status = [2]
 

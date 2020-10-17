@@ -1,11 +1,12 @@
 #ifndef _TRANSFORMATIONS_H_
 #define _TRANSFORMATIONS_H_
 
+#include <util/constexpr_util.h>
 #include <util/integer_range.h>
-
 namespace vsort {
 namespace transform {
 namespace internal {
+
 
 template<uint32_t n, uint32_t size, uint32_t... pairs>
 struct permutation_transform_impl {

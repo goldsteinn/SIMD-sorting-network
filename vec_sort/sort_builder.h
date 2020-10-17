@@ -64,7 +64,7 @@ template<typename T,
          builtin_usage     builtin_perm>
 vop::vec_t<T, n> ALWAYS_INLINE CONST_ATTR
 generate_sort(vop::vec_t<T, n> v) {
-    return internal::sort_builder<T, next_p2(n), simd_set, builtin_perm>::build(
+    return internal::sort_builder<T, n, simd_set, builtin_perm>::build(
         v,
         network{});
 }

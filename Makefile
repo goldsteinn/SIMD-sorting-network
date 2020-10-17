@@ -10,4 +10,4 @@ all:
 	$(CXX) $(CXXFLAGS) $(INCLUDES) driver.o stats.o -o driver
 
 clean:
-	rm -f *~ *#* driver
+	rm -f *~ *#* *.o driver

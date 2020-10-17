@@ -2,7 +2,9 @@
 #define _INSTRUCTIONS_H_
 
 #include <immintrin.h>
+#include <mmintrin.h>
 #include <stdint.h>
+#include <xmmintrin.h>
 #include <utility>
 
 #include <instructions/vector_operation_support.h>
@@ -40,6 +42,108 @@ template<typename T,
          builtin_usage     builtin_perm,
          uint32_t          vec_size>
 struct vector_ops;
+
+template<typename T, simd_instructions simd_set, builtin_usage builtin_perm>
+struct vector_ops<T, simd_set, builtin_perm, sizeof(__m64)> {
+    static constexpr uint32_t vec_size = sizeof(__m64);
+    static constexpr uint32_t n        = vec_size / sizeof(T);
+
+    template<uint32_t... e>
+    static constexpr __m64 ALWAYS_INLINE CONST_ATTR
+    build_set_vec() {
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            return _mm_set_pi8(e...);
+        }
+        else /* sizeof(T) == sizeof(uint16_t) */ {
+            return _mm_set_pi16(e...);
+        }
+    }
+
+    static __m64 ALWAYS_INLINE CONST_ATTR
+    vec_min(__m64 v1, __m64 v2) {
+
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            if constexpr (std::is_signed<T>::value) {
+                __m64 cmp_mask = _mm_cmpgt_pi8(v2, v1);
+                return _mm_or_si64(_mm_and_si64(cmp_mask, v1),
+                                   _mm_andnot_si64(cmp_mask, v2));
+            }
+            else {
+                // SSE
+                return _mm_min_pu8(v1, v2);
+            }
+        }
+        else /* sizeof(T) == sizeof(uint16_t) */ {
+        }
+        if constexpr (std::is_signed<T>::value) {
+            // SSE
+            return _mm_min_pi16(v1, v2);
+        }
+        else {
+            __m64 sign_bits = _mm_set1_pi16(1 << 15);
+            __m64 cmp_mask  = _mm_cmpgt_pi16(_mm_xor_si64(v1, sign_bits),
+                                            _mm_xor_si64(v2, sign_bits));
+            return _mm_or_si64(_mm_and_si64(cmp_mask, v2),
+                               _mm_andnot_si64(cmp_mask, v1));
+        }
+    }
+
+    static __m64 ALWAYS_INLINE CONST_ATTR
+    vec_max(__m64 v1, __m64 v2) {
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            if constexpr (std::is_signed<T>::value) {
+                // todo
+                __m64 cmp_mask = _mm_cmpgt_pi8(v1, v2);
+                return _mm_or_si64(_mm_and_si64(cmp_mask, v1),
+                                   _mm_andnot_si64(cmp_mask, v2));
+            }
+            else {
+                // SSE
+                return _mm_max_pu8(v1, v2);
+            }
+        }
+        else /* sizeof(T) == sizeof(uint16_t) */ {
+        }
+        if constexpr (std::is_signed<T>::value) {
+            // SSE
+            return _mm_max_pi16(v1, v2);
+        }
+        else {
+            __m64 sign_bits = _mm_set1_pi16(1 << 15);
+            __m64 cmp_mask  = _mm_cmpgt_pi16(_mm_xor_si64(v1, sign_bits),
+                                            _mm_xor_si64(v2, sign_bits));
+            return _mm_or_si64(_mm_and_si64(cmp_mask, v1),
+                               _mm_andnot_si64(cmp_mask, v2));
+        }
+    }
+
+
+    template<uint32_t... e>
+    static __m64 ALWAYS_INLINE CONST_ATTR
+    vec_blend(__m64 v1, __m64 v2) {
+        using vop_support = internal::blend_support<T, n, e...>;
+
+        constexpr __m64 blend_mask = (__m64)vop_support::blend_mask;
+
+        return _mm_or_si64(_mm_and_si64(blend_mask, v2),
+                           _mm_andnot_si64(blend_mask, v1));
+    }
+
+    template<uint32_t... e>
+    static __m64 ALWAYS_INLINE CONST_ATTR
+    vec_permutate(__m64 v) {
+
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            return _mm_shuffle_pi8(v, build_set_vec<e...>());
+        }
+        else /* sizeof(T) == sizeof(uint16_t) */ {
+            constexpr uint32_t shuffle_mask =
+                shuffle_support<T, n, e...>::shuffle_mask;
+            return _mm_shuffle_pi16(v, shuffle_mask);
+        }
+    }
+
+};  // namespace internal
 
 template<typename T, simd_instructions simd_set, builtin_usage builtin_perm>
 struct vector_ops<T, simd_set, builtin_perm, sizeof(__m128i)> {
@@ -761,12 +865,12 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
                 __m256i same_lane = _mm256_shuffle_epi8(
                     v,
                     build_set_vec_wrapper<0>(
-                        typename vop_support::
+                        typename shuffle_across_lane_support<T, n, e...>::
                             across_lanes_same_vec_initialize{}));
                 __m256i other_lane = _mm256_shuffle_epi8(
                     lo_hi_swap,
                     build_set_vec_wrapper<0>(
-                        typename vop_support::
+                        typename shuffle_across_lane_support<T, n, e...>::
                             across_lanes_other_vec_initialize{}));
                 // AVX2
                 return _mm256_or_si256(same_lane, other_lane);
@@ -782,7 +886,8 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
                     _mm256_shufflelo_epi16(v, shuffle_mask_lo),
                     shuffle_mask_hi);
             }
-            else if constexpr (vop_support::in_same_lanes) {
+            else if constexpr (shuffle_inlane_support<T, n, e...>::
+                                   in_same_lanes) {
                 // AVX2
                 return _mm256_shuffle_epi8(
                     v,
@@ -810,12 +915,12 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
                 __m256i same_lane = _mm256_shuffle_epi8(
                     v,
                     build_set_vec_wrapper<sizeof(uint8_t)>(
-                        typename vop_support::
+                        typename shuffle_across_lane_support<T, n, e...>::
                             across_lanes_same_vec_initialize{}));
                 __m256i other_lane = _mm256_shuffle_epi8(
                     lo_hi_swap,
                     build_set_vec_wrapper<sizeof(uint8_t)>(
-                        typename vop_support::
+                        typename shuffle_across_lane_support<T, n, e...>::
                             across_lanes_other_vec_initialize{}));
 
 
@@ -1147,29 +1252,17 @@ using vec_t = typename internal::vec_types::get_vec_t<T, n>::type;
 template<typename T, uint32_t n>
 constexpr vec_t<T, n> ALWAYS_INLINE
 vec_load(T * const arr) {
-    if constexpr (n * sizeof(T) <= sizeof(__m128i)) {
-        return _mm_load_si128((__m128i *)arr);
-    }
-    else if constexpr (n * sizeof(T) <= sizeof(__m256i)) {
-        return _mm256_load_si256((__m256i *)arr);
-    }
-    else {
-        return _mm512_load_si512((__m512i *)arr);
-    }
+    // compiler will optimize to loadu if n * sizeof(T) == sizeof(vec_t<T, n>)
+    vec_t<T, n> r;
+    memcpy(&r, arr, n * sizeof(T));
+    return r;
 }
 
 template<typename T, uint32_t n>
 constexpr void ALWAYS_INLINE
 vec_store(T * const arr, vec_t<T, n> v) {
-    if constexpr (n * sizeof(T) <= sizeof(__m128i)) {
-        return _mm_store_si128((__m128i *)arr, v);
-    }
-    else if constexpr (n * sizeof(T) <= sizeof(__m256i)) {
-        return _mm256_store_si256((__m256i *)arr, v);
-    }
-    else {
-        return _mm512_store_si512((__m512i *)arr, v);
-    }
+    // compiler will optimize to storeu if n * sizeof(T) == sizeof(vec_t<T, n>)
+    memcpy(arr, &v, n * sizeof(T));
 }
 
 template<typename T,
@@ -1179,13 +1272,25 @@ template<typename T,
          uint32_t... e>
 constexpr vec_t<T, n> ALWAYS_INLINE CONST_ATTR
 compare_exchange(vec_t<T, n> v) {
-    using vec_ops =
-        typename internal::vector_ops<T, simd_set, builtin_perm, sizeof(T) * n>;
-    vec_t<T, n> cmp   = vec_ops::template vec_permutate<e...>(v);
-    vec_t<T, n> s_min = vec_ops::vec_min(v, cmp);
-    vec_t<T, n> s_max = vec_ops::vec_max(v, cmp);
-    vec_t<T, n> ret   = vec_ops::template vec_blend<e...>(s_max, s_min);
-    return ret;
+    if constexpr (sizeof(T) * n < sizeof(__m64)) {
+        using vec_ops =
+            typename internal::vector_ops<T, simd_set, builtin_perm, 8>;
+        vec_t<T, n> cmp = vec_ops::template vec_permutate<7, 6, 5, 4, e...>(v);
+        vec_t<T, n> s_min = vec_ops::vec_min(v, cmp);
+        vec_t<T, n> s_max = vec_ops::vec_max(v, cmp);
+        vec_t<T, n> ret =
+            vec_ops::template vec_blend<7, 6, 5, 4, e...>(s_max, s_min);
+        return ret;
+    }
+    else {
+        using vec_ops = typename internal::
+            vector_ops<T, simd_set, builtin_perm, sizeof(T) * n>;
+        vec_t<T, n> cmp   = vec_ops::template vec_permutate<e...>(v);
+        vec_t<T, n> s_min = vec_ops::vec_min(v, cmp);
+        vec_t<T, n> s_max = vec_ops::vec_max(v, cmp);
+        vec_t<T, n> ret   = vec_ops::template vec_blend<e...>(s_max, s_min);
+        return ret;
+    }
 }
 
 

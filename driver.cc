@@ -157,7 +157,7 @@ template<OPERATION op, typename T, uint32_t n>
 void
 test_all_kernel() {
     if constexpr (sizeof(T) * n <= 64) {
-        if constexpr (n >= 4) {
+        if constexpr (n >= 2) {
             test<op,
                  T,
                  n,
@@ -197,10 +197,15 @@ test_all_kernel() {
 template<OPERATION op>
 void
 test_all() {
-    test_all_kernel<op, uint8_t, 9>();
-    test_all_kernel<op, uint16_t, 5>();
-    test_all_kernel<op, uint32_t, 4>();
-    test_all_kernel<op, uint64_t, 4>();
+    /*    test_all_kernel<op, uint8_t, 3>();
+    test_all_kernel<op, uint16_t, 3>();
+    test_all_kernel<op, uint32_t, 3>();
+    test_all_kernel<op, uint64_t, 3>();*/
+
+    test_all_kernel<op, int8_t, 2>();
+    test_all_kernel<op, int16_t, 2>();
+    test_all_kernel<op, int32_t, 2>();
+    test_all_kernel<op, int64_t, 2>();
 }
 
 #define v_to_string(X)  _v_to_string(X)
