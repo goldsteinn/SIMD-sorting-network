@@ -439,19 +439,9 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m128i)> {
             return _mm_blend_epi32(v1, v2, blend_mask);
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512F &&
-                          internal::avail_instructions::AVX512VL) {
-                // AVX512F & AVX512VL
-                return _mm_mask_mov_epi64(v1, blend_mask, v2);
-            }
-            else {
-                // build_blend_mask will create proper mask for epi64 if AVX512F
-                // and AVX512VL are not available
-
-                // AVX2
-                return _mm_blend_epi32(v1, v2, blend_mask);
-            }
+            // build_blend_mask will create proper mask for epi64
+            // AVX2
+            return _mm_blend_epi32(v1, v2, blend_mask);
         }
     }
 
@@ -464,8 +454,8 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m128i)> {
 
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
             // SSE3
-            if constexpr (shuffle_mask && shuffle_mask != 1) {
-                return _mm_shuffle_epi32(v, shuffle_mask);
+            if constexpr (shuffle_mask & vop_support::shuffle_as_epi32_flag) {
+                return _mm_shuffle_epi32(v, shuffle_mask & 0xff);
             }
             else {
                 return _mm_shuffle_epi8(
@@ -476,13 +466,15 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m128i)> {
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
             if constexpr (shuffle_mask) {
-                constexpr uint32_t shuffle_mask_lo = shuffle_mask;
-                constexpr uint32_t shuffle_mask_hi = (shuffle_mask >> 32);
-                if constexpr (shuffle_mask_hi == 0) {
+                if constexpr (shuffle_mask &
+                              vop_support::shuffle_as_epi32_flag) {
                     // SSE2
-                    return _mm_shuffle_epi32(v, shuffle_mask);
+                    return _mm_shuffle_epi32(v, shuffle_mask & 0xff);
                 }
                 else {
+                    constexpr uint32_t shuffle_mask_lo = shuffle_mask;
+                    constexpr uint32_t shuffle_mask_hi = (shuffle_mask >> 32);
+
                     // SSE2
                     return _mm_shufflehi_epi16(
                         _mm_shufflelo_epi16(v, shuffle_mask_lo),
@@ -501,8 +493,9 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m128i)> {
             return _mm_shuffle_epi32(v, shuffle_mask);
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
+            // Will always get shuffle_as_epi32
             // SSE2
-            return _mm_shuffle_epi32(v, shuffle_mask);
+            return _mm_shuffle_epi32(v, shuffle_mask & 0xff);
         }
     }
 
@@ -847,8 +840,9 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
             // gcc misses some optimizations
             if constexpr (shuffle_mask) {
                 // AVX2
-                if constexpr (shuffle_mask != 1) {
-                    return _mm256_shuffle_epi32(v, shuffle_mask);
+                if constexpr (shuffle_mask &
+                              vop_support::shuffle_as_epi32_flag) {
+                    return _mm256_shuffle_epi32(v, shuffle_mask & 0xff);
                 }
                 else {
                     return _mm256_shuffle_epi8(
@@ -894,13 +888,15 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
             if constexpr (shuffle_mask) {
-                constexpr uint32_t shuffle_mask_lo = shuffle_mask;
-                constexpr uint32_t shuffle_mask_hi = (shuffle_mask >> 32);
-                if constexpr (shuffle_mask_hi == 0) {
+
+                if constexpr (shuffle_mask &
+                              vop_support::shuffle_as_epi32_flag) {
                     // AVX2
-                    return _mm256_shuffle_epi32(v, shuffle_mask);
+                    return _mm256_shuffle_epi32(v, shuffle_mask & 0xff);
                 }
                 else {
+                    constexpr uint32_t shuffle_mask_lo = shuffle_mask;
+                    constexpr uint32_t shuffle_mask_hi = (shuffle_mask >> 32);
 
                     // AVX2
                     return _mm256_shufflehi_epi16(
@@ -967,11 +963,14 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
             }
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
-            // permute4x64 can fully rearrange epi64
-            static_assert(shuffle_mask);
-            // TODO use shuffle_epi32 if possible
-            // AVX2
-            return _mm256_permute4x64_epi64(v, shuffle_mask);
+            if constexpr (shuffle_mask & vop_support::shuffle_as_epi32_flag) {
+                return _mm256_shuffle_epi32(v, shuffle_mask & 0xff);
+            }
+            else {
+                // permute4x64 can fully rearrange epi64.
+                // AVX2
+                return _mm256_permute4x64_epi64(v, shuffle_mask);
+            }
         }
     }
 
@@ -1232,17 +1231,20 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m512i)> {
         constexpr uint64_t shuffle_mask = vop_support::shuffle_mask;
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
 
-            if constexpr (shuffle_mask && shuffle_mask != 1) {
+            if constexpr (shuffle_mask & vop_support::shuffle_as_epi32_flag) {
                 // AVX512F
-                return _mm512_shuffle_epi32(v, (_MM_PERM_ENUM)shuffle_mask);
+                return _mm512_shuffle_epi32(
+                    v,
+                    (_MM_PERM_ENUM)(shuffle_mask & 0xff));
             }
             // AVX512VBMI
             return _mm512_permutexvar_epi8(_mm512_set_epi8(e...), v);
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-            if constexpr (shuffle_mask &&
-                          (((shuffle_mask >> 32) & 0xffffffff) == 0)) {
-                return _mm512_shuffle_epi32(v, (_MM_PERM_ENUM)shuffle_mask);
+            if constexpr (shuffle_mask & vop_support::shuffle_as_epi32_flag) {
+                return _mm512_shuffle_epi32(
+                    v,
+                    (_MM_PERM_ENUM)(shuffle_mask & 0xff));
             }
             // AVX512BW
             return _mm512_permutexvar_epi16(_mm512_set_epi16(e...), v);
@@ -1265,8 +1267,16 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m512i)> {
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
             if constexpr (shuffle_mask) {
-                // AVX512F
-                return _mm512_permutex_epi64(v, shuffle_mask);
+                if constexpr (shuffle_mask & vop_support::shuffle_as_epi32_flag) {
+                    // AVX512F
+                    return _mm512_shuffle_epi32(
+                        v,
+                        (_MM_PERM_ENUM)(shuffle_mask & 0xff));
+                }
+                else {
+                    // AVX512F
+                    return _mm512_permutex_epi64(v, shuffle_mask);
+                }
             }
             else if (vop_support::in_same_lanes) {
                 return _mm512_shuffle_epi8(

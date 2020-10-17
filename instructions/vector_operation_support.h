@@ -79,35 +79,51 @@ struct vec_types {
 
 template<typename T, uint32_t n, uint32_t... e>
 struct vector_ops_support_impl {
+    static constexpr uint64_t shuffle_as_epi32_flag = (1UL) << 63;
 
-    template<uint32_t... seq>
+    template<uint32_t factor, uint32_t... seq>
     static constexpr decltype(auto)
     expand_seq_kernel(std::integer_sequence<uint32_t, seq...> _seq) {
         constexpr uint32_t _e[sizeof...(e)] = { static_cast<uint32_t>(e)... };
         return std::integer_sequence<uint32_t,
-                                     sizeof(T) * _e[seq / sizeof(T)] +
-                                         ((sizeof(T) - 1) -
-                                          (seq % sizeof(T)))...>{};
+                                     factor * _e[seq / factor] +
+                                         ((factor - 1) - (seq % factor))...>{};
     }
 
+    template<uint32_t factor>
     static constexpr decltype(auto)
     expand_seq() {
-        return expand_seq_kernel(
-            std::make_integer_sequence<uint32_t, n * sizeof(T)>{});
+        return expand_seq_kernel<factor>(
+            std::make_integer_sequence<uint32_t, n * factor>{});
     }
 
-    template<uint32_t scale, uint32_t... seq>
+    template<uint32_t factor, uint32_t... seq>
     static constexpr decltype(auto)
     shrink_seq_kernel(std::integer_sequence<uint32_t, seq...> _seq) {
         constexpr uint32_t _e[sizeof...(e)] = { static_cast<uint32_t>(e)... };
-        return std::integer_sequence<uint32_t, (_e[seq * scale] / scale)...>{};
+        return std::integer_sequence<uint32_t,
+                                     (_e[seq * factor] / factor)...>{};
     }
 
-    template<uint32_t scale>
+    template<uint32_t factor>
     static constexpr decltype(auto)
     shrink_seq() {
-        return shrink_seq_kernel<scale>(
-            std::make_integer_sequence<uint32_t, n / scale>{});
+        return shrink_seq_kernel<factor>(
+            std::make_integer_sequence<uint32_t, n / factor>{});
+    }
+
+    template<typename fromT, typename toT>
+    static constexpr decltype(auto)
+    scale_seq() {
+        if constexpr (sizeof(fromT) > sizeof(toT)) {
+            return expand_seq<sizeof(fromT) / sizeof(toT)>();
+        }
+        else if constexpr (sizeof(fromT) < sizeof(toT)) {
+            return shrink_seq<sizeof(toT) / sizeof(fromT)>();
+        }
+        else {
+            return std::integer_sequence<uint32_t, e...>{};
+        }
     }
 
 
@@ -211,8 +227,9 @@ struct vector_ops_support_impl {
 
     static constexpr uint64_t
     build_shuffle_mask_as_epi32() {
-        constexpr uint32_t perms[n]  = { static_cast<uint32_t>(e)... };
-        constexpr uint32_t T_per_int = sizeof(uint32_t) / sizeof(T);
+        constexpr uint32_t perms[n] = { static_cast<uint32_t>(e)... };
+        constexpr uint32_t T_per_int =
+            (sizeof(T) > sizeof(uint32_t)) ? 1 : (sizeof(uint32_t) / sizeof(T));
         for (uint32_t i = 0; i < n; i += T_per_int) {
             uint32_t base_ele = perms[i];
             if ((base_ele % T_per_int) != (T_per_int - 1)) {
@@ -225,13 +242,13 @@ struct vector_ops_support_impl {
             }
         }
         return build_shuffle_mask_as_epi32_impl_wrapper(
-            shrink_seq<T_per_int>());
+            scale_seq<T, uint32_t>());
     }
 
 
     static constexpr decltype(auto)
     build_shuffle_vec_initializer() {
-        return expand_seq();
+        return scale_seq<T, uint8_t>();
     }
 
 
@@ -241,9 +258,11 @@ struct vector_ops_support_impl {
             constexpr uint64_t shuffle_mask_epi32 =
                 build_shuffle_mask_as_epi32();
             if constexpr (shuffle_mask_epi32) {
-                return shuffle_mask_epi32;
+                return shuffle_mask_epi32 | shuffle_as_epi32_flag;
             }
-            return !!build_shuffle_mask_impl<0, 16, 16, e...>();
+            else {
+                return !!build_shuffle_mask_impl<0, 16, 16, e...>();
+            }
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
             if constexpr (n <= 4) {
@@ -253,7 +272,7 @@ struct vector_ops_support_impl {
                 constexpr uint64_t shuffle_mask_epi32 =
                     build_shuffle_mask_as_epi32();
                 if constexpr (shuffle_mask_epi32) {
-                    return shuffle_mask_epi32;
+                    return shuffle_mask_epi32 | shuffle_as_epi32_flag;
                 }
                 else {
                     constexpr uint64_t shuffle_mask_lo =
@@ -274,7 +293,14 @@ struct vector_ops_support_impl {
             return build_shuffle_mask_impl<0, 4, 4, e...>();
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
-            return build_shuffle_mask_impl<0, 4, 4, e...>();
+            constexpr uint64_t shuffle_mask_epi32 =
+                build_shuffle_mask_as_epi32();
+            if constexpr (shuffle_mask_epi32) {
+                return shuffle_mask_epi32 | shuffle_as_epi32_flag;
+            }
+            else {
+                return build_shuffle_mask_impl<0, 4, 4, e...>();
+            }
         }
     }
 
@@ -375,6 +401,8 @@ struct blend_support {
 template<typename T, uint32_t n, uint32_t... e>
 struct shuffle_support {
     using vop_support_impl = vector_ops_support_impl<T, n, e...>;
+    static constexpr uint64_t shuffle_as_epi32_flag =
+        vop_support_impl::shuffle_as_epi32_flag;
 
     static constexpr uint64_t shuffle_mask =
         vop_support_impl::build_shuffle_mask();

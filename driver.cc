@@ -68,7 +68,7 @@ do_sort(T * arr) {
         std::sort(arr, arr + n);
     }
     else {
-        vsort::sort<T, n, vsort::oddeven, simd_set, builtin_perm>(arr);
+        vsort::sort<T, n, vsort::bitonic, simd_set, builtin_perm>(arr);
     }
 }
 
@@ -198,9 +198,9 @@ template<OPERATION op>
 void
 test_all() {
     test_all_kernel<op, uint8_t, 2>();
-    test_all_kernel<op, uint16_t, 2>();
+    /*    test_all_kernel<op, uint16_t, 2>();
     test_all_kernel<op, uint32_t, 2>();
-    test_all_kernel<op, uint64_t, 2>();
+    test_all_kernel<op, uint64_t, 2>();*/
 
     //    test_all_kernel<op, int8_t, 2>();
     //    test_all_kernel<op, int16_t, 2>();
