@@ -197,15 +197,15 @@ test_all_kernel() {
 template<OPERATION op>
 void
 test_all() {
-    /*    test_all_kernel<op, uint8_t, 3>();
-    test_all_kernel<op, uint16_t, 3>();
-    test_all_kernel<op, uint32_t, 3>();
-    test_all_kernel<op, uint64_t, 3>();*/
+     test_all_kernel<op, uint8_t, 2>();
+    //    test_all_kernel<op, uint16_t, 2>();
+    //        test_all_kernel<op, uint32_t, 2>();
+    //        test_all_kernel<op, uint64_t, 2>();
 
-    test_all_kernel<op, int8_t, 2>();
-    test_all_kernel<op, int16_t, 2>();
-    test_all_kernel<op, int32_t, 2>();
-    test_all_kernel<op, int64_t, 2>();
+    //    test_all_kernel<op, int8_t, 2>();
+    //    test_all_kernel<op, int16_t, 2>();
+    //    test_all_kernel<op, int32_t, 2>();
+    //    test_all_kernel<op, int64_t, 2>();
 }
 
 #define v_to_string(X)  _v_to_string(X)
@@ -232,9 +232,15 @@ test_all() {
 #endif
 
 
+#define N 10
 int
 main() {
     test_all<CORRECT>();
+    sarr<uint8_t, N> s;
+    s.binit();
+    vsort::sort<uint8_t, N, vsort::bosenelson>(s.arr);
+    s.show();
+
     /*    const char * outfile  = "out.txt";
     const char * hdr      = "type,test_n,simd,builtin";
     char         buf[128] = "";

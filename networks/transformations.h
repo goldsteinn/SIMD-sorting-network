@@ -53,9 +53,9 @@ struct group_transform_impl {
     constexpr group_transform_impl() : arr(), size_out() {
         constexpr uint32_t _pairs[size] = { static_cast<uint32_t>(pairs)... };
 
-        uint32_t ngroups              = 0;
-        uint32_t group_indexes[n + 1] = { 0 };
-        uint32_t tmp_arr[n * (n + 1)] = { 0 };
+        uint32_t ngroups                    = 0;
+        uint32_t group_indexes[next_p2(n)] = { 0 };
+        uint32_t tmp_arr[next_p2(n) * (n + 1)]       = { 0 };
 
         for (uint32_t i = 0; i < size; i += 2) {
             const uint32_t x_i = _pairs[i];
