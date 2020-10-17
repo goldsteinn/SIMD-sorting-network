@@ -41,21 +41,21 @@ stddev_and_variance(double   mean,
 
 void
 stats_out::print(bool               format,
+                 FILE *             outfile,
                  const char * const header,
-                 const char *       header_fields,
-                 FILE *             outfile) {
+                 const char *       header_fields) {
     if (format == human_readable) {
-        print_hr(header, header_fields, outfile);
+        print_hr(outfile, header, header_fields);
     }
     else {
-        print_csv(header, header_fields, outfile);
+        print_csv(outfile, header, header_fields);
     }
 }
 
 void
-stats_out::print_hr(const char * const header,
-                    const char *       header_fields,
-                    FILE *             outfile) {
+stats_out::print_hr(FILE *             outfile,
+                    const char * const header,
+                    const char *       header_fields) {
     char fmt_buf[512] = "";
     sprintf(fmt_buf,
             "----------------------------------------\n"
@@ -104,14 +104,21 @@ stats_out::print_hr(const char * const header,
 }
 
 void
-stats_out::print_csv(const char * const header,
-                     const char *       header_fields,
-                     FILE *             outfile) {
+stats_out::print_csv(FILE *             outfile,
+                     const char * const header,
+                     const char *       header_fields) {
+    if (header != NULL && header != DONT_PRINT_HEADER &&
+        header_fields != NULL) {
+        fprintf(outfile, "%s,", header);
+    }
+    if (header != DONT_PRINT_HEADER) {
+        fprintf(outfile, "n,median,mean,max,min,p99,p95,p90,stddev,variance\n");
+    }
+    if (header_fields != NULL) {
+        fprintf(outfile, "%s,", header_fields);
+    }
     fprintf(outfile,
-            "%s,n,median,mean,max,min,p99,p95,p90,stddev,variance\n"
-            "%s,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf\n",
-            header,
-            header_fields,
+            "%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf\n",
             N,
             median,
             mean,

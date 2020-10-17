@@ -12,9 +12,9 @@
 
 namespace stats {
 
-static constexpr bool human_readable = true;
-static constexpr bool csv            = false;
-
+static constexpr bool human_readable    = true;
+static constexpr bool csv               = false;
+static char * const   DONT_PRINT_HEADER = (char * const)1UL;
 struct stats_out {
 
     uint64_t N;
@@ -33,16 +33,16 @@ struct stats_out {
     timers::time_units units;
 
     void print(bool               format,
-               const char * const header,
-               const char *       header_fields,
-               FILE *             outfile = stderr);
+               FILE *             outfile       = stderr,
+               const char * const header        = NULL,
+               const char *       header_fields = NULL);
 
-    void print_csv(const char * const header,
-                   const char *       header_fields,
-                   FILE *             outfile = stderr);
-    void print_hr(const char * const header,
-                  const char *       header_fields,
-                  FILE *             outfile = stderr);
+    void print_csv(FILE *             outfile       = stderr,
+                   const char * const header        = NULL,
+                   const char *       header_fields = NULL);
+    void print_hr(FILE *             outfile       = stderr,
+                  const char * const header        = NULL,
+                  const char *       header_fields = NULL);
 
     void get_stats(uint64_t *         data,
                    uint32_t           n,

@@ -59,7 +59,9 @@ struct sarr {
 enum SORT { SSORT = 0, VSORT = 1 };
 template<SORT s,
          typename T,
-         uint32_t                 n,
+         uint32_t n,
+         template<uint32_t _n>
+         typename network_algorithm,
          vsort::simd_instructions simd_set,
          vsort::builtin_usage     builtin_perm>
 void NEVER_INLINE
@@ -68,13 +70,15 @@ do_sort(T * arr) {
         std::sort(arr, arr + n);
     }
     else {
-        vsort::sort<T, n, vsort::bitonic, simd_set, builtin_perm>(arr);
+        vsort::sort<T, n, network_algorithm, simd_set, builtin_perm>(arr);
     }
 }
 
 
 template<typename T,
-         uint32_t                 n,
+         uint32_t n,
+         template<uint32_t _n>
+         typename network_algorithm,
          vsort::simd_instructions simd_set,
          vsort::builtin_usage     builtin_perm>
 void
@@ -87,8 +91,8 @@ corr_test() {
     for (i = 0; i < tsize; ++i) {
         s1.randomize();
         memcpy(s2.arr, s1.arr, n * sizeof(T));
-        do_sort<SSORT, T, n, simd_set, builtin_perm>(s1.arr);
-        do_sort<VSORT, T, n, simd_set, builtin_perm>(s2.arr);
+        do_sort<SSORT, T, n, network_algorithm, simd_set, builtin_perm>(s1.arr);
+        do_sort<VSORT, T, n, network_algorithm, simd_set, builtin_perm>(s2.arr);
         if (!(!memcmp(s1.arr, s2.arr, n * sizeof(T)))) {
             fprintf(stderr,
                     "FAILED : [%zu][%d][%d][%d]\n",
@@ -110,7 +114,9 @@ corr_test() {
 }
 
 template<typename T,
-         uint32_t                 n,
+         uint32_t n,
+         template<uint32_t _n>
+         typename network_algorithm,
          vsort::simd_instructions simd_set,
          vsort::builtin_usage     builtin_perm>
 double
@@ -122,7 +128,7 @@ perf_test() {
         s.randomize();
 
         uint64_t start = _rdtsc();
-        do_sort<VSORT, T, n, simd_set, builtin_perm>(s.arr);
+        do_sort<VSORT, T, n, network_algorithm, simd_set, builtin_perm>(s.arr);
         uint64_t end = _rdtsc();
         total_cycles += end - start;
     }
@@ -133,16 +139,18 @@ perf_test() {
 enum OPERATION { CORRECT = 0, PERFORMANCE = 1 };
 template<OPERATION op,
          typename T,
-         uint32_t                 n,
+         uint32_t n,
+         template<uint32_t _n>
+         typename network_algorithm,
          vsort::simd_instructions simd_set,
          vsort::builtin_usage     builtin_perm>
 void
 test() {
     if constexpr (op == CORRECT) {
-        corr_test<T, n, simd_set, builtin_perm>();
+        corr_test<T, n, network_algorithm, simd_set, builtin_perm>();
     }
     else {
-        double r = perf_test<T, n, simd_set, builtin_perm>();
+        double r = perf_test<T, n, network_algorithm, simd_set, builtin_perm>();
         fprintf(stderr,
                 "[%zu][%d][%d][%d]: %.3lf\n",
                 sizeof(T),
@@ -153,7 +161,11 @@ test() {
     }
 }
 
-template<OPERATION op, typename T, uint32_t n>
+template<OPERATION op,
+         typename T,
+         uint32_t n,
+         template<uint32_t _n>
+         typename network_algorithm>
 void
 test_all_kernel() {
     if constexpr (sizeof(T) * n <= 64) {
@@ -161,58 +173,72 @@ test_all_kernel() {
             test<op,
                  T,
                  n,
+                 network_algorithm,
                  vsort::simd_instructions::AVX2,
                  vsort::builtin_usage::BUILTIN_FIRST>();
             test<op,
                  T,
                  n,
+                 network_algorithm,
                  vsort::simd_instructions::AVX2,
                  vsort::builtin_usage::BUILTIN_FALLBACK>();
             test<op,
                  T,
                  n,
+                 network_algorithm,
                  vsort::simd_instructions::AVX2,
                  vsort::builtin_usage::BUILTIN_NONE>();
 
             test<op,
                  T,
                  n,
+                 network_algorithm,
                  vsort::simd_instructions::AVX512,
                  vsort::builtin_usage::BUILTIN_FIRST>();
             test<op,
                  T,
                  n,
+                 network_algorithm,
                  vsort::simd_instructions::AVX512,
                  vsort::builtin_usage::BUILTIN_FALLBACK>();
             test<op,
                  T,
                  n,
+                 network_algorithm,
                  vsort::simd_instructions::AVX512,
                  vsort::builtin_usage::BUILTIN_NONE>();
         }
-        test_all_kernel<op, T, n + 1>();
+        test_all_kernel<op, T, n + 1, network_algorithm>();
     }
 }
 
-template<OPERATION op>
+template<OPERATION op, template<uint32_t _n> typename network_algorithm>
 void
 test_all() {
-    test_all_kernel<op, uint8_t, 2>();
-    /*    test_all_kernel<op, uint16_t, 2>();
-    test_all_kernel<op, uint32_t, 2>();
-    test_all_kernel<op, uint64_t, 2>();*/
+    test_all_kernel<op, uint8_t, 2, network_algorithm>();
+    test_all_kernel<op, uint16_t, 2, network_algorithm>();
+    test_all_kernel<op, uint32_t, 2, network_algorithm>();
+    test_all_kernel<op, uint64_t, 2, network_algorithm>();
 
-    //    test_all_kernel<op, int8_t, 2>();
-    //    test_all_kernel<op, int16_t, 2>();
-    //    test_all_kernel<op, int32_t, 2>();
-    //    test_all_kernel<op, int64_t, 2>();
+    /* test_all_kernel<op, int8_t, 2, network_algorithm>();
+    test_all_kernel<op, int16_t, 2, network_algorithm>();
+    test_all_kernel<op, int32_t, 2, network_algorithm>();
+    test_all_kernel<op, int64_t, 2, network_algorithm>();*/
 }
 
 #define v_to_string(X)  _v_to_string(X)
 #define _v_to_string(X) #X
 
+#ifndef TEST_NETWORK_ALGORITHM
+#define TEST_NETWORK_ALGORITHM bitonic
+#endif
+
 #ifndef NRUNS
-#define NRUNS 1000
+#define NRUNS 64
+#endif
+
+#ifndef WARMUP
+#define WARMUP 2
 #endif
 
 #ifndef TEST_TYPE
@@ -232,43 +258,37 @@ test_all() {
 #endif
 
 
-#define N    9
-#define TYPE uint16_t
 int
 main() {
-    test_all<CORRECT>();
-    /*        sarr<TYPE, N> s;
-    s.binit();
-    vsort::sort<TYPE, N, vsort::oddeven>(s.arr);
-    s.show();*/
-
-    /*    const char * outfile  = "out.txt";
-    const char * hdr      = "type,test_n,simd,builtin";
-    char         buf[128] = "";
-    sprintf(buf,            "%s,%d,%d,%d",
+    //    test_all<CORRECT, vsort::bitonic>();
+    const char * hdr = "network_algorithm,type,test_n,simd,builtin";
+    char         test_fields[128] = "";
+    sprintf(test_fields,
+            "%s,%s,%d,%d,%d",
+            v_to_string(TEST_NETWORK_ALGORITHM),
             v_to_string(TEST_TYPE),
             TEST_N,
             TEST_SIMD,
             TEST_BUILTIN);
 
-    FILE * fp = fopen(outfile, "a");
-
-
     double * results = (double *)calloc(NRUNS, sizeof(double));
-    perf_test<TEST_TYPE,
-              TEST_N,
-              (vsort::simd_instructions)TEST_SIMD,
-              (vsort::builtin_usage)TEST_BUILTIN>();
+    for (uint32_t i = 0; i < WARMUP; ++i) {
+        perf_test<TEST_TYPE,
+                  TEST_N,
+                  vsort::TEST_NETWORK_ALGORITHM,
+                  (vsort::simd_instructions)TEST_SIMD,
+                  (vsort::builtin_usage)TEST_BUILTIN>();
+    }
     for (uint32_t i = 0; i < NRUNS; ++i) {
         results[i] = perf_test<TEST_TYPE,
                                TEST_N,
+                               vsort::TEST_NETWORK_ALGORITHM,
                                (vsort::simd_instructions)TEST_SIMD,
                                (vsort::builtin_usage)TEST_BUILTIN>();
     }
 
     stats::stats_out so;
     so.get_stats(results, NRUNS, timers::time_units::CYCLES);
-    so.print_csv(hdr, buf, fp);
-    fclose(fp);
-    free(results);*/
+    so.print_csv(stderr, stats::DONT_PRINT_HEADER, test_fields);
+    free(results);
 }
