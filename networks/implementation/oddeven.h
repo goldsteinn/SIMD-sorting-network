@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 
-#include <networks/transformations.h>
 #include <util/integer_range.h>
 
 namespace vsort {

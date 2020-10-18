@@ -38,14 +38,15 @@ parser.add_argument("-N",
                     "--N-constraints",
                     nargs="+",
                     type=str,
-                    default=["4", "64"],
+                    default=["16", "32"],
                     help="N range to graph (X axis)")
-parser.add_argument("-r",
-                    "--range",
-                    action="store_true",
-                    default=False,
-                    help="Set if N specifies a range rather than a set of points")
-                    
+parser.add_argument(
+    "-r",
+    "--range",
+    action="store_true",
+    default=False,
+    help="Set if N specifies a range rather than a set of points")
+
 parser.add_argument("-T",
                     "--type-constraints",
                     nargs="+",
@@ -80,7 +81,7 @@ data_file = flags.file
 y_axis = flags.y_axis
 x_axis = flags.x_axis
 
-N_as_range=flags.range
+N_as_range = flags.range
 
 type_constraints = flags.type_constraints
 _N_constraints = flags.N_constraints
@@ -135,9 +136,11 @@ def arr_idx(v, arr):
         if v == a:
             return counter
         counter += 1
+    err_assert(False,
+               "Error: unable to find {} in {}".format(str(v), str(arr)))
 
 
-def label_to_arr(v):
+def label_to_arr():
     if x_axis == "type":
         return type_constraints
     elif x_axis == "test_n":
@@ -151,7 +154,7 @@ def label_to_arr(v):
 
 
 def label_to_idx(v):
-    return arr_idx(v, label_to_arr(v))
+    return arr_idx(v, label_to_arr())
 
 
 def get_simd_name(s):
@@ -248,7 +251,7 @@ class Point():
         if float(y_min) == float(-1.0) or float(y_min) > float(Y):
             y_min = float(Y)
 
-        self.X = X
+        self.X = str(X)
         self.Y = float(Y)
 
     def to_string(self):
@@ -300,6 +303,9 @@ class Line():
             return False
 
         data_x = csv_get(x_axis, csv_data)
+        if data_x not in label_to_arr():
+            return False
+        
         data_y = csv_get(y_axis, csv_data)
         self.points.append(Point(data_x, data_y))
 

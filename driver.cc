@@ -64,13 +64,13 @@ template<SORT s,
          typename network_algorithm,
          vsort::simd_instructions simd_set,
          vsort::builtin_usage     builtin_perm>
-void NEVER_INLINE
+void NEVER_INLINE ALIGN_ATTR(64)
 do_sort(T * arr) {
     if constexpr (s == SSORT) {
         std::sort(arr, arr + n);
     }
     else {
-        vsort::sort<T, n, network_algorithm, simd_set, builtin_perm>(arr);
+        vsort::sorta<T, n, network_algorithm, simd_set, builtin_perm>(arr);
     }
 }
 
@@ -126,10 +126,11 @@ perf_test() {
     uint64_t                  total_cycles = 0;
     for (uint32_t i = 0; i < tsize; ++i) {
         s.randomize();
-
-        uint64_t start = _rdtsc();
+        uint64_t                start = _rdtsc();
         do_sort<VSORT, T, n, network_algorithm, simd_set, builtin_perm>(s.arr);
         uint64_t end = _rdtsc();
+
+
         total_cycles += end - start;
     }
     double ret = total_cycles;
@@ -168,7 +169,7 @@ template<OPERATION op,
          typename network_algorithm>
 void
 test_all_kernel() {
-    if constexpr (sizeof(T) * n <= 64) {
+    if constexpr (sizeof(T) * n <= 64 && n <= 32) {
         if constexpr (n >= 2) {
             test<op,
                  T,
@@ -234,7 +235,7 @@ test_all() {
 #endif
 
 #ifndef NRUNS
-#define NRUNS 64
+#define NRUNS 256
 #endif
 
 #ifndef WARMUP
@@ -266,7 +267,8 @@ main(int argc, char ** argv) {
         so.export_hdr(stderr, hdr);
     }
     else {
-        //    test_all<CORRECT, vsort::bitonic>();
+        test_all<PERFORMANCE, vsort::best>();
+        exit(0);
         char test_fields[128] = "";
         sprintf(test_fields,
                 "%s,%d,%s,%d,%d",

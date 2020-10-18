@@ -1267,7 +1267,8 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m512i)> {
         }
         else /* sizeof(T) == sizeof(uint64_t) */ {
             if constexpr (shuffle_mask) {
-                if constexpr (shuffle_mask & vop_support::shuffle_as_epi32_flag) {
+                if constexpr (shuffle_mask &
+                              vop_support::shuffle_as_epi32_flag) {
                     // AVX512F
                     return _mm512_shuffle_epi32(
                         v,
@@ -1310,7 +1311,7 @@ using vec_t = typename internal::vec_types::get_vec_t<T, n>::type;
 
 template<typename T, uint32_t n>
 constexpr vec_t<T, n> ALWAYS_INLINE
-vec_load(T * const arr) {
+vec_loadu(T * const arr) {
     // compiler will optimize to loadu if n * sizeof(T) == sizeof(vec_t<T, n>)
     vec_t<T, n> r;
     memcpy(&r, arr, n * sizeof(T));
@@ -1318,10 +1319,44 @@ vec_load(T * const arr) {
 }
 
 template<typename T, uint32_t n>
+constexpr vec_t<T, n> ALWAYS_INLINE
+vec_loada(T * const arr) {
+    if constexpr (sizeof(T) * n <= sizeof(__m64)) {
+        return *((__m64 *)arr);
+    }
+    else if constexpr (sizeof(T) * n <= sizeof(__m128i)) {
+        return _mm_load_si128((__m128i *)arr);
+    }
+    else if constexpr (sizeof(T) * n <= sizeof(__m256i)) {
+        return _mm256_load_si256((__m256i *)arr);
+    }
+    else {
+        return _mm512_load_si512((__m512i *)arr);
+    }
+}
+
+template<typename T, uint32_t n>
 constexpr void ALWAYS_INLINE
-vec_store(T * const arr, vec_t<T, n> v) {
+vec_storeu(T * const arr, vec_t<T, n> v) {
     // compiler will optimize to storeu if n * sizeof(T) == sizeof(vec_t<T, n>)
     memcpy(arr, &v, n * sizeof(T));
+}
+
+template<typename T, uint32_t n>
+constexpr void ALWAYS_INLINE
+vec_storea(T * const arr, vec_t<T, n> v) {
+    if constexpr (sizeof(T) * n <= sizeof(__m64)) {
+        memcpy(arr, &v, sizeof(__m64));
+    }
+    else if constexpr (sizeof(T) * n <= sizeof(__m128i)) {
+        return _mm_store_si128((__m128i *)arr, v);
+    }
+    else if constexpr (sizeof(T) * n <= sizeof(__m256i)) {
+        return _mm256_store_si256((__m256i *)arr, v);
+    }
+    else {
+        return _mm512_store_si512((__m512i *)arr, v);
+    }
 }
 
 template<typename T,

@@ -15,9 +15,9 @@ parser.add_argument('-f',
                     action='store',
                     default="",
                     help='File to output data to')
-parser.add_argument('-s',
-                    '--skip',
-                    action='store_true',
+parser.add_argument('-n',
+                    '--no-skip',
+                    action='store_false',
                     default=True,
                     help='Set to skip ahead based on results already in file')
 parser.add_argument('--verbose',
@@ -27,7 +27,7 @@ parser.add_argument('--verbose',
                     help='Set verbosity')
 
 args = parser.parse_args()
-skip = args.skip
+skip = args.no_skip
 res_file = args.file
 verbosity = args.verbose
 
@@ -199,8 +199,7 @@ class Trial():
 
         TEST_FLAGS = "-DTEST_TYPE={}".format(str(self.T)) + " "
         TEST_FLAGS += "-DTEST_N={}".format(str(self.N)) + " "
-        TEST_FLAGS += "-DTEST_ALGORITHM={}".format(str(
-            self.algorithm)) + " "
+        TEST_FLAGS += "-DTEST_ALGORITHM={}".format(str(self.algorithm)) + " "
         TEST_FLAGS += "-DTEST_SIMD={}".format(str(self.simd)) + " "
         TEST_FLAGS += "-DTEST_BUILTIN={}".format(str(self.builtin)) + " "
 

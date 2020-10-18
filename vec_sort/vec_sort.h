@@ -30,22 +30,52 @@ small_sort(T * const arr) {
 }
 #undef CSWAP
 
+
 template<typename T,
          uint32_t n,
          template<uint32_t _n>
          typename network,
          simd_instructions simd_set     = vop::simd_instructions_default,
          builtin_usage     builtin_perm = vop::builtin_perm_default>
-void NEVER_INLINE
-sort(T * const arr) {
+constexpr vop::vec_t<T, n> ALWAYS_INLINE CONST_ATTR
+sortv(vop::vec_t<T, n> v) {
+    return sortgen::
+        generate_sort<T, next_p2(n), network<n>, simd_set, builtin_perm>(v);
+}
+
+template<typename T,
+         uint32_t n,
+         template<uint32_t _n>
+         typename network,
+         simd_instructions simd_set     = vop::simd_instructions_default,
+         builtin_usage     builtin_perm = vop::builtin_perm_default>
+void 
+sortu(T * const arr) {
     if constexpr (n < 4) {
         small_sort<T, n>(arr);
     }
     else {
-        vop::vec_t<T, n> v = vop::vec_load<T, n>(arr);
-        v = sortgen::
-            generate_sort<T, next_p2(n), network<n>, simd_set, builtin_perm>(v);
-        vop::vec_store<T, n>(arr, v);
+        vop::vec_t<T, n> v = vop::vec_loadu<T, n>(arr);
+        v                  = sortv<T, n, network, simd_set, builtin_perm>(v);
+        vop::vec_storeu<T, n>(arr, v);
+    }
+}
+
+template<typename T,
+         uint32_t n,
+         template<uint32_t _n>
+         typename network,
+         simd_instructions simd_set     = vop::simd_instructions_default,
+         builtin_usage     builtin_perm = vop::builtin_perm_default>
+void 
+sorta(T * const arr) {
+    if constexpr (n < 4) {
+        small_sort<T, n>(arr);
+    }
+    else {
+        vop::vec_t<T, n> v = vop::vec_loada<T, n>(arr);
+        v                  = sortv<T, n, network, simd_set, builtin_perm>(v);
+        vop::vec_storea<T, n>(arr, v);
     }
 }
 

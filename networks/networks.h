@@ -6,6 +6,7 @@
 #include <networks/implementation/bitonic.h>
 #include <networks/implementation/bosenelson.h>
 #include <networks/implementation/oddeven.h>
+#include <networks/implementation/best.h>
 #include <networks/transformations.h>
 
 namespace vsort {
@@ -31,6 +32,10 @@ using balanced = typename transform::
 template<uint32_t n>
 using oddeven = typename transform::
     build<n, typename network::internal::oddeven_network<n>::network>::type;
+
+template<uint32_t n>
+using best = typename transform::
+    build<n, typename network::internal::best_network<n>::network>::type;
 
 
 }  // namespace vsort
