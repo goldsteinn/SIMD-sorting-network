@@ -229,8 +229,8 @@ test_all() {
 #define v_to_string(X)  _v_to_string(X)
 #define _v_to_string(X) #X
 
-#ifndef TEST_NETWORK_ALGORITHM
-#define TEST_NETWORK_ALGORITHM bitonic
+#ifndef TEST_ALGORITHM
+#define TEST_ALGORITHM bitonic
 #endif
 
 #ifndef NRUNS
@@ -260,7 +260,7 @@ test_all() {
 
 int
 main(int argc, char ** argv) {
-    const char *     hdr = "type,test_n,network_algorithm,simd,builtin";
+    const char *     hdr = "type,test_n,algorithm,simd,builtin";
     stats::stats_out so;
     if (argc > 1) {
         so.export_hdr(stderr, hdr);
@@ -272,7 +272,7 @@ main(int argc, char ** argv) {
                 "%s,%d,%s,%d,%d",
                 v_to_string(TEST_TYPE),
                 TEST_N,
-                v_to_string(TEST_NETWORK_ALGORITHM),
+                v_to_string(TEST_ALGORITHM),
                 TEST_SIMD,
                 TEST_BUILTIN);
 
@@ -280,14 +280,14 @@ main(int argc, char ** argv) {
         for (uint32_t i = 0; i < WARMUP; ++i) {
             perf_test<TEST_TYPE,
                       TEST_N,
-                      vsort::TEST_NETWORK_ALGORITHM,
+                      vsort::TEST_ALGORITHM,
                       (vsort::simd_instructions)TEST_SIMD,
                       (vsort::builtin_usage)TEST_BUILTIN>();
         }
         for (uint32_t i = 0; i < NRUNS; ++i) {
             results[i] = perf_test<TEST_TYPE,
                                    TEST_N,
-                                   vsort::TEST_NETWORK_ALGORITHM,
+                                   vsort::TEST_ALGORITHM,
                                    (vsort::simd_instructions)TEST_SIMD,
                                    (vsort::builtin_usage)TEST_BUILTIN>();
         }

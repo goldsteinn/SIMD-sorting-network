@@ -83,7 +83,7 @@ def err_assert(check, errstr):
 
 
 def trial_subprocess(cmd):
-    if verbosity > 1:
+    if verbosity > 2:
         print("\tExecuting: " + cmd)
     sproc = subprocess.Popen(cmd,
                              shell=True,
@@ -199,7 +199,7 @@ class Trial():
 
         TEST_FLAGS = "-DTEST_TYPE={}".format(str(self.T)) + " "
         TEST_FLAGS += "-DTEST_N={}".format(str(self.N)) + " "
-        TEST_FLAGS += "-DTEST_NETWORK_ALGORITHM={}".format(str(
+        TEST_FLAGS += "-DTEST_ALGORITHM={}".format(str(
             self.algorithm)) + " "
         TEST_FLAGS += "-DTEST_SIMD={}".format(str(self.simd)) + " "
         TEST_FLAGS += "-DTEST_BUILTIN={}".format(str(self.builtin)) + " "
@@ -209,11 +209,11 @@ class Trial():
 
         exe = BUILD_FLAGS + "driver.o stats.o -o driver"
 
-        if verbosity > 1:
+        if verbosity > 2:
             print("\tBuild Step: " + stats_o)
         err_assert(os.system(stats_o) == 0, "Error building stats.o")
 
-        if verbosity > 1:
+        if verbosity > 2:
             print("\tBuild Step: " + driver_o)
 
         start = float(time.monotonic())
@@ -221,7 +221,7 @@ class Trial():
         end = float(time.monotonic())
         err_assert(ret == 0, "Error building driver.o")
 
-        if verbosity > 1:
+        if verbosity > 2:
             print("\tBuild Step: " + exe)
         err_assert(os.system(exe) == 0, "Error linking driver.o and stats.o")
 
@@ -244,6 +244,8 @@ def output_data(use_file, ow_file, data):
         try:
             ow_file.write(data)
             ow_file.flush()
+            if verbosity > 0:
+                print(data, end="")
         except IOError:
             err_assert(
                 False, "Error writing to file: {}\nLost line: {}".format(
@@ -263,7 +265,7 @@ def get_last_trial():
         for csv_lines in open(res_file):
             if csv_lines != "" and "compile time" not in csv_lines:
                 last_line = csv_lines
-                if verbosity > 0:
+                if verbosity > 1:
                     t.from_str(last_line)
                     print("Skipping: " + t.to_string())
 
@@ -310,7 +312,7 @@ def runner():
                 for simd_idx in range(simd_start, len(simds)):
                     simd_start = 0
                     for builtin_idx in range(builtin_start, len(builtins)):
-                        if verbosity > 2:
+                        if verbosity > 3:
                             print("Iter: [{}][{}][{}][{}][{}]".format(
                                 T_idx, N_idx, algorithm_idx, simd_idx,
                                 builtin_idx))
@@ -325,7 +327,7 @@ def runner():
                         cur_trial.init(test_type, test_n, test_algorithm,
                                        test_simd, test_builtin)
 
-                        if verbosity > 0:
+                        if verbosity > 1:
                             print("Running: " + cur_trial.to_string())
 
                         result = cur_trial.run()
