@@ -1,5 +1,5 @@
-#ifndef _BEST_NETWORK_H_
-#define _BEST_NETWORK_H_
+#ifndef _MINIMUM_NETWORK_H_
+#define _MINIMUM_NETWORK_H_
 
 
 /*
@@ -16,16 +16,13 @@ namespace network {
 namespace internal {
 
 template<uint32_t n>
-struct best_network {
-    // Default to Bitonic Sorting Network
-    using network = typename network::internal::bitonic_network<n>::network;
-};
+struct minimum_network {};
 
 /*
  * Sorting Network For N = 4, with Depth = 3
  */
 template<>
-struct best_network<4> {
+struct minimum_network<4> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  2,  1,  3,  0,  1,  2,  3,
@@ -38,7 +35,7 @@ struct best_network<4> {
  * Sorting Network For N = 5, with Depth = 5
  */
 template<>
-struct best_network<5> {
+struct minimum_network<5> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  3,  1,  4,  0,  2,  1,  3,
@@ -52,7 +49,7 @@ struct best_network<5> {
  * Sorting Network For N = 6, with Depth = 5
  */
 template<>
-struct best_network<6> {
+struct minimum_network<6> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  5,  1,  3,  2,  4,  1,  2,
@@ -66,7 +63,7 @@ struct best_network<6> {
  * Sorting Network For N = 7, with Depth = 6
  */
 template<>
-struct best_network<7> {
+struct minimum_network<7> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  6,  2,  3,  4,  5,  0,  2,
@@ -81,7 +78,7 @@ struct best_network<7> {
  * Sorting Network For N = 8, with Depth = 6
  */
 template<>
-struct best_network<8> {
+struct minimum_network<8> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  2,  1,  3,  4,  6,  5,  7,
@@ -97,7 +94,7 @@ struct best_network<8> {
  * Sorting Network For N = 9, with Depth = 7
  */
 template<>
-struct best_network<9> {
+struct minimum_network<9> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  3,  1,  7,  2,  5,  4,  8,
@@ -115,7 +112,7 @@ struct best_network<9> {
  * Sorting Network For N = 10, with Depth = 7
  */
 template<>
-struct best_network<10> {
+struct minimum_network<10> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  1,  2,  5,  3,  6,  4,  7,
@@ -134,7 +131,7 @@ struct best_network<10> {
  * Sorting Network For N = 11, with Depth = 8
  */
 template<>
-struct best_network<11> {
+struct minimum_network<11> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  9,  1,  6,  2,  4,  3,  7,
@@ -154,7 +151,7 @@ struct best_network<11> {
  * Sorting Network For N = 12, with Depth = 8
  */
 template<>
-struct best_network<12> {
+struct minimum_network<12> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  8,  1,  7,  2,  6,  3, 11,
@@ -175,7 +172,7 @@ struct best_network<12> {
  * Sorting Network For N = 13, with Depth = 9
  */
 template<>
-struct best_network<13> {
+struct minimum_network<13> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0, 11,  1,  7,  2,  4,  3,  5,
@@ -198,7 +195,7 @@ struct best_network<13> {
  * Sorting Network For N = 14, with Depth = 9
  */
 template<>
-struct best_network<14> {
+struct minimum_network<14> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  3,  1,  9,  2,  6,  4, 12,
@@ -222,7 +219,7 @@ struct best_network<14> {
  * Sorting Network For N = 15, with Depth = 9
  */
 template<>
-struct best_network<15> {
+struct minimum_network<15> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  6,  1, 10,  2, 14,  3,  9,
@@ -248,7 +245,7 @@ struct best_network<15> {
  * Sorting Network For N = 16, with Depth = 9
  */
 template<>
-struct best_network<16> {
+struct minimum_network<16> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  5,  1,  4,  2, 12,  3, 13,
@@ -275,7 +272,7 @@ struct best_network<16> {
  * Sorting Network For N = 17, with Depth = 10
  */
 template<>
-struct best_network<17> {
+struct minimum_network<17> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            1,  2,  3,  4,  5,  6,  7,  8,
@@ -305,7 +302,7 @@ struct best_network<17> {
  * Sorting Network For N = 18, with Depth = 11
  */
 template<>
-struct best_network<18> {
+struct minimum_network<18> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  6,  1, 10,  2, 15,  3,  5,
@@ -336,7 +333,7 @@ struct best_network<18> {
  * Sorting Network For N = 19, with Depth = 11
  */
 template<>
-struct best_network<19> {
+struct minimum_network<19> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0, 12,  1, 13,  2, 14,  3, 15,
@@ -369,7 +366,7 @@ struct best_network<19> {
  * Sorting Network For N = 20, with Depth = 11
  */
 template<>
-struct best_network<20> {
+struct minimum_network<20> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0, 12,  1, 13,  2, 14,  3, 15,
@@ -404,7 +401,7 @@ struct best_network<20> {
  * Sorting Network For N = 21, with Depth = 12
  */
 template<>
-struct best_network<21> {
+struct minimum_network<21> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  7,  1, 10,  3,  5,  4,  8,
@@ -440,7 +437,7 @@ struct best_network<21> {
  * Sorting Network For N = 22, with Depth = 12
  */
 template<>
-struct best_network<22> {
+struct minimum_network<22> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0, 14,  1,  8,  2,  4,  3,  5,
@@ -478,7 +475,7 @@ struct best_network<22> {
  * Sorting Network For N = 23, with Depth = 12
  */
 template<>
-struct best_network<23> {
+struct minimum_network<23> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  1,  2,  3,  4,  5,  6,  7,
@@ -519,7 +516,7 @@ struct best_network<23> {
  * Sorting Network For N = 24, with Depth = 12
  */
 template<>
-struct best_network<24> {
+struct minimum_network<24> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  1,  2,  3,  4,  5,  6,  7,
@@ -561,7 +558,7 @@ struct best_network<24> {
  * Sorting Network For N = 25, with Depth = 13
  */
 template<>
-struct best_network<25> {
+struct minimum_network<25> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0, 13,  1,  6,  2,  8,  3, 20,
@@ -607,7 +604,7 @@ struct best_network<25> {
  * Sorting Network For N = 26, with Depth = 13
  */
 template<>
-struct best_network<26> {
+struct minimum_network<26> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0, 13,  1,  6,  2,  8,  3, 20,
@@ -655,7 +652,7 @@ struct best_network<26> {
  * Sorting Network For N = 27, with Depth = 14
  */
 template<>
-struct best_network<27> {
+struct minimum_network<27> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  9,  1,  6,  2,  4,  3,  7,
@@ -704,7 +701,7 @@ struct best_network<27> {
  * Sorting Network For N = 28, with Depth = 14
  */
 template<>
-struct best_network<28> {
+struct minimum_network<28> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  1,  2,  3,  4,  5,  6,  7,
@@ -755,7 +752,7 @@ struct best_network<28> {
  * Sorting Network For N = 29, with Depth = 14
  */
 template<>
-struct best_network<29> {
+struct minimum_network<29> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  1,  2,  3,  4,  5,  6,  7,
@@ -808,7 +805,7 @@ struct best_network<29> {
  * Sorting Network For N = 30, with Depth = 14
  */
 template<>
-struct best_network<30> {
+struct minimum_network<30> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  1,  2,  3,  4,  5,  6,  7,
@@ -863,7 +860,7 @@ struct best_network<30> {
  * Sorting Network For N = 31, with Depth = 14
  */
 template<>
-struct best_network<31> {
+struct minimum_network<31> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  1,  2,  3,  4,  5,  6,  7,
@@ -919,7 +916,7 @@ struct best_network<31> {
  * Sorting Network For N = 32, with Depth = 14
  */
 template<>
-struct best_network<32> {
+struct minimum_network<32> {
     using network = std::integer_sequence<uint32_t,
                                           // clang-format off
                                            0,  1,  2,  3,  4,  5,  6,  7,

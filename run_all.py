@@ -31,9 +31,12 @@ skip = args.no_skip
 res_file = args.file
 verbosity = args.verbose
 
-types = ["uint8_t", "uint16_t", "uint32_t", "uint64_t"]
+#"uint8_t", "uint16_t", 
+types = ["uint32_t", "uint64_t"]
 n_min = 4
-algorithms = ["bitonic", "oddeven", "batcher", "balanced", "bosenelson"]
+b_max = 64
+#algorithms = ["bitonic", "oddeven", "batcher", "balanced", "bosenelson"]
+algorithms = ["best"]
 simds = ["1", "2"]
 builtins = ["0", "1", "2"]
 
@@ -297,25 +300,33 @@ def runner():
     except IOError:
         err_assert(False, "Error: unable to open: {}".format(res_file))
 
+    skip_first = False
     first = True
     if skip is True and start_trial.is_empty() is False:
+        skip_first = True
         first = False
 
     for T_idx in range(T_start, len(types)):
         T_start = 0
-        n_max = int(64 / get_type_size(types[T_idx]))
-        for N_idx in range(N_start, n_max):
-            N_start = 0
+        N_start = int(32 / get_type_size(types[T_idx])) + 1
+        n_max = int(b_max / get_type_size(types[T_idx]))
+        for N_idx in range(N_start, n_max + 1):
+            N_start = n_min
             for algorithm_idx in range(algorithm_start, len(algorithms)):
                 algorithm_start = 0
                 for simd_idx in range(simd_start, len(simds)):
                     simd_start = 0
                     for builtin_idx in range(builtin_start, len(builtins)):
+                        builtin_start = 0
+                        if skip_first is True:
+                            skip_first = False
+                            continue
+
                         if verbosity > 3:
                             print("Iter: [{}][{}][{}][{}][{}]".format(
                                 T_idx, N_idx, algorithm_idx, simd_idx,
                                 builtin_idx))
-                        builtin_start = 0
+
                         test_type = types[T_idx]
                         test_n = N_idx
                         test_algorithm = algorithms[algorithm_idx]

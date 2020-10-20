@@ -5,8 +5,8 @@
 #include <networks/implementation/batcher.h>
 #include <networks/implementation/bitonic.h>
 #include <networks/implementation/bosenelson.h>
+#include <networks/implementation/minimum.h>
 #include <networks/implementation/oddeven.h>
-#include <networks/implementation/best.h>
 #include <networks/transformations.h>
 
 namespace vsort {
@@ -34,8 +34,16 @@ using oddeven = typename transform::
     build<n, typename network::internal::oddeven_network<n>::network>::type;
 
 template<uint32_t n>
-using best = typename transform::
-    build<n, typename network::internal::best_network<n>::network>::type;
+using minimum = typename transform::
+    build<n, typename network::internal::minimum_network<n>::network>::type;
+
+
+template<uint32_t n>
+// the logic for n value on not taken type helps build time a lot
+using best =
+    std::conditional_t<is_pow2(n) || (n > 32),
+                       bitonic<(is_pow2(n) || (n > 32)) ? next_p2(n) : 4>,
+                       minimum<(is_pow2(n) || (n > 32)) ? 4 : n>>;
 
 
 }  // namespace vsort

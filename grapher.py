@@ -46,6 +46,11 @@ parser.add_argument(
     action="store_true",
     default=False,
     help="Set if N specifies a range rather than a set of points")
+parser.add_argument("-l",
+                    "--lines",
+                    action="store_true",
+                    default=False,
+                    help="Set to include lines between points")
 
 parser.add_argument("-T",
                     "--type-constraints",
@@ -58,7 +63,7 @@ parser.add_argument(
     "--algorithm-constraints",
     nargs="+",
     type=str,
-    default=["bitonic", "oddeven", "batcher", "balanced", "bosenelson"],
+    default=["bitonic", "oddeven", "batcher", "balanced", "bosenelson", "best"],
     help="Algorithms to graph")
 parser.add_argument("-s",
                     "--simd-constraints",
@@ -77,6 +82,8 @@ flags = parser.parse_args()
 verbose = flags.verbose
 
 data_file = flags.file
+
+do_plot = flags.lines
 
 y_axis = flags.y_axis
 x_axis = flags.x_axis
@@ -109,8 +116,8 @@ y_axis_idx = 0
 
 data_lines = []
 
-graph_colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'w']
-graph_markers = ['.', ',', 'o', 'v', '^', '<', '>']
+graph_colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+graph_markers = ['o', 'v', '^', '<', '>']
 unique_graph_indicators = []
 for gm in graph_markers:
     for gc in graph_colors:
@@ -305,7 +312,7 @@ class Line():
         data_x = csv_get(x_axis, csv_data)
         if data_x not in label_to_arr():
             return False
-        
+
         data_y = csv_get(y_axis, csv_data)
         self.points.append(Point(data_x, data_y))
 
@@ -371,12 +378,22 @@ def graph_data():
             x_points.append(x_val)
             y_points.append(points.Y)
 
-        plt.scatter(x_points,
-                    y_points,
-                    linewidth=1,
-                    color=lines.uid[0],
-                    marker=lines.uid[1],
-                    label=lines.to_string(False))
+        if do_plot:
+            plt.scatter(x_points,
+                        y_points,
+                        linewidth=1,
+                        color=lines.uid[0],
+                        marker=lines.uid[1],
+                        label=lines.to_string(False))
+        else:
+            plt.plot(x_points,
+                     y_points,
+                     linewidth=1,
+                     color=lines.uid[0],
+                     marker=lines.uid[1],
+                     markersize=3,
+                     linestyle='dashed',
+                     label=lines.to_string(False))
 
         plt.xticks(x_points, x_labels)
 

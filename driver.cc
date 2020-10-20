@@ -56,7 +56,7 @@ struct sarr {
 };
 
 
-enum SORT { SSORT = 0, VSORT = 1 };
+enum SORT { SSORT = 0, VSORT = 1, USORT = 2 };
 template<SORT s,
          typename T,
          uint32_t n,
@@ -64,13 +64,16 @@ template<SORT s,
          typename network_algorithm,
          vsort::simd_instructions simd_set,
          vsort::builtin_usage     builtin_perm>
-void NEVER_INLINE ALIGN_ATTR(64)
-do_sort(T * arr) {
+void NEVER_INLINE
+ALIGN_ATTR(64) do_sort(T * arr) {
     if constexpr (s == SSORT) {
         std::sort(arr, arr + n);
     }
-    else {
+    else if constexpr (s == VSORT) {
         vsort::sorta<T, n, network_algorithm, simd_set, builtin_perm>(arr);
+    }
+    else {
+        vsort::sortu<T, n, network_algorithm, simd_set, builtin_perm>(arr);
     }
 }
 
@@ -86,16 +89,28 @@ corr_test() {
     static constexpr uint32_t tsize = ((1u) << 20);
     sarr<T, n>                s1;
     sarr<T, n>                s2;
+    sarr<T, n>                s3;
 
     uint32_t i = 0;
     for (i = 0; i < tsize; ++i) {
         s1.randomize();
         memcpy(s2.arr, s1.arr, n * sizeof(T));
+        memcpy(s3.arr, s1.arr, n * sizeof(T));
         do_sort<SSORT, T, n, network_algorithm, simd_set, builtin_perm>(s1.arr);
         do_sort<VSORT, T, n, network_algorithm, simd_set, builtin_perm>(s2.arr);
+        do_sort<USORT, T, n, network_algorithm, simd_set, builtin_perm>(s3.arr);
         if (!(!memcmp(s1.arr, s2.arr, n * sizeof(T)))) {
             fprintf(stderr,
-                    "FAILED : [%zu][%d][%d][%d]\n",
+                    "FAILED[A] : [%zu][%d][%d][%d]\n",
+                    sizeof(T),
+                    n,
+                    (uint32_t)simd_set,
+                    (uint32_t)builtin_perm);
+            break;
+        }
+        if (!(!memcmp(s1.arr, s3.arr, n * sizeof(T)))) {
+            fprintf(stderr,
+                    "FAILED[U] : [%zu][%d][%d][%d]\n",
                     sizeof(T),
                     n,
                     (uint32_t)simd_set,
@@ -126,7 +141,7 @@ perf_test() {
     uint64_t                  total_cycles = 0;
     for (uint32_t i = 0; i < tsize; ++i) {
         s.randomize();
-        uint64_t                start = _rdtsc();
+        uint64_t start = _rdtsc();
         do_sort<VSORT, T, n, network_algorithm, simd_set, builtin_perm>(s.arr);
         uint64_t end = _rdtsc();
 
@@ -169,7 +184,7 @@ template<OPERATION op,
          typename network_algorithm>
 void
 test_all_kernel() {
-    if constexpr (sizeof(T) * n <= 64 && n <= 32) {
+    if constexpr (sizeof(T) * n <= 64) {
         if constexpr (n >= 2) {
             test<op,
                  T,
@@ -221,10 +236,10 @@ test_all() {
     test_all_kernel<op, uint32_t, 2, network_algorithm>();
     test_all_kernel<op, uint64_t, 2, network_algorithm>();
 
-    /* test_all_kernel<op, int8_t, 2, network_algorithm>();
+    test_all_kernel<op, int8_t, 2, network_algorithm>();
     test_all_kernel<op, int16_t, 2, network_algorithm>();
     test_all_kernel<op, int32_t, 2, network_algorithm>();
-    test_all_kernel<op, int64_t, 2, network_algorithm>();*/
+    test_all_kernel<op, int64_t, 2, network_algorithm>();
 }
 
 #define v_to_string(X)  _v_to_string(X)
@@ -261,13 +276,14 @@ test_all() {
 
 int
 main(int argc, char ** argv) {
+
     const char *     hdr = "type,test_n,algorithm,simd,builtin";
     stats::stats_out so;
     if (argc > 1) {
         so.export_hdr(stderr, hdr);
     }
     else {
-        test_all<PERFORMANCE, vsort::best>();
+        test_all<CORRECT, vsort::best>();
         exit(0);
         char test_fields[128] = "";
         sprintf(test_fields,

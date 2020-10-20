@@ -951,7 +951,7 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
 
                 return _mm256_shuffle_epi32(v, shuffle_mask);
             }
-            else if (vop_support::in_same_lanes) {
+            else if constexpr (vop_support::in_same_lanes) {
                 return _mm256_shuffle_epi8(
                     v,
                     build_set_vec_wrapper<1>(
@@ -1254,7 +1254,7 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m512i)> {
                 // AVX512F
                 return _mm512_shuffle_epi32(v, (_MM_PERM_ENUM)shuffle_mask);
             }
-            else if (vop_support::in_same_lanes) {
+            else if constexpr (vop_support::in_same_lanes) {
                 return _mm512_shuffle_epi8(
                     v,
                     build_set_vec_wrapper<1>(
@@ -1279,7 +1279,7 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m512i)> {
                     return _mm512_permutex_epi64(v, shuffle_mask);
                 }
             }
-            else if (vop_support::in_same_lanes) {
+            else if constexpr (vop_support::in_same_lanes) {
                 return _mm512_shuffle_epi8(
                     v,
                     build_set_vec_wrapper<1>(
@@ -1309,36 +1309,179 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m512i)> {
 template<typename T, uint32_t n>
 using vec_t = typename internal::vec_types::get_vec_t<T, n>::type;
 
+template<typename T>
+constexpr T ALWAYS_INLINE CONST_ATTR
+get_max() {
+    if constexpr (std::is_signed<T>::value) {
+        return (T)(((1UL) << (8 * sizeof(T) - 1)) - 1);
+    }
+    else {
+        return (T)(((1UL) << (8 * sizeof(T))) - 1);
+    }
+}
+
+template<typename T, uint32_t n, uint32_t... indices>
+constexpr vec_t<T, n> ALWAYS_INLINE
+vec_load_np2(T * const                                   arr,
+             std::integer_sequence<uint32_t, indices...> _indices) {
+
+    if constexpr (sizeof(vec_t<T, n>) == sizeof(__m64)) {
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            return _mm_set_pi8((indices < (8 - n)
+                                    ? get_max<T>()
+                                    : arr[(indices) - (8 - n)])...);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+            return _mm_set_pi16((indices < (next_p2(n) - n)
+                                     ? get_max<T>()
+                                     : arr[(indices) - (next_p2(n) - n)])...);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+            return _mm_set_pi32((indices < (next_p2(n) - n)
+                                     ? get_max<T>()
+                                     : arr[(indices) - (next_p2(n) - n)])...);
+        }
+        else /* sizeof(T) == sizeof(uint64_t) */ {
+            return _mm_set_pi64((indices < (next_p2(n) - n)
+                                     ? get_max<T>()
+                                     : arr[(indices) - (next_p2(n) - n)])...);
+        }
+    }
+    else if constexpr (sizeof(vec_t<T, n>) == sizeof(__m128i)) {
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            return _mm_set_epi8((indices < (next_p2(n) - n)
+                                     ? get_max<T>()
+                                     : arr[(indices) - (next_p2(n) - n)])...);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+            return _mm_set_epi16((indices < (next_p2(n) - n)
+                                      ? get_max<T>()
+                                      : arr[(indices) - (next_p2(n) - n)])...);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+            return _mm_set_epi32((indices < (next_p2(n) - n)
+                                      ? get_max<T>()
+                                      : arr[(indices) - (next_p2(n) - n)])...);
+        }
+        else /* sizeof(T) == sizeof(uint64_t) */ {
+            return _mm_set_epi64((indices < (next_p2(n) - n)
+                                      ? get_max<T>()
+                                      : arr[(indices) - (next_p2(n) - n)])...);
+        }
+    }
+    else if constexpr (sizeof(vec_t<T, n>) == sizeof(__m256i)) {
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            return _mm256_set_epi8(
+                (indices < (next_p2(n) - n)
+                     ? get_max<T>()
+                     : arr[(indices) - (next_p2(n) - n)])...);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+            return _mm256_set_epi16(
+                (indices < (next_p2(n) - n)
+                     ? get_max<T>()
+                     : arr[(indices) - (next_p2(n) - n)])...);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+            return _mm256_set_epi32(
+                (indices < (next_p2(n) - n)
+                     ? get_max<T>()
+                     : arr[(indices) - (next_p2(n) - n)])...);
+        }
+        else /* sizeof(T) == sizeof(uint64_t) */ {
+            return _mm256_set_epi64x(
+                (indices < (next_p2(n) - n)
+                     ? get_max<T>()
+                     : arr[(indices) - (next_p2(n) - n)])...);
+        }
+    }
+    else /* sizeof(vec_t<T, n>) == sizeof(__m512i) */ {
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            return _mm512_set_epi8(
+                (indices < (next_p2(n) - n)
+                     ? get_max<T>()
+                     : arr[(indices) - (next_p2(n) - n)])...);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+            return _mm512_set_epi16(
+                (indices < (next_p2(n) - n)
+                     ? get_max<T>()
+                     : arr[(indices) - (next_p2(n) - n)])...);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+            return _mm512_set_epi32(
+                (indices < (next_p2(n) - n)
+                     ? get_max<T>()
+                     : arr[(indices) - (next_p2(n) - n)])...);
+        }
+        else /* sizeof(T) == sizeof(uint64_t) */ {
+            return _mm512_set_epi64(
+                (indices < (next_p2(n) - n)
+                     ? get_max<T>()
+                     : arr[(indices) - (next_p2(n) - n)])...);
+        }
+    }
+}
+
 template<typename T, uint32_t n>
 constexpr vec_t<T, n> ALWAYS_INLINE
 vec_loadu(T * const arr) {
     // compiler will optimize to loadu if n * sizeof(T) == sizeof(vec_t<T, n>)
-    vec_t<T, n> r;
-    memcpy(&r, arr, n * sizeof(T));
-    return r;
+    if constexpr (is_pow2(n)) {
+        if constexpr (sizeof(T) * n <= sizeof(__m64)) {
+            return vec_load_np2<T, n>(
+                arr,
+                std::make_integer_sequence < uint32_t,
+                (sizeof(T) == sizeof(uint8_t) && n <= 4) ? 8 : next_p2(n) > {});
+        }
+        else if constexpr (sizeof(T) * n <= sizeof(__m128i)) {
+            return _mm_loadu_si128((__m128i *)arr);
+        }
+        else if constexpr (sizeof(T) * n <= sizeof(__m256i)) {
+            return _mm256_loadu_si256((__m256i *)arr);
+        }
+        else {
+            return _mm512_loadu_si512((__m512i *)arr);
+        }
+    }
+    else {
+        return vec_load_np2<T, n>(
+            arr,
+            std::make_integer_sequence < uint32_t,
+            (sizeof(T) == sizeof(uint8_t) && n <= 4) ? 8 : next_p2(n) > {});
+    }
 }
 
 template<typename T, uint32_t n>
 constexpr vec_t<T, n> ALWAYS_INLINE
 vec_loada(T * const arr) {
-    if constexpr (sizeof(T) * n <= sizeof(__m64)) {
-        return *((__m64 *)arr);
-    }
-    else if constexpr (sizeof(T) * n <= sizeof(__m128i)) {
-        return _mm_load_si128((__m128i *)arr);
-    }
-    else if constexpr (sizeof(T) * n <= sizeof(__m256i)) {
-        return _mm256_load_si256((__m256i *)arr);
+    if constexpr (is_pow2(n) || (n < 32)) {
+        if constexpr (sizeof(T) * n <= sizeof(__m64)) {
+            return *((__m64 *)arr);
+        }
+        else if constexpr (sizeof(T) * n <= sizeof(__m128i)) {
+            return _mm_load_si128((__m128i *)arr);
+        }
+        else if constexpr (sizeof(T) * n <= sizeof(__m256i)) {
+            return _mm256_load_si256((__m256i *)arr);
+        }
+        else {
+            return _mm512_load_si512((__m512i *)arr);
+        }
     }
     else {
-        return _mm512_load_si512((__m512i *)arr);
+        return vec_load_np2<T, n>(
+            arr,
+            std::make_integer_sequence < uint32_t,
+            (sizeof(T) == sizeof(uint8_t) && n <= 4) ? 8 : next_p2(n) > {});
     }
 }
 
 template<typename T, uint32_t n>
 constexpr void ALWAYS_INLINE
 vec_storeu(T * const arr, vec_t<T, n> v) {
-    // compiler will optimize to storeu if n * sizeof(T) == sizeof(vec_t<T, n>)
+    // compiler will optimize to storeu if n * sizeof(T) == sizeof(vec_t<T,
+    // n>)
     memcpy(arr, &v, n * sizeof(T));
 }
 

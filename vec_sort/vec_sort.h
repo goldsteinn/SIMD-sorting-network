@@ -33,8 +33,7 @@ small_sort(T * const arr) {
 
 template<typename T,
          uint32_t n,
-         template<uint32_t _n>
-         typename network,
+         template<uint32_t _n> typename network = vsort::best,
          simd_instructions simd_set     = vop::simd_instructions_default,
          builtin_usage     builtin_perm = vop::builtin_perm_default>
 constexpr vop::vec_t<T, n> ALWAYS_INLINE CONST_ATTR
@@ -45,11 +44,10 @@ sortv(vop::vec_t<T, n> v) {
 
 template<typename T,
          uint32_t n,
-         template<uint32_t _n>
-         typename network,
+         template<uint32_t _n> typename network = vsort::best,
          simd_instructions simd_set     = vop::simd_instructions_default,
          builtin_usage     builtin_perm = vop::builtin_perm_default>
-void 
+void
 sortu(T * const arr) {
     if constexpr (n < 4) {
         small_sort<T, n>(arr);
@@ -63,11 +61,10 @@ sortu(T * const arr) {
 
 template<typename T,
          uint32_t n,
-         template<uint32_t _n>
-         typename network,
+         template<uint32_t _n> typename network = vsort::best,
          simd_instructions simd_set     = vop::simd_instructions_default,
          builtin_usage     builtin_perm = vop::builtin_perm_default>
-void 
+void
 sorta(T * const arr) {
     if constexpr (n < 4) {
         small_sort<T, n>(arr);
