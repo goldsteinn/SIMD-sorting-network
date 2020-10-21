@@ -53,9 +53,9 @@ sortu(T * const arr) {
         small_sort<T, n>(arr);
     }
     else {
-        vop::vec_t<T, n> v = vop::vec_loadu<T, n>(arr);
+        vop::vec_t<T, n> v = vop::vec_loadu<T, n, simd_set>(arr);
         v                  = sortv<T, n, network, simd_set, builtin_perm>(v);
-        vop::vec_storeu<T, n>(arr, v);
+        vop::vec_storeu<T, n, simd_set>(arr, v);
     }
 }
 
@@ -70,9 +70,9 @@ sorta(T * const arr) {
         small_sort<T, n>(arr);
     }
     else {
-        vop::vec_t<T, n> v = vop::vec_loada<T, n>(arr);
+        vop::vec_t<T, n> v = vop::vec_loada<T, n, simd_set>(arr);
         v                  = sortv<T, n, network, simd_set, builtin_perm>(v);
-        vop::vec_storea<T, n>(arr, v);
+        vop::vec_storea<T, n, simd_set>(arr, v);
     }
 }
 

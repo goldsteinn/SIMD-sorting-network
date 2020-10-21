@@ -14,7 +14,7 @@ struct sarr {
     typedef uint32_t aliasing_u32 __attribute__((aligned(1), may_alias));
 
 
-    T arr[n] ALIGN_ATTR(64);
+    T arr[64 / sizeof(T)] ALIGN_ATTR(64);
 
     void
     finit() {
@@ -47,9 +47,7 @@ struct sarr {
     void
     randomize() {
         aliasing_u32 * _arr = (aliasing_u32 *)arr;
-        for (uint32_t i = 0;
-             i < ((sizeof(T) * n + (sizeof(uint32_t) - 1))) / sizeof(uint32_t);
-             ++i) {
+        for (uint32_t i = 0; i < (64 / sizeof(uint32_t)); ++i) {
             _arr[i] = rand();
         }
     }
@@ -94,23 +92,22 @@ corr_test() {
     uint32_t i = 0;
     for (i = 0; i < tsize; ++i) {
         s1.randomize();
-        memcpy(s2.arr, s1.arr, n * sizeof(T));
-        memcpy(s3.arr, s1.arr, n * sizeof(T));
+        memcpy(s2.arr, s1.arr, 64);
+        memcpy(s3.arr, s1.arr, 64);
         do_sort<SSORT, T, n, network_algorithm, simd_set, builtin_perm>(s1.arr);
         do_sort<VSORT, T, n, network_algorithm, simd_set, builtin_perm>(s2.arr);
         do_sort<USORT, T, n, network_algorithm, simd_set, builtin_perm>(s3.arr);
-        if (!(!memcmp(s1.arr, s2.arr, n * sizeof(T)))) {
+        if (!(!memcmp(s1.arr, s2.arr, 64))) {
             fprintf(stderr,
-                    "FAILED[A] : [%zu][%d][%d][%d]\n",
+                    "FAILED : [A][%zu][%d][%d][%d]\n",
                     sizeof(T),
                     n,
                     (uint32_t)simd_set,
                     (uint32_t)builtin_perm);
-            break;
         }
-        if (!(!memcmp(s1.arr, s3.arr, n * sizeof(T)))) {
+        if (!(!memcmp(s1.arr, s3.arr, 64))) {
             fprintf(stderr,
-                    "FAILED[U] : [%zu][%d][%d][%d]\n",
+                    "FAILED : [U][%zu][%d][%d][%d]\n",
                     sizeof(T),
                     n,
                     (uint32_t)simd_set,
