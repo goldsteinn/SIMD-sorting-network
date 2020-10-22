@@ -45,17 +45,23 @@ sortv(vop::vec_t<T, n> v) {
 template<typename T,
          uint32_t n,
          template<uint32_t _n> typename network = vsort::best,
+         uint32_t          aligned,
+         uint32_t          extra_memory,
          simd_instructions simd_set     = vop::simd_instructions_default,
          builtin_usage     builtin_perm = vop::builtin_perm_default>
-void
-sortu(T * const arr) {
+constexpr void ALWAYS_INLINE
+sort(T * const arr) {
     if constexpr (n < 4) {
         small_sort<T, n>(arr);
     }
     else {
-        vop::vec_t<T, n> v = vop::vec_loadu<T, n, simd_set>(arr);
-        v                  = sortv<T, n, network, simd_set, builtin_perm>(v);
-        vop::vec_storeu<T, n, simd_set>(arr, v);
+        constexpr uint32_t use_extra_memory =
+            extra_memory &&
+            (!(std::is_same<network<4>, vsort::best<4>>::value && n > 32));
+        vop::vec_t<T, n> v =
+            vop::vec_load<T, n, aligned, use_extra_memory, simd_set>(arr);
+        v = sortv<T, n, network, simd_set, builtin_perm>(v);
+        vop::vec_store<T, n, aligned, use_extra_memory, simd_set>(arr, v);
     }
 }
 
@@ -65,15 +71,38 @@ template<typename T,
          simd_instructions simd_set     = vop::simd_instructions_default,
          builtin_usage     builtin_perm = vop::builtin_perm_default>
 void
+sortu(T * const arr) {
+    sort<T, n, network, 1, 0, simd_set, builtin_perm>(arr);
+}
+
+template<typename T,
+         uint32_t n,
+         template<uint32_t _n> typename network = vsort::best,
+         simd_instructions simd_set     = vop::simd_instructions_default,
+         builtin_usage     builtin_perm = vop::builtin_perm_default>
+void
 sorta(T * const arr) {
-    if constexpr (n < 4) {
-        small_sort<T, n>(arr);
-    }
-    else {
-        vop::vec_t<T, n> v = vop::vec_loada<T, n, simd_set>(arr);
-        v                  = sortv<T, n, network, simd_set, builtin_perm>(v);
-        vop::vec_storea<T, n, simd_set>(arr, v);
-    }
+    sort<T, n, network, 1, 0, simd_set, builtin_perm>(arr);
+}
+
+template<typename T,
+         uint32_t n,
+         template<uint32_t _n> typename network = vsort::best,
+         simd_instructions simd_set     = vop::simd_instructions_default,
+         builtin_usage     builtin_perm = vop::builtin_perm_default>
+void
+sortue(T * const arr) {
+    sort<T, n, network, 1, 1, simd_set, builtin_perm>(arr);
+}
+
+template<typename T,
+         uint32_t n,
+         template<uint32_t _n> typename network = vsort::best,
+         simd_instructions simd_set     = vop::simd_instructions_default,
+         builtin_usage     builtin_perm = vop::builtin_perm_default>
+void
+sortae(T * const arr) {
+    sort<T, n, network, 1, 1, simd_set, builtin_perm>(arr);
 }
 
 }  // namespace vsort

@@ -38,6 +38,8 @@ static constexpr builtin_usage builtin_perm_default =
 
 
 namespace internal {
+
+
 template<typename T,
          simd_instructions simd_set,
          builtin_usage     builtin_perm,
@@ -48,6 +50,40 @@ template<typename T, simd_instructions simd_set, builtin_usage builtin_perm>
 struct vector_ops<T, simd_set, builtin_perm, sizeof(__m64)> {
     static constexpr uint32_t vec_size = sizeof(__m64);
     static constexpr uint32_t n        = vec_size / sizeof(T);
+
+    template<uint32_t partial_n, uint32_t aligned, uint32_t extra_memory>
+    static constexpr void ALWAYS_INLINE
+    vec_store(T * const arr, __m64 v) {
+        memcpy(arr, &v, partial_n * sizeof(T));
+    }
+
+    template<uint32_t partial_n, uint32_t... indices>
+    static constexpr __m64 ALWAYS_INLINE
+    vec_load_impl(T * const                                   arr,
+                  std::integer_sequence<uint32_t, indices...> _indices) {
+        __m64 v;
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            v = _mm_set1_pi8(get_max<T>());
+        }
+        else /* sizeof(T) == sizeof(uint16_t) */ {
+            v = _mm_set1_pi16(get_max<T>());
+        }
+        memcpy(&v, arr, partial_n * sizeof(T));
+        return v;
+    }
+
+    template<uint32_t partial_n, uint32_t aligned, uint32_t extra_memory>
+    static constexpr __m64 ALWAYS_INLINE
+    vec_load(T * const arr) {
+        if constexpr (partial_n == n || extra_memory) {
+            return *((__m64 *)arr);
+        }
+        else {
+            return vec_load_impl<partial_n>(
+                arr,
+                std::make_integer_sequence<uint32_t, n>{});
+        }
+    }
 
     template<uint32_t... e>
     static constexpr __m64 ALWAYS_INLINE CONST_ATTR
@@ -150,6 +186,228 @@ template<typename T, simd_instructions simd_set, builtin_usage builtin_perm>
 struct vector_ops<T, simd_set, builtin_perm, sizeof(__m128i)> {
     static constexpr uint32_t vec_size = sizeof(__m128i);
     static constexpr uint32_t n        = vec_size / sizeof(T);
+
+    template<uint32_t partial_n, uint32_t aligned, uint32_t extra_memory>
+    static constexpr void ALWAYS_INLINE
+    vec_store(T * const arr, __m128i v) {
+        if constexpr (partial_n == n || extra_memory) {
+            if constexpr (aligned) {
+                return _mm_store_si128((__m128i *)arr, v);
+            }
+            else {
+                return _mm_storeu_si128((__m128i *)arr, v);
+            }
+        }
+        else if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512BW) {
+                _mm_mask_compressstoreu_epi8((T * const)arr,
+                                             (1UL << partial_n) - 1,
+                                             v);
+            }
+            else {
+                _mm_maskstore_epi32((int32_t * const)arr,
+                                    _mm_set_epi32((partial_n >= 16) << 31,
+                                                  (partial_n >= 12) << 31,
+                                                  (partial_n >= 8) << 31,
+                                                  (partial_n >= 4) << 31),
+                                    v);
+                if constexpr (partial_n % (sizeof(uint32_t) / sizeof(T))) {
+                    constexpr uint32_t rounded_n =
+                        partial_n & (~((sizeof(uint32_t) / sizeof(T)) - 1));
+                    constexpr uint32_t shift = 8 * sizeof(T);
+
+                    const uint32_t remainder = _mm_extract_epi32(
+                        v,
+                        partial_n / (sizeof(uint32_t) / sizeof(T)));
+                    arr[rounded_n] = remainder & ((1 << shift) - 1);
+                    if constexpr ((partial_n % (sizeof(uint32_t) / sizeof(T))) >
+                                  1) {
+                        arr[rounded_n + 1] =
+                            (remainder >> shift) & ((1 << shift) - 1);
+                    }
+                    if constexpr ((partial_n % (sizeof(uint32_t) / sizeof(T))) >
+                                  2) {
+                        arr[rounded_n + 2] =
+                            (remainder >> (2 * shift)) & ((1 << shift) - 1);
+                    }
+                }
+            }
+        }
+        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512BW) {
+                _mm_mask_compressstoreu_epi16((T * const)arr,
+                                              (1UL << partial_n) - 1,
+                                              v);
+            }
+            else {
+                _mm_maskstore_epi32((int32_t * const)arr,
+                                    _mm_set_epi32((partial_n >= 8) << 31,
+                                                  (partial_n >= 6) << 31,
+                                                  (partial_n >= 4) << 31,
+                                                  (partial_n >= 2) << 31),
+                                    v);
+                if constexpr (partial_n % (sizeof(uint32_t) / sizeof(T))) {
+                    constexpr uint32_t rounded_n =
+                        partial_n & (~((sizeof(uint32_t) / sizeof(T)) - 1));
+                    constexpr uint32_t shift = 8 * sizeof(T);
+
+                    const uint32_t remainder = _mm_extract_epi32(
+                        v,
+                        partial_n / (sizeof(uint32_t) / sizeof(T)));
+                    arr[rounded_n] = remainder & ((1 << shift) - 1);
+                }
+            }
+        }
+        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512F) {
+                _mm_mask_compressstoreu_epi32((T * const)arr,
+                                              (1UL << partial_n) - 1,
+                                              v);
+            }
+            else {
+                _mm_maskstore_epi32((T * const)arr,
+                                    _mm_set_epi32((partial_n >= 4) << 31,
+                                                  (partial_n >= 3) << 31,
+                                                  (partial_n >= 2) << 31,
+                                                  (partial_n >= 1) << 31),
+                                    v);
+            }
+        }
+        else /* sizeof(T) == sizeof(uint64_t) */ {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512F) {
+                _mm_mask_compressstoreu_epi64((T * const)arr,
+                                              (1UL << partial_n) - 1,
+                                              v);
+            }
+            else {
+                _mm_maskstore_epi64(
+                    (T * const)arr,
+                    _mm_set_epi64x(((uint64_t)(partial_n >= 2)) << 63,
+                                   ((uint64_t)(partial_n >= 1)) << 63),
+                    v);
+            }
+        }
+    }
+
+    template<uint32_t partial_n, uint32_t... indices>
+    static constexpr __m128i ALWAYS_INLINE
+    vec_load_impl(T * const                                   arr,
+                  std::integer_sequence<uint32_t, indices...> _indices) {
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512BW) {
+                return _mm_mask_loadu_epi8(_mm_set1_epi8(get_max<T>()),
+                                           (1UL << partial_n) - 1,
+                                           (T * const)arr);
+            }
+            else {
+                __m128i or_mask = _mm_set_epi8(
+                    ((indices < (n - partial_n)) ? get_max<T>() : 0)...);
+                __m128i v =
+                    _mm_maskload_epi32((int32_t * const)arr,
+                                       _mm_set_epi32((partial_n >= 12) << 31,
+                                                     (partial_n >= 8) << 31,
+                                                     (partial_n >= 4) << 31,
+                                                     (partial_n >= 0) << 31));
+                if constexpr (std::is_signed<T>::value) {
+                    v                = _mm_or_si128(v, or_mask);
+                    __m128i xor_mask = _mm_set_epi8(
+                        ((indices < (n - partial_n)) ? (~get_max<T>()) : 0)...);
+                    return _mm_xor_si128(v, xor_mask);
+                }
+                else {
+                    return _mm_or_si128(v, or_mask);
+                }
+            }
+        }
+        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512BW) {
+                return _mm_mask_loadu_epi16(_mm_set1_epi16(get_max<T>()),
+                                            (1UL << partial_n) - 1,
+                                            (T * const)arr);
+            }
+            else {
+                __m128i or_mask = _mm_set_epi16(
+                    ((indices < (n - partial_n)) ? get_max<T>() : 0)...);
+                __m128i v =
+                    _mm_maskload_epi32((int32_t * const)arr,
+                                       _mm_set_epi32((partial_n >= 6) << 31,
+                                                     (partial_n >= 4) << 31,
+                                                     (partial_n >= 2) << 31,
+                                                     (partial_n >= 0) << 31));
+                if constexpr (std::is_signed<T>::value) {
+                    v                = _mm_or_si128(v, or_mask);
+                    __m128i xor_mask = _mm_set_epi16(
+                        ((indices < (n - partial_n)) ? (~get_max<T>()) : 0)...);
+                    return _mm_xor_si128(v, xor_mask);
+                }
+                else {
+                    return _mm_or_si128(v, or_mask);
+                }
+            }
+        }
+        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512F) {
+                return _mm_mask_loadu_epi32(_mm_set1_epi32(get_max<T>()),
+                                            (1UL << partial_n) - 1,
+                                            (T * const)arr);
+            }
+            else {
+                return _mm_maskload_epi32(
+                    (T * const)arr,
+                    _mm_set_epi32((partial_n >= 4) << 31,
+                                  (partial_n >= 3) << 31,
+                                  (partial_n >= 2) << 31,
+                                  (partial_n >= 1) << 31));
+            }
+        }
+        else /* sizeof(T) == sizeof(uint64_t) */ {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512F) {
+                return _mm_mask_loadu_epi64(_mm_set1_epi64x(get_max<T>()),
+                                            (1UL << partial_n) - 1,
+                                            (T * const)arr);
+            }
+            else {
+                return _mm_maskload_epi64(
+                    (T * const)arr,
+                    _mm_set_epi64x(((uint64_t)(partial_n >= 2)) << 63,
+                                   ((uint64_t)(partial_n >= 1)) << 63));
+            }
+        }
+    }
+
+    template<uint32_t partial_n, uint32_t aligned, uint32_t extra_memory>
+    static constexpr __m128i ALWAYS_INLINE
+    vec_load(T * const arr) {
+        if constexpr (partial_n == n || extra_memory) {
+            if constexpr (aligned) {
+                return _mm_load_si128((__m128i *)arr);
+            }
+            else {
+                return _mm_loadu_si128((__m128i *)arr);
+            }
+        }
+        else {
+            return vec_load_impl<partial_n>(
+                arr,
+                std::make_integer_sequence<uint32_t, n>{});
+        }
+    }
 
     template<uint32_t... e>
     static __m128i ALWAYS_INLINE CONST_ATTR
@@ -519,6 +777,256 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
     static constexpr uint32_t vec_size = sizeof(__m256i);
     static constexpr uint32_t n        = vec_size / sizeof(T);
 
+    template<uint32_t partial_n, uint32_t aligned, uint32_t extra_memory>
+    static constexpr void ALWAYS_INLINE
+    vec_store(T * const arr, __m256i v) {
+        if constexpr (partial_n == n || extra_memory) {
+            if constexpr (aligned) {
+                return _mm256_store_si256((__m256i *)arr, v);
+            }
+            else {
+                return _mm256_storeu_si256((__m256i *)arr, v);
+            }
+        }
+        else if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512BW) {
+                _mm256_mask_compressstoreu_epi8((T * const)arr,
+                                                (1UL << partial_n) - 1,
+                                                v);
+            }
+            else {
+                _mm256_maskstore_epi32((int32_t * const)arr,
+                                       _mm256_set_epi32((partial_n >= 32) << 31,
+                                                        (partial_n >= 28) << 31,
+                                                        (partial_n >= 24) << 31,
+                                                        (partial_n >= 20) << 31,
+                                                        (partial_n >= 16) << 31,
+                                                        (partial_n >= 12) << 31,
+                                                        (partial_n >= 8) << 31,
+                                                        (partial_n >= 4) << 31),
+                                       v);
+                if constexpr (partial_n % (sizeof(uint32_t) / sizeof(T))) {
+                    constexpr uint32_t rounded_n =
+                        partial_n & (~((sizeof(uint32_t) / sizeof(T)) - 1));
+                    constexpr uint32_t shift = 8 * sizeof(T);
+
+                    const uint32_t remainder = _mm256_extract_epi32(
+                        v,
+                        partial_n / (sizeof(uint32_t) / sizeof(T)));
+                    arr[rounded_n] = remainder & ((1 << shift) - 1);
+                    if constexpr ((partial_n % (sizeof(uint32_t) / sizeof(T))) >
+                                  1) {
+                        arr[rounded_n + 1] =
+                            (remainder >> shift) & ((1 << shift) - 1);
+                    }
+                    if constexpr ((partial_n % (sizeof(uint32_t) / sizeof(T))) >
+                                  2) {
+                        arr[rounded_n + 2] =
+                            (remainder >> (2 * shift)) & ((1 << shift) - 1);
+                    }
+                }
+            }
+        }
+        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512BW) {
+                _mm256_mask_compressstoreu_epi16((T * const)arr,
+                                                 (1UL << partial_n) - 1,
+                                                 v);
+            }
+            else {
+                _mm256_maskstore_epi32((int32_t * const)arr,
+                                       _mm256_set_epi32((partial_n >= 16) << 31,
+                                                        (partial_n >= 14) << 31,
+                                                        (partial_n >= 12) << 31,
+                                                        (partial_n >= 10) << 31,
+                                                        (partial_n >= 8) << 31,
+                                                        (partial_n >= 6) << 31,
+                                                        (partial_n >= 4) << 31,
+                                                        (partial_n >= 2) << 31),
+                                       v);
+                if constexpr (partial_n % (sizeof(uint32_t) / sizeof(T))) {
+                    constexpr uint32_t rounded_n =
+                        partial_n & (~((sizeof(uint32_t) / sizeof(T)) - 1));
+                    constexpr uint32_t shift = 8 * sizeof(T);
+
+                    const uint32_t remainder = _mm256_extract_epi32(
+                        v,
+                        partial_n / (sizeof(uint32_t) / sizeof(T)));
+                    arr[rounded_n] = remainder & ((1 << shift) - 1);
+                }
+            }
+        }
+        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512F) {
+                _mm256_mask_compressstoreu_epi32((T * const)arr,
+                                                 (1UL << partial_n) - 1,
+                                                 v);
+            }
+            else {
+                _mm256_maskstore_epi32((int32_t * const)arr,
+                                       _mm256_set_epi32((partial_n >= 8) << 31,
+                                                        (partial_n >= 7) << 31,
+                                                        (partial_n >= 6) << 31,
+                                                        (partial_n >= 5) << 31,
+                                                        (partial_n >= 4) << 31,
+                                                        (partial_n >= 3) << 31,
+                                                        (partial_n >= 2) << 31,
+                                                        (partial_n >= 1) << 31),
+                                       v);
+            }
+        }
+        else /* sizeof(T) == sizeof(uint64_t) */ {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512F) {
+
+                _mm256_mask_compressstoreu_epi64((T * const)arr,
+                                                 (1UL << partial_n) - 1,
+                                                 v);
+            }
+            else {
+                _mm256_maskstore_epi64(
+                    (T * const)arr,
+                    _mm256_set_epi64x((partial_n >= 4) << 31,
+                                      (partial_n >= 3) << 31,
+                                      (partial_n >= 2) << 31,
+                                      (partial_n >= 1) << 31),
+                    v);
+            }
+        }
+    }
+
+    template<uint32_t partial_n, uint32_t... indices>
+    static constexpr __m256i ALWAYS_INLINE
+    vec_load_impl(T * const                                   arr,
+                  std::integer_sequence<uint32_t, indices...> _indices) {
+        if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512BW) {
+                return _mm256_mask_loadu_epi8(_mm256_set1_epi8(get_max<T>()),
+                                              (1UL << partial_n) - 1,
+                                              (T * const)arr);
+            }
+            else {
+                __m256i or_mask = _mm256_set_epi8(
+                    ((indices < (n - partial_n)) ? get_max<T>() : 0)...);
+                __m256i v = _mm256_maskload_epi32(
+                    (int32_t * const)arr,
+                    _mm256_set_epi32((partial_n >= 28) << 31,
+                                     (partial_n >= 24) << 31,
+                                     (partial_n >= 20) << 31,
+                                     (partial_n >= 16) << 31,
+                                     (partial_n >= 12) << 31,
+                                     (partial_n >= 8) << 31,
+                                     (partial_n >= 4) << 31,
+                                     (partial_n >= 0) << 31));
+                if constexpr (std::is_signed<T>::value) {
+                    v                = _mm256_or_si256(v, or_mask);
+                    __m256i xor_mask = _mm256_set_epi8(
+                        ((indices < (n - partial_n)) ? (~get_max<T>()) : 0)...);
+                    return _mm256_xor_si256(v, xor_mask);
+                }
+                else {
+                    return _mm256_or_si256(v, or_mask);
+                }
+            }
+        }
+        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512BW) {
+                return _mm256_mask_loadu_epi16(_mm256_set1_epi16(get_max<T>()),
+                                               (1UL << partial_n) - 1,
+                                               (T * const)arr);
+            }
+            else {
+                __m256i or_mask = _mm256_set_epi16(
+                    ((indices < (n - partial_n)) ? get_max<T>() : 0)...);
+                __m256i v = _mm256_maskload_epi32(
+                    (int32_t * const)arr,
+                    _mm256_set_epi32((partial_n >= 14) << 31,
+                                     (partial_n >= 12) << 31,
+                                     (partial_n >= 10) << 31,
+                                     (partial_n >= 8) << 31,
+                                     (partial_n >= 6) << 31,
+                                     (partial_n >= 4) << 31,
+                                     (partial_n >= 2) << 31,
+                                     (partial_n >= 0) << 31));
+                if constexpr (std::is_signed<T>::value) {
+                    v                = _mm256_or_si256(v, or_mask);
+                    __m256i xor_mask = _mm256_set_epi16(
+                        ((indices < (n - partial_n)) ? (~get_max<T>()) : 0)...);
+                    return _mm256_xor_si256(v, xor_mask);
+                }
+                else {
+                    return _mm256_or_si256(v, or_mask);
+                }
+            }
+        }
+        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512F) {
+                return _mm256_mask_loadu_epi32(_mm256_set1_epi32(get_max<T>()),
+                                               (1UL << partial_n) - 1,
+                                               (T * const)arr);
+            }
+            else {
+                return _mm256_maskload_epi32(
+                    (int32_t * const)arr,
+                    _mm256_set_epi32((partial_n >= 8) << 31,
+                                     (partial_n >= 7) << 31,
+                                     (partial_n >= 6) << 31,
+                                     (partial_n >= 5) << 31,
+                                     (partial_n >= 4) << 31,
+                                     (partial_n >= 3) << 31,
+                                     (partial_n >= 2) << 31,
+                                     (partial_n >= 1) << 31));
+            }
+        }
+        else /* sizeof(T) == sizeof(uint64_t) */ {
+            if constexpr (simd_set >= simd_instructions::AVX512 &&
+                          internal::avail_instructions::AVX512VL &&
+                          internal::avail_instructions::AVX512F) {
+                return _mm256_mask_loadu_epi64(_mm256_set1_epi64x(get_max<T>()),
+                                               (1UL << partial_n) - 1,
+                                               (T * const)arr);
+            }
+            else {
+                return _mm256_maskload_epi64(
+                    (T * const)arr,
+                    _mm256_set_epi64x((partial_n >= 4) << 31,
+                                      (partial_n >= 3) << 31,
+                                      (partial_n >= 2) << 31,
+                                      (partial_n >= 1) << 31));
+            }
+        }
+    }
+
+    template<uint32_t partial_n, uint32_t aligned, uint32_t extra_memory>
+    static constexpr __m256i ALWAYS_INLINE
+    vec_load(T * const arr) {
+        if constexpr (partial_n == n || extra_memory) {
+            if constexpr (aligned) {
+                return _mm256_load_si256((__m256i *)arr);
+            }
+            else {
+                return _mm256_loadu_si256((__m256i *)arr);
+            }
+        }
+        else {
+            return vec_load_impl<partial_n>(
+                arr,
+                std::make_integer_sequence<uint32_t, n>{});
+        }
+    }
 
     template<uint32_t... e>
     static __m256i ALWAYS_INLINE CONST_ATTR
@@ -993,6 +1501,74 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m512i)> {
     static constexpr uint32_t vec_size = sizeof(__m512i);
     static constexpr uint32_t n        = vec_size / sizeof(T);
 
+
+    template<uint32_t partial_n, uint32_t aligned, uint32_t extra_memory>
+    static constexpr void ALWAYS_INLINE
+    vec_store(T * const arr, __m512i v) {
+        if constexpr (partial_n == n || extra_memory) {
+            if constexpr (aligned) {
+                return _mm512_store_si512((__m512i *)arr, v);
+            }
+            else {
+                return _mm512_storeu_si512((__m512i *)arr, v);
+            }
+        }
+        else if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            _mm512_mask_compressstoreu_epi8((T * const)arr,
+                                            (1UL << partial_n) - 1,
+                                            v);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+            _mm512_mask_compressstoreu_epi16((T * const)arr,
+                                             (1UL << partial_n) - 1,
+                                             v);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+            _mm512_mask_compressstoreu_epi32((T * const)arr,
+                                             (1UL << partial_n) - 1,
+                                             v);
+        }
+        else /* sizeof(T) == sizeof(uint64_t) */ {
+            _mm512_mask_compressstoreu_epi64((T * const)arr,
+                                             (1UL << partial_n) - 1,
+                                             v);
+        }
+    }
+
+
+    template<uint32_t partial_n, uint32_t aligned, uint32_t extra_memory>
+    static constexpr __m512i ALWAYS_INLINE
+    vec_load(T * const arr) {
+        if constexpr (partial_n == n || extra_memory) {
+            if constexpr (aligned) {
+                return _mm512_load_si512((__m512i *)arr);
+            }
+            else {
+                return _mm512_loadu_si512((__m512i *)arr);
+            }
+        }
+        else if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            return _mm512_mask_loadu_epi8(_mm512_set1_epi8(get_max<T>()),
+                                          (1UL << partial_n) - 1,
+                                          (T * const)arr);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+            return _mm512_mask_loadu_epi16(_mm512_set1_epi16(get_max<T>()),
+                                           (1UL << partial_n) - 1,
+                                           (T * const)arr);
+        }
+        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+            return _mm512_mask_loadu_epi32(_mm512_set1_epi32(get_max<T>()),
+                                           (1UL << partial_n) - 1,
+                                           (T * const)arr);
+        }
+        else /* sizeof(T) == sizeof(uint64_t) */ {
+            return _mm512_mask_loadu_epi64(_mm512_set1_epi64(get_max<T>()),
+                                           (1UL << partial_n) - 1,
+                                           (T * const)arr);
+        }
+    }
+
     template<uint32_t... e>
     static __m512i ALWAYS_INLINE CONST_ATTR
     builtin_shuffle_impl(__m512i v) {
@@ -1309,584 +1885,32 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m512i)> {
 template<typename T, uint32_t n>
 using vec_t = typename internal::vec_types::get_vec_t<T, n>::type;
 
-template<typename T>
-constexpr T ALWAYS_INLINE CONST_ATTR
-get_max() {
-    if constexpr (std::is_signed<T>::value) {
-        return (T)(((1UL) << (8 * sizeof(T) - 1)) - 1);
-    }
-    else {
-        return (T)(((1UL) << (8 * sizeof(T))) - 1);
-    }
-}
 
 template<typename T,
          uint32_t          n,
-         simd_instructions simd_set,
-         uint32_t... indices>
-constexpr vec_t<T, n> ALWAYS_INLINE
-vec_load_np(T * const                                   arr,
-            std::integer_sequence<uint32_t, indices...> _indices) {
-    if constexpr (sizeof(vec_t<T, n>) == sizeof(__m64)) {
-        vec_t<T, n> v;
-        if constexpr (sizeof(T) == sizeof(uint8_t)) {
-            v = _mm_set1_pi8(get_max<T>());
-        }
-        else /* sizeof(T) == sizeof(uint16_t) */ {
-            v = _mm_set1_pi16(get_max<T>());
-        }
-        memcpy(&v, arr, n * sizeof(T));
-        return v;
-    }
-    else if constexpr (sizeof(vec_t<T, n>) == sizeof(__m128i)) {
-        if constexpr (sizeof(T) == sizeof(uint8_t)) {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512BW) {
-                return _mm_mask_loadu_epi8(_mm_set1_epi8(get_max<T>()),
-                                           (1UL << n) - 1,
-                                           (T * const)arr);
-            }
-            else {
-                vec_t<T, n> or_mask = _mm_set_epi8(
-                    ((indices < (next_p2(n) - n)) ? get_max<T>() : 0)...);
-                vec_t<T, n> v =
-                    _mm_maskload_epi32((int32_t * const)arr,
-                                       _mm_set_epi32((n >= 12) << 31,
-                                                     (n >= 8) << 31,
-                                                     (n >= 4) << 31,
-                                                     (n >= 0) << 31));
-                if constexpr (std::is_signed<T>::value) {
-                    v                    = _mm_or_si128(v, or_mask);
-                    vec_t<T, n> xor_mask = _mm_set_epi8((
-                        (indices < (next_p2(n) - n)) ? (~get_max<T>()) : 0)...);
-                    return _mm_xor_si128(v, xor_mask);
-                }
-                else {
-                    return v;
-                }
-            }
-        }
-        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512BW) {
-                return _mm_mask_loadu_epi16(_mm_set1_epi16(get_max<T>()),
-                                            (1UL << n) - 1,
-                                            (T * const)arr);
-            }
-            else {
-                vec_t<T, n> or_mask = _mm_set_epi16(
-                    ((indices < (next_p2(n) - n)) ? get_max<T>() : 0)...);
-                vec_t<T, n> v =
-                    _mm_maskload_epi32((int32_t * const)arr,
-                                       _mm_set_epi32((n >= 6) << 31,
-                                                     (n >= 4) << 31,
-                                                     (n >= 2) << 31,
-                                                     (n >= 0) << 31));
-                if constexpr (std::is_signed<T>::value) {
-                    v                    = _mm_or_si128(v, or_mask);
-                    vec_t<T, n> xor_mask = _mm_set_epi16((
-                        (indices < (next_p2(n) - n)) ? (~get_max<T>()) : 0)...);
-                    return _mm_xor_si128(v, xor_mask);
-                }
-                else {
-                    return v;
-                }
-            }
-        }
-        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512F) {
-                return _mm_mask_loadu_epi32(_mm_set1_epi32(get_max<T>()),
-                                            (1UL << n) - 1,
-                                            (T * const)arr);
-            }
-            else {
-                return _mm_maskload_epi32((T * const)arr,
-                                          _mm_set_epi32((n >= 4) << 31,
-                                                        (n >= 3) << 31,
-                                                        (n >= 2) << 31,
-                                                        (n >= 1) << 31));
-            }
-        }
-        else /* sizeof(T) == sizeof(uint64_t) */ {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512F) {
-                return _mm_mask_loadu_epi64(_mm_set1_epi64x(get_max<T>()),
-                                            (1UL << n) - 1,
-                                            (T * const)arr);
-            }
-            else {
-                return _mm_maskload_epi64(
-                    (T * const)arr,
-                    _mm_set_epi64x(((uint64_t)(n >= 2)) << 63,
-                                   ((uint64_t)(n >= 1)) << 63));
-            }
-        }
-    }
-    else if constexpr (sizeof(vec_t<T, n>) == sizeof(__m256i)) {
-        if constexpr (sizeof(T) == sizeof(uint8_t)) {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512BW) {
-                return _mm256_mask_loadu_epi8(_mm256_set1_epi8(get_max<T>()),
-                                              (1UL << n) - 1,
-                                              (T * const)arr);
-            }
-            else {
-                vec_t<T, n> or_mask = _mm256_set_epi8(
-                    ((indices < (next_p2(n) - n)) ? get_max<T>() : 0)...);
-                vec_t<T, n> v =
-                    _mm256_maskload_epi32((int32_t * const)arr,
-                                          _mm256_set_epi32((n >= 28) << 31,
-                                                           (n >= 24) << 31,
-                                                           (n >= 20) << 31,
-                                                           (n >= 16) << 31,
-                                                           (n >= 12) << 31,
-                                                           (n >= 8) << 31,
-                                                           (n >= 4) << 31,
-                                                           (n >= 0) << 31));
-                if constexpr (std::is_signed<T>::value) {
-                    v                    = _mm256_or_si256(v, or_mask);
-                    vec_t<T, n> xor_mask = _mm256_set_epi8((
-                        (indices < (next_p2(n) - n)) ? (~get_max<T>()) : 0)...);
-                    return _mm256_xor_si256(v, xor_mask);
-                }
-                else {
-                    return v;
-                }
-            }
-        }
-        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512BW) {
-                return _mm256_mask_loadu_epi16(_mm256_set1_epi16(get_max<T>()),
-                                               (1UL << n) - 1,
-                                               (T * const)arr);
-            }
-            else {
-                vec_t<T, n> or_mask = _mm256_set_epi16(
-                    ((indices < (next_p2(n) - n)) ? get_max<T>() : 0)...);
-                vec_t<T, n> v =
-                    _mm256_maskload_epi32((int32_t * const)arr,
-                                          _mm256_set_epi32((n >= 14) << 31,
-                                                           (n >= 12) << 31,
-                                                           (n >= 10) << 31,
-                                                           (n >= 8) << 31,
-                                                           (n >= 6) << 31,
-                                                           (n >= 4) << 31,
-                                                           (n >= 2) << 31,
-                                                           (n >= 0) << 31));
-                if constexpr (std::is_signed<T>::value) {
-                    v                    = _mm256_or_si256(v, or_mask);
-                    vec_t<T, n> xor_mask = _mm256_set_epi16((
-                        (indices < (next_p2(n) - n)) ? (~get_max<T>()) : 0)...);
-                    return _mm256_xor_si256(v, xor_mask);
-                }
-                else {
-                    return v;
-                }
-            }
-        }
-        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512F) {
-                return _mm256_mask_loadu_epi32(_mm256_set1_epi32(get_max<T>()),
-                                               (1UL << n) - 1,
-                                               (T * const)arr);
-            }
-            else {
-                return _mm256_maskload_epi32((int32_t * const)arr,
-                                             _mm256_set_epi32((n >= 8) << 31,
-                                                              (n >= 7) << 31,
-                                                              (n >= 6) << 31,
-                                                              (n >= 5) << 31,
-                                                              (n >= 4) << 31,
-                                                              (n >= 3) << 31,
-                                                              (n >= 2) << 31,
-                                                              (n >= 1) << 31));
-            }
-        }
-        else /* sizeof(T) == sizeof(uint64_t) */ {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512F) {
-                return _mm256_mask_loadu_epi64(_mm256_set1_epi64x(get_max<T>()),
-                                               (1UL << n) - 1,
-                                               (T * const)arr);
-            }
-            else {
-                return _mm256_maskload_epi64((T * const)arr,
-                                             _mm256_set_epi64x((n >= 4) << 31,
-                                                               (n >= 3) << 31,
-                                                               (n >= 2) << 31,
-                                                               (n >= 1) << 31));
-            }
-        }
-    }
-    else /* sizeof(vec_t<T, n>) == sizeof(__m512i) */ {
-        if constexpr (sizeof(T) == sizeof(uint8_t)) {
-            return _mm512_mask_loadu_epi8(_mm512_set1_epi8(get_max<T>()),
-                                          (1UL << n) - 1,
-                                          (T * const)arr);
-        }
-        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-            return _mm512_mask_loadu_epi16(_mm512_set1_epi16(get_max<T>()),
-                                           (1UL << n) - 1,
-                                           (T * const)arr);
-        }
-        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
-            return _mm512_mask_loadu_epi32(_mm512_set1_epi32(get_max<T>()),
-                                           (1UL << n) - 1,
-                                           (T * const)arr);
-        }
-        else /* sizeof(T) == sizeof(uint64_t) */ {
-            return _mm512_mask_loadu_epi64(_mm512_set1_epi64(get_max<T>()),
-                                           (1UL << n) - 1,
-                                           (T * const)arr);
-        }
-    }
-}
-
-template<typename T,
-         uint32_t          n,
+         uint32_t          aligned,
+         uint32_t          extra_memory,
          simd_instructions simd_set = vop::simd_instructions_default>
 constexpr vec_t<T, n> ALWAYS_INLINE
-vec_loadu(T * const arr) {
-    // compiler will optimize to loadu if n * sizeof(T) == sizeof(vec_t<T,
-    // n>)
-    if constexpr (is_pow2(n) && (sizeof(T) * n > 4)) {
-        if constexpr (sizeof(T) * n <= sizeof(__m64)) {
-            __m64 r;
-            memcpy(&r, arr, n * sizeof(T));
-            return r;
-        }
-        else if constexpr (sizeof(T) * n <= sizeof(__m128i)) {
-            return _mm_loadu_si128((__m128i *)arr);
-        }
-        else if constexpr (sizeof(T) * n <= sizeof(__m256i)) {
-            return _mm256_loadu_si256((__m256i *)arr);
-        }
-        else {
-            return _mm512_loadu_si512((__m512i *)arr);
-        }
-    }
-    else {
-        return vec_load_np<T, n, simd_set>(
-            arr,
-            std::make_integer_sequence < uint32_t,
-            (sizeof(T) == sizeof(uint8_t) && n <= 4) ? 8 : next_p2(n) > {});
-    }
+vec_load(T * const arr) {
+    using vec_ops = typename internal::
+        vector_ops<T, simd_set, BUILTIN_FIRST, sizeof(vec_t<T, n>)>;
+    return vec_ops::template vec_load<n, aligned, extra_memory>(arr);
 }
+
 
 template<typename T,
          uint32_t          n,
-         simd_instructions simd_set = vop::simd_instructions_default>
-constexpr vec_t<T, n> ALWAYS_INLINE
-vec_loada(T * const arr) {
-    if constexpr (is_pow2(n) && (sizeof(T) * n > 4)) {
-        if constexpr (sizeof(T) * n <= sizeof(__m64)) {
-            __m64 r;
-            memcpy(&r, arr, n * sizeof(T));
-            return r;
-        }
-        else if constexpr (sizeof(T) * n <= sizeof(__m128i)) {
-            return _mm_load_si128((__m128i *)arr);
-        }
-        else if constexpr (sizeof(T) * n <= sizeof(__m256i)) {
-            return _mm256_load_si256((__m256i *)arr);
-        }
-        else {
-            return _mm512_load_si512((__m512i *)arr);
-        }
-    }
-    else {
-        return vec_load_np<T, n, simd_set>(
-            arr,
-            std::make_integer_sequence < uint32_t,
-            (sizeof(T) == sizeof(uint8_t) && n <= 4) ? 8 : next_p2(n) > {});
-    }
-}
-
-template<typename T, uint32_t n, simd_instructions simd_set>
-constexpr void ALWAYS_INLINE
-vec_store_np(T * const arr, vec_t<T, n> v) {
-    if constexpr (sizeof(vec_t<T, n>) == sizeof(__m64)) {
-        memcpy(arr, &v, n * sizeof(T));
-    }
-    else if constexpr (sizeof(vec_t<T, n>) == sizeof(__m128i)) {
-        if constexpr (sizeof(T) == sizeof(uint8_t)) {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512BW) {
-                _mm_mask_compressstoreu_epi8((T * const)arr, (1UL << n) - 1, v);
-            }
-            else {
-                _mm_maskstore_epi32((int32_t * const)arr,
-                                    _mm_set_epi32((n >= 16) << 31,
-                                                  (n >= 12) << 31,
-                                                  (n >= 8) << 31,
-                                                  (n >= 4) << 31),
-                                    v);
-                if constexpr (n % (sizeof(uint32_t) / sizeof(T))) {
-                    constexpr uint32_t rounded_n =
-                        n & (~((sizeof(uint32_t) / sizeof(T)) - 1));
-                    constexpr uint32_t shift = 8 * sizeof(T);
-
-                    const uint32_t remainder =
-                        _mm_extract_epi32(v,
-                                          n / (sizeof(uint32_t) / sizeof(T)));
-                    arr[rounded_n] = remainder & ((1 << shift) - 1);
-                    if constexpr ((n % (sizeof(uint32_t) / sizeof(T))) > 1) {
-                        arr[rounded_n + 1] =
-                            (remainder >> shift) & ((1 << shift) - 1);
-                    }
-                    if constexpr ((n % (sizeof(uint32_t) / sizeof(T))) > 2) {
-                        arr[rounded_n + 2] =
-                            (remainder >> (2 * shift)) & ((1 << shift) - 1);
-                    }
-                }
-            }
-        }
-        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512BW) {
-                _mm_mask_compressstoreu_epi16((T * const)arr,
-                                              (1UL << n) - 1,
-                                              v);
-            }
-            else {
-                _mm_maskstore_epi32((int32_t * const)arr,
-                                    _mm_set_epi32((n >= 8) << 31,
-                                                  (n >= 6) << 31,
-                                                  (n >= 4) << 31,
-                                                  (n >= 2) << 31),
-                                    v);
-                if constexpr (n % (sizeof(uint32_t) / sizeof(T))) {
-                    constexpr uint32_t rounded_n =
-                        n & (~((sizeof(uint32_t) / sizeof(T)) - 1));
-                    constexpr uint32_t shift = 8 * sizeof(T);
-
-                    const uint32_t remainder =
-                        _mm_extract_epi32(v,
-                                          n / (sizeof(uint32_t) / sizeof(T)));
-                    arr[rounded_n] = remainder & ((1 << shift) - 1);
-                }
-            }
-        }
-        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512F) {
-                _mm_mask_compressstoreu_epi32((T * const)arr,
-                                              (1UL << n) - 1,
-                                              v);
-            }
-            else {
-                _mm_maskstore_epi32((T * const)arr,
-                                    _mm_set_epi32((n >= 4) << 31,
-                                                  (n >= 3) << 31,
-                                                  (n >= 2) << 31,
-                                                  (n >= 1) << 31),
-                                    v);
-            }
-        }
-        else /* sizeof(T) == sizeof(uint64_t) */ {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512F) {
-                _mm_mask_compressstoreu_epi64((T * const)arr,
-                                              (1UL << n) - 1,
-                                              v);
-            }
-            else {
-                _mm_maskstore_epi64((T * const)arr,
-                                    _mm_set_epi64x(((uint64_t)(n >= 2)) << 63,
-                                                   ((uint64_t)(n >= 1)) << 63),
-                                    v);
-            }
-        }
-    }
-    else if constexpr (sizeof(vec_t<T, n>) == sizeof(__m256i)) {
-        if constexpr (sizeof(T) == sizeof(uint8_t)) {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512BW) {
-                _mm256_mask_compressstoreu_epi8((T * const)arr,
-                                                (1UL << n) - 1,
-                                                v);
-            }
-            else {
-                _mm256_maskstore_epi32((int32_t * const)arr,
-                                       _mm256_set_epi32((n >= 32) << 31,
-                                                        (n >= 28) << 31,
-                                                        (n >= 24) << 31,
-                                                        (n >= 20) << 31,
-                                                        (n >= 16) << 31,
-                                                        (n >= 12) << 31,
-                                                        (n >= 8) << 31,
-                                                        (n >= 4) << 31),
-                                       v);
-                if constexpr (n % (sizeof(uint32_t) / sizeof(T))) {
-                    constexpr uint32_t rounded_n =
-                        n & (~((sizeof(uint32_t) / sizeof(T)) - 1));
-                    constexpr uint32_t shift = 8 * sizeof(T);
-
-                    const uint32_t remainder = _mm256_extract_epi32(
-                        v,
-                        n / (sizeof(uint32_t) / sizeof(T)));
-                    arr[rounded_n] = remainder & ((1 << shift) - 1);
-                    if constexpr ((n % (sizeof(uint32_t) / sizeof(T))) > 1) {
-                        arr[rounded_n + 1] =
-                            (remainder >> shift) & ((1 << shift) - 1);
-                    }
-                    if constexpr ((n % (sizeof(uint32_t) / sizeof(T))) > 2) {
-                        arr[rounded_n + 2] =
-                            (remainder >> (2 * shift)) & ((1 << shift) - 1);
-                    }
-                }
-            }
-        }
-        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512BW) {
-                _mm256_mask_compressstoreu_epi16((T * const)arr,
-                                                 (1UL << n) - 1,
-                                                 v);
-            }
-            else {
-                _mm256_maskstore_epi32((int32_t * const)arr,
-                                       _mm256_set_epi32((n >= 16) << 31,
-                                                        (n >= 14) << 31,
-                                                        (n >= 12) << 31,
-                                                        (n >= 10) << 31,
-                                                        (n >= 8) << 31,
-                                                        (n >= 6) << 31,
-                                                        (n >= 4) << 31,
-                                                        (n >= 2) << 31),
-                                       v);
-                if constexpr (n % (sizeof(uint32_t) / sizeof(T))) {
-                    constexpr uint32_t rounded_n =
-                        n & (~((sizeof(uint32_t) / sizeof(T)) - 1));
-                    constexpr uint32_t shift = 8 * sizeof(T);
-
-                    const uint32_t remainder = _mm256_extract_epi32(
-                        v,
-                        n / (sizeof(uint32_t) / sizeof(T)));
-                    arr[rounded_n] = remainder & ((1 << shift) - 1);
-                }
-            }
-        }
-        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512F) {
-                _mm256_mask_compressstoreu_epi32((T * const)arr,
-                                                 (1UL << n) - 1,
-                                                 v);
-            }
-            else {
-                _mm256_maskstore_epi32((int32_t * const)arr,
-                                       _mm256_set_epi32((n >= 8) << 31,
-                                                        (n >= 7) << 31,
-                                                        (n >= 6) << 31,
-                                                        (n >= 5) << 31,
-                                                        (n >= 4) << 31,
-                                                        (n >= 3) << 31,
-                                                        (n >= 2) << 31,
-                                                        (n >= 1) << 31),
-                                       v);
-            }
-        }
-        else /* sizeof(T) == sizeof(uint64_t) */ {
-            if constexpr (simd_set >= simd_instructions::AVX512 &&
-                          internal::avail_instructions::AVX512VL &&
-                          internal::avail_instructions::AVX512F) {
-
-                _mm256_mask_compressstoreu_epi64((T * const)arr,
-                                                 (1UL << n) - 1,
-                                                 v);
-            }
-            else {
-                _mm256_maskstore_epi64((T * const)arr,
-                                       _mm256_set_epi64x((n >= 4) << 31,
-                                                         (n >= 3) << 31,
-                                                         (n >= 2) << 31,
-                                                         (n >= 1) << 31),
-                                       v);
-            }
-        }
-    }
-    else /* sizeof(vec_t<T, n>) == sizeof(__m512i) */ {
-        if constexpr (sizeof(T) == sizeof(uint8_t)) {
-            _mm512_mask_compressstoreu_epi8((T * const)arr, (1UL << n) - 1, v);
-        }
-        else if constexpr (sizeof(T) == sizeof(uint16_t)) {
-            _mm512_mask_compressstoreu_epi16((T * const)arr, (1UL << n) - 1, v);
-        }
-        else if constexpr (sizeof(T) == sizeof(uint32_t)) {
-            _mm512_mask_compressstoreu_epi32((T * const)arr, (1UL << n) - 1, v);
-        }
-        else /* sizeof(T) == sizeof(uint64_t) */ {
-            _mm512_mask_compressstoreu_epi64((T * const)arr, (1UL << n) - 1, v);
-        }
-    }
-}
-
-template<typename T,
-         uint32_t          n,
+         uint32_t          aligned,
+         uint32_t          extra_memory,
          simd_instructions simd_set = vop::simd_instructions_default>
 constexpr void ALWAYS_INLINE
-vec_storeu(T * const arr, vec_t<T, n> v) {
-    if constexpr (is_pow2(n)) {
-        if constexpr (sizeof(T) * n <= sizeof(__m64)) {
-            memcpy(arr, &v, n * sizeof(T));
-        }
-        else if constexpr (sizeof(T) * n <= sizeof(__m128i)) {
-            return _mm_storeu_si128((__m128i *)arr, v);
-        }
-        else if constexpr (sizeof(T) * n <= sizeof(__m256i)) {
-            return _mm256_storeu_si256((__m256i *)arr, v);
-        }
-        else {
-            return _mm512_storeu_si512((__m512i *)arr, v);
-        }
-    }
-    else {
-        vec_store_np<T, n, simd_set>(arr, v);
-    }
+vec_store(T * const arr, vec_t<T, n> v) {
+    using vec_ops = typename internal::
+        vector_ops<T, simd_set, BUILTIN_FIRST, sizeof(vec_t<T, n>)>;
+    vec_ops::template vec_store<n, aligned, extra_memory>(arr, v);
 }
 
-template<typename T,
-         uint32_t          n,
-         simd_instructions simd_set = vop::simd_instructions_default>
-constexpr void ALWAYS_INLINE
-vec_storea(T * const arr, vec_t<T, n> v) {
-    if constexpr (is_pow2(n)) {
-        if constexpr (sizeof(T) * n <= sizeof(__m64)) {
-            memcpy(arr, &v, n * sizeof(T));
-        }
-        else if constexpr (sizeof(T) * n <= sizeof(__m128i)) {
-            return _mm_store_si128((__m128i *)arr, v);
-        }
-        else if constexpr (sizeof(T) * n <= sizeof(__m256i)) {
-            return _mm256_store_si256((__m256i *)arr, v);
-        }
-        else {
-            return _mm512_store_si512((__m512i *)arr, v);
-        }
-    }
-    else {
-        vec_store_np<T, n, simd_set>(arr, v);
-    }
-}
 
 template<typename T,
          uint32_t          n,

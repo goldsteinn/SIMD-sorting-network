@@ -54,7 +54,7 @@ struct sarr {
 };
 
 
-enum SORT { SSORT = 0, VSORT = 1, USORT = 2 };
+enum SORT { SSORT = 0, SORTA = 1, SORTU = 2, SORTAE = 3, SORTUE = 4 };
 template<SORT s,
          typename T,
          uint32_t n,
@@ -67,11 +67,17 @@ ALIGN_ATTR(64) do_sort(T * arr) {
     if constexpr (s == SSORT) {
         std::sort(arr, arr + n);
     }
-    else if constexpr (s == VSORT) {
+    else if constexpr (s == SORTA) {
         vsort::sorta<T, n, network_algorithm, simd_set, builtin_perm>(arr);
     }
-    else {
+    else if constexpr (s == SORTU) {
         vsort::sortu<T, n, network_algorithm, simd_set, builtin_perm>(arr);
+    }
+    else if constexpr (s == SORTAE) {
+        vsort::sortae<T, n, network_algorithm, simd_set, builtin_perm>(arr);
+    }
+    else {
+        vsort::sortue<T, n, network_algorithm, simd_set, builtin_perm>(arr);
     }
 }
 
@@ -88,15 +94,23 @@ corr_test() {
     sarr<T, n>                s1;
     sarr<T, n>                s2;
     sarr<T, n>                s3;
+    sarr<T, n>                s4;
+    sarr<T, n>                s5;
 
     uint32_t i = 0;
     for (i = 0; i < tsize; ++i) {
         s1.randomize();
         memcpy(s2.arr, s1.arr, 64);
         memcpy(s3.arr, s1.arr, 64);
+        memcpy(s4.arr, s1.arr, 64);
+        memcpy(s5.arr, s1.arr, 64);
         do_sort<SSORT, T, n, network_algorithm, simd_set, builtin_perm>(s1.arr);
-        do_sort<VSORT, T, n, network_algorithm, simd_set, builtin_perm>(s2.arr);
-        do_sort<USORT, T, n, network_algorithm, simd_set, builtin_perm>(s3.arr);
+        do_sort<SORTA, T, n, network_algorithm, simd_set, builtin_perm>(s2.arr);
+        do_sort<SORTU, T, n, network_algorithm, simd_set, builtin_perm>(s3.arr);
+        do_sort<SORTAE, T, n, network_algorithm, simd_set, builtin_perm>(
+            s4.arr);
+        do_sort<SORTUE, T, n, network_algorithm, simd_set, builtin_perm>(
+            s5.arr);
         if (!(!memcmp(s1.arr, s2.arr, 64))) {
             fprintf(stderr,
                     "FAILED : [A][%zu][%d][%d][%d]\n",
@@ -108,6 +122,24 @@ corr_test() {
         if (!(!memcmp(s1.arr, s3.arr, 64))) {
             fprintf(stderr,
                     "FAILED : [U][%zu][%d][%d][%d]\n",
+                    sizeof(T),
+                    n,
+                    (uint32_t)simd_set,
+                    (uint32_t)builtin_perm);
+            break;
+        }
+        if (!(!memcmp(s1.arr, s4.arr, 64))) {
+            fprintf(stderr,
+                    "FAILED : [AE][%zu][%d][%d][%d]\n",
+                    sizeof(T),
+                    n,
+                    (uint32_t)simd_set,
+                    (uint32_t)builtin_perm);
+            break;
+        }
+        if (!(!memcmp(s1.arr, s5.arr, 64))) {
+            fprintf(stderr,
+                    "FAILED : [UE][%zu][%d][%d][%d]\n",
                     sizeof(T),
                     n,
                     (uint32_t)simd_set,
@@ -139,7 +171,7 @@ perf_test() {
     for (uint32_t i = 0; i < tsize; ++i) {
         s.randomize();
         uint64_t start = _rdtsc();
-        do_sort<VSORT, T, n, network_algorithm, simd_set, builtin_perm>(s.arr);
+        do_sort<SORTAE, T, n, network_algorithm, simd_set, builtin_perm>(s.arr);
         uint64_t end = _rdtsc();
 
 

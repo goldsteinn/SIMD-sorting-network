@@ -69,6 +69,7 @@ generate_sort(vop::vec_t<T, n> v) {
         network{});
 }
 
+
 }  // namespace sortgen
 }  // namespace vsort
 
