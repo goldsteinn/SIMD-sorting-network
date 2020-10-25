@@ -54,7 +54,7 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m64)> {
     template<uint32_t partial_n, uint32_t aligned, uint32_t extra_memory>
     static constexpr void ALWAYS_INLINE
     vec_store(T * const arr, __m64 v) {
-        memcpy(arr, &v, partial_n * sizeof(T));
+        memcpoy(arr, &v, partial_n * sizeof(T));
     }
 
     template<uint32_t partial_n, uint32_t... indices>
@@ -1457,7 +1457,6 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
         else if constexpr (sizeof(T) == sizeof(uint32_t)) {
             if constexpr (shuffle_mask) {
                 // AVX2
-
                 return _mm256_shuffle_epi32(v, shuffle_mask);
             }
             else if constexpr (vop_support::in_same_lanes) {

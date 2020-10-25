@@ -4,7 +4,6 @@ import cpufeature
 import copy
 from enum import Enum
 import traceback
-import sys
 
 
 def err_assert(check, msg):
@@ -12,6 +11,15 @@ def err_assert(check, msg):
         print("Error: " + msg)
         traceback.print_stack()
         exit(-1)
+
+
+def arr_to_str(arr):
+    arr_str = ""
+    for i in range(0, len(arr)):
+        arr_str += str(arr[i])
+        if i != len(arr) - 1:
+            arr_str += "\n"
+    return arr_str
 
 
 def arr_to_csv(arr, HEX=None):
@@ -26,9 +34,57 @@ def arr_to_csv(arr, HEX=None):
     return arr_str
 
 
-SIMD_RESTRICTIONS = "AVX512"
+SIMD_RESTRICTIONS = ""
 ALIGNED_ACCESS = False
 EXTRA_MEMORY = False
+
+
+class Headers():
+    def __init__(self):
+        self.aliasing_m64 = False
+        self.aliasing_int16 = False
+        self.xmmintrin = False
+        self.immintrin = False
+        self.stdint = True
+
+    def reset(self):
+        self.aliasing_m64 = False
+        self.aliasing_int16 = False
+        self.xmmintrin = False
+        self.immintrin = False
+        self.stdint = True
+
+    def get_headers(self, sort_type):
+        ret = ""
+        if self.xmmintrin is True:
+            ret += "#include <xmmintrin.h>"
+            ret += "\n"
+        if self.immintrin is True:
+            ret += "#include <immintrin.h>"
+            ret += "\n"
+        if self.stdint is True:
+            ret += "#include <stdint.h>"
+            ret += "\n"
+        ret += "\n"
+
+        if self.aliasing_m64 is True:
+            alignment = sort_type.sizeof()
+            if ALIGNED_ACCESS is True:
+                alignment = 8
+            ret += "typedef __m64 _aliasing_m64_ __attribute__((aligned({}), may_alias))".format(
+                alignment)
+            ret += "\n"
+        if self.aliasing_int16 is True:
+            alignment = sort_type.sizeof()
+            if ALIGNED_ACCESS is True:
+                alignment = max(alignment, 2)
+            ret += "typedef uint16_t _aliasing_int16_t_ __attribute__((aligned({}), may_alias))".format(
+                alignment)
+            ret += "\n"
+        return ret
+
+
+header = Headers()
 
 ######################################################################
 # Instruction Generation
@@ -131,13 +187,13 @@ class SIMD_m512():
 
 
 def get_simd_type(sort_bytes):
-    if sort_bytes == SIMD_m64().sizeof():
+    if sort_bytes <= SIMD_m64().sizeof():
         return SIMD_m64()
-    elif sort_bytes == SIMD_m128().sizeof():
+    elif sort_bytes <= SIMD_m128().sizeof():
         return SIMD_m128()
-    elif sort_bytes == SIMD_m256().sizeof():
+    elif sort_bytes <= SIMD_m256().sizeof():
         return SIMD_m256()
-    elif sort_bytes == SIMD_m512().sizeof():
+    elif sort_bytes <= SIMD_m512().sizeof():
         return SIMD_m512()
     else:
         err_assert(False, "No matching SIMD type")
@@ -176,31 +232,31 @@ class Sort_Type():
     def sizeof_bits(self):
         return 8 * self.sizeof()
 
+    def to_string(self):
+        if self.sign == Sign.SIGNED:
+            return self.signed_casts[self.size]
+        elif self.sign == Sign.UNSIGNED:
+            return self.unsigned_casts[self.size]
+        else:
+            err_assert(False, "unable to find type")
+
     def min_value(self):
-        cast = "None"
         val = 0
         if self.sign == Sign.SIGNED:
-            cast = self.signed_casts[self.size]
             val = (int(1) << (self.sizeof_bits() - 1))
         elif self.sign == Sign.UNSIGNED:
-            cast = self.unsigned_casts[self.size]
             val = 0
 
-        err_assert(cast != "None", "no cast for type")
-        return "{}({})".format(cast, str(hex(val)))
+        return "{}({})".format(self.to_string(), str(hex(val)))
 
     def max_value(self):
-        cast = "None"
         val = 0
         if self.sign == Sign.SIGNED:
-            cast = self.signed_casts[self.size]
             val = (int(1) << (self.sizeof_bits() - 1)) - 1
         elif self.sign == Sign.UNSIGNED:
-            cast = self.unsigned_casts[self.size]
             val = (int(1) << (self.sizeof_bits())) - 1
 
-        err_assert(cast != "None", "no cast for type")
-        return "{}({})".format(cast, str(hex(val)))
+        return "{}({})".format(self.to_string(), str(hex(val)))
 
 
 class Match_Info():
@@ -218,6 +274,7 @@ class SIMD_Instruction():
         self.simd_type = simd_type
         self.iname = iname
         self.SIMD_constraints = SIMD_Constraints(constraints)
+        self.constraints = constraints
         self.weight = weight
 
     def match(self, match_info):
@@ -977,7 +1034,7 @@ class SIMD_Shuffle_As_Epi64(SIMD_Instruction):
         return mask
 
     def generate_instruction(self):
-        return "_mm256_permute4x64_epi64([V], [SHUFFLE_MASK])".replace(
+        return "_mm256_permute4x64_epi64([V1], [SHUFFLE_MASK])".replace(
             "[SHUFFLE_MASK]", str(hex(self.shuffle_mask())))
 
 
@@ -1017,9 +1074,12 @@ class SIMD_Shuffle_As_Epi32(SIMD_Instruction):
         return shuffle_mask_impl(4, 4, 2, 0, shrink_perm(T_size, 4, self.perm))
 
     def generate_instruction(self):
-        return "{}_shuffle_epi32([V], [SHUFFLE_MASK])".format(
-            self.simd_type.prefix()).replace("[SHUFFLE_MASK]",
-                                             str(hex(self.shuffle_mask())))
+        mask_t = "uint8_t"
+        if self.simd_type.sizeof() == 64:
+            mask_t = "_MM_PERM_ENUM"
+        return "{}_shuffle_epi32([V1], [MASK_T]([SHUFFLE_MASK]))".format(
+            self.simd_type.prefix()).replace("[MASK_T]", mask_t).replace(
+                "[SHUFFLE_MASK]", str(hex(self.shuffle_mask())))
 
 
 class SIMD_Shuffle_As_Epi16(SIMD_Instruction):
@@ -1073,7 +1133,7 @@ class SIMD_Shuffle_As_Epi16(SIMD_Instruction):
         mask = self.shuffle_mask()
         shuffle_mask_lo = mask & 0xffffffff
         shuffle_mask_hi = (mask >> 32) & 0xffffffff
-        return "{}_shufflehi_epi16({}_shufflelo_epi16([V], [SHUFFLE_MASK_LO]), [SHUFFLE_MASK_HI])".format(
+        return "{}_shufflehi_epi16({}_shufflelo_epi16([V1], [SHUFFLE_MASK_LO]), [SHUFFLE_MASK_HI])".format(
             self.simd_type.prefix(), self.simd_type.prefix()).replace(
                 "[SHUFFLE_MASK_LO]",
                 str(hex(shuffle_mask_lo))).replace("[SHUFFLE_MASK_HI]",
@@ -1090,13 +1150,14 @@ class SIMD_Shuffle_As_Epi8(SIMD_Instruction):
     def match(self, match_info):
         return self.has_support() and self.match_sort_type(
             match_info.sort_type) and self.match_simd_type(
-                match_info.simd_type) and in_same_lanes(16, 1, self.perm)
+                match_info.simd_type) and in_same_lanes(
+                    16, self.T_size, self.perm)
 
     def generate_instruction(self):
         scaled_perm = scale_perm(self.T_size, 1, self.perm)
         list_perm = arr_to_csv(scaled_perm)
 
-        instruction = "{}_shuffle_epi8([V], {}_set_epi8([SHUFFLE_VEC]))".format(
+        instruction = "{}_shuffle_epi8([V1], {}_set_epi8([SHUFFLE_VEC]))".format(
             self.simd_type.prefix(),
             self.simd_type.prefix()).replace("[SHUFFLE_VEC]", list_perm)
 
@@ -1152,7 +1213,7 @@ class SIMD_Permutex_Fallback(SIMD_Instruction):
 
         instruction = "__m256i [TMP0] = _mm256_permute4x64_epi64(v, 0x4e);"
         instruction += "\n"
-        instruction += "__m256i [TMP1] = _mm256_shuffle_epi8([V], _mm256_set_epi8([SAME_LANE_VEC]));".replace(
+        instruction += "__m256i [TMP1] = _mm256_shuffle_epi8([V1], _mm256_set_epi8([SAME_LANE_VEC]));".replace(
             "[SAME_LANE_VEC]", same_lane_list_vec)
         instruction += "\n"
         instruction += "__m256i [TMP2] = _mm256_shuffle_epi8([TMP0], _mm256_set_epi8([OTHER_LANE_VEC]));".replace(
@@ -1177,7 +1238,7 @@ class SIMD_Permute():
         self.instructions = [
             ###################################################################
             SIMD_Permutex_Generate(
-                "_mm_shuffle_epi8([V], _mm_set_pi8([PERM_LIST]))", 1, perm,
+                "_mm_shuffle_epi8([V1], _mm_set_pi8([PERM_LIST]))", 1, perm,
                 SIMD_m64(), ["MMX", "SSSE3"], 0),
             SIMD_Shuffle_As_Epi16(2, perm, SIMD_m64(), ["SSE"], 0),
             ###################################################################
@@ -1200,7 +1261,7 @@ class SIMD_Permute():
             SIMD_Shuffle_As_Epi16(1, perm, SIMD_m256(), ["AVX2"], 2),
             SIMD_Shuffle_As_Epi8(1, perm, SIMD_m256(), ["AVX2"], 3),
             SIMD_Permutex_Generate(
-                "_mm256_permutexvar_epi8([V], _mm256_set_epi8([PERM_LIST]))",
+                "_mm256_permutexvar_epi8([V1], _mm256_set_epi8([PERM_LIST]))",
                 1, perm, SIMD_m256(), ["AVX512vbmi", "AVX512vl", "AVX"], 4),
             SIMD_Permutex_Fallback(1, perm, SIMD_m256(), ["AVX2", "AVX"], 5),
             # __m256i epi16 ordering
@@ -1209,7 +1270,7 @@ class SIMD_Permute():
             SIMD_Shuffle_As_Epi16(2, perm, SIMD_m256(), ["AVX2"], 2),
             SIMD_Shuffle_As_Epi8(2, perm, SIMD_m256(), ["AVX2"], 4),
             SIMD_Permutex_Generate(
-                "_mm256_permutexvar_epi16([V], _mm256_set_epi16([PERM_LIST]))",
+                "_mm256_permutexvar_epi16([V1], _mm256_set_epi16([PERM_LIST]))",
                 2, perm, SIMD_m256(), ["AVX512bw", "AVX512vl", "AVX"], 4),
             SIMD_Permutex_Fallback(2, perm, SIMD_m256(), ["AVX2", "AVX"], 5),
             # __m256i epi32 ordering
@@ -1217,7 +1278,7 @@ class SIMD_Permute():
             SIMD_Shuffle_As_Epi64(1, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Shuffle_As_Epi8(4, perm, SIMD_m256(), ["AVX2"], 2),
             SIMD_Permutex_Generate(
-                "_mm256_permutevar8x32_epi32([V], _mm256_set_epi32([PERM_LIST]))",
+                "_mm256_permutevar8x32_epi32([V1], _mm256_set_epi32([PERM_LIST]))",
                 4, perm, SIMD_m256(), ["AVX2", "AVX"], 3),
             # __m256i epi64 ordering
             SIMD_Shuffle_As_Epi32(8, perm, SIMD_m256(), ["AVX2"], 0),
@@ -1228,26 +1289,26 @@ class SIMD_Permute():
             SIMD_Shuffle_As_Epi16(1, perm, SIMD_m512(), ["AVX512bw"], 1),
             SIMD_Shuffle_As_Epi8(1, perm, SIMD_m512(), ["AVX512bw"], 2),
             SIMD_Permutex_Generate(
-                "_mm512_permutexvar_epi8([V], _mm512_set_epi8([PERM_LIST]))",
+                "_mm512_permutexvar_epi8([V1], _mm512_set_epi8([PERM_LIST]))",
                 1, perm, SIMD_m512(), ["AVX512vbmi", "AVX512f"], 3),
             # __m512i epi16 ordering
             SIMD_Shuffle_As_Epi32(2, perm, SIMD_m512(), ["AVX512f"], 0),
             SIMD_Shuffle_As_Epi16(2, perm, SIMD_m512(), ["AVX512bw"], 1),
             SIMD_Shuffle_As_Epi8(2, perm, SIMD_m512(), ["AVX512bw"], 2),
             SIMD_Permutex_Generate(
-                "_mm512_permutexvar_epi16([V], _mm512_set_epi16([PERM_LIST]))",
+                "_mm512_permutexvar_epi16([V1], _mm512_set_epi16([PERM_LIST]))",
                 2, perm, SIMD_m512(), ["AVX512bw", "AVX512f"], 3),
             # __m512i epi32 ordering
             SIMD_Shuffle_As_Epi32(4, perm, SIMD_m512(), ["AVX512f"], 0),
             SIMD_Shuffle_As_Epi8(4, perm, SIMD_m512(), ["AVX512bw"], 1),
             SIMD_Permutex_Generate(
-                "_mm512_permutexvar_epi32([V], _mm512_set_epi32([PERM_LIST]))",
+                "_mm512_permutexvar_epi32([V1], _mm512_set_epi32([PERM_LIST]))",
                 4, perm, SIMD_m512(), ["AVX512f"], 2),
             # __m512i epi64 ordering
             SIMD_Shuffle_As_Epi32(8, perm, SIMD_m512(), ["AVX512f"], 0),
             SIMD_Shuffle_As_Epi8(8, perm, SIMD_m512(), ["AVX512bw"], 1),
             SIMD_Permutex_Generate(
-                "_mm512_permutexvar_epi64([V], _mm512_set_epi64([PERM_LIST]))",
+                "_mm512_permutexvar_epi64([V1], _mm512_set_epi64([PERM_LIST]))",
                 8, perm, SIMD_m512(), ["AVX512f"], 2)
         ]
 
@@ -1280,9 +1341,9 @@ class SIMD_Full_Load(SIMD_Instruction):
 
 
 class SIMD_Partial_Load_m64(SIMD_Instruction):
-    def __init__(self, iname, sort_type, raw_N, simd_type, constraints,
-                 weight):
-        super().__init__(iname, Sign.NOT_SIGNED, sort_type.sizeof(), simd_type,
+    def __init__(self, sort_type, raw_N, simd_type, constraints, weight):
+        super().__init__("Override Error: " + self.__class__.__name__,
+                         Sign.NOT_SIGNED, sort_type.sizeof(), simd_type,
                          constraints, weight)
         self.raw_N = raw_N
         self.sort_type = sort_type
@@ -1296,7 +1357,7 @@ class SIMD_Partial_Load_m64(SIMD_Instruction):
             self.sort_type.sizeof_bits()).replace("[MAX]",
                                                   self.sort_type.max_value())
         instruction += "\n"
-        instruction += "memcpy(&[TMP0], [ARR], [SORT_BYTES]);".replace(
+        instruction += "__builtin_memcpy(&[TMP0], [ARR], [SORT_BYTES]);".replace(
             "[SORT_BYTES]", str(self.raw_N * self.sort_type.sizeof()))
         instruction += "\n"
         instruction += "[TMP0]"
@@ -1310,7 +1371,7 @@ class SIMD_Mask_Load(SIMD_Instruction):
                          constraints, weight)
         self.raw_N = raw_N
         self.sort_type = sort_type
-        
+
         # Booleans
         self.aligned = aligned
 
@@ -1379,7 +1440,7 @@ class SIMD_Mask_Load_Fallback_As_Epi32(SIMD_Instruction):
         set_arr_ret = []
         for i in range(0, len(set_arr)):
             set_arr_ret.append(set_arr[len(set_arr) - (i + 1)])
-            
+
         return set_arr_ret
 
     def build_load_bool_vec_lt(self):
@@ -1403,10 +1464,11 @@ class SIMD_Mask_Load_Fallback_As_Epi32(SIMD_Instruction):
         set_arr_ret = []
         for i in range(0, len(set_arr)):
             set_arr_ret.append(set_arr[len(set_arr) - (i + 1)])
-        
+
         return set_arr_ret
 
     def generate_instruction(self):
+        header.stdint = True
         if self.sort_type.sizeof() < 4:
             return self.generate_instruction_lt()
         else:
@@ -1416,7 +1478,7 @@ class SIMD_Mask_Load_Fallback_As_Epi32(SIMD_Instruction):
         load_bool_vec = self.build_load_bool_vec()
         list_load_bool_vec = arr_to_csv(load_bool_vec, True)
 
-        instruction = "{}_maskload_epi32({}_set_epi_32([LOAD_BOOLS]))".format(
+        instruction = "{}_maskload_epi32((int32_t * const)[ARR], {}_set_epi_32([LOAD_BOOLS]))".format(
             self.simd_type.prefix(),
             self.simd_type.prefix()).replace("[LOAD_BOOLS]",
                                              list_load_bool_vec)
@@ -1470,14 +1532,9 @@ class SIMD_Load():
     def __init__(self, raw_N, sort_type):
         self.instructions = [
             ###################################################################
-            SIMD_Full_Load("(*((_aliasing_m64_ *)[ARR]))", True, SIMD_m64(),
+            SIMD_Full_Load("(*((_aliasing_m64_ *)[ARR]))", False, SIMD_m64(),
                            ["MMX"], 0),
-            SIMD_Partial_Load_m64("(*((_aliasing_m64_ *)[ARR]))", sort_type,
-                                  raw_N, SIMD_m64(), ["MMX"], 1),
-            SIMD_Full_Load("(*((_aliasing_m64_ *)[ARR]))", True, SIMD_m64(),
-                           ["MMX"], 0),
-            SIMD_Partial_Load_m64("(*((_aliasing_m64_ *)[ARR]))", sort_type,
-                                  raw_N, SIMD_m64(), ["MMX"], 1),
+            SIMD_Partial_Load_m64(sort_type, raw_N, SIMD_m64(), ["MMX"], 1),
             ###################################################################
             # These are universal best instructions if applicable
             SIMD_Full_Load("_mm_load_si128((__m128i *)[ARR])", True,
@@ -1577,6 +1634,290 @@ class SIMD_Load():
 
 
 ######################################################################
+# Store
+
+# Store has similiar requirements and logic to load in that array size
+# and vec don't necessarily align.
+######################################################################
+
+
+class SIMD_Full_Store(SIMD_Instruction):
+    def __init__(self, iname, aligned, simd_type, constraints, weight):
+        # T_size doesn't matter, only register size
+        super().__init__(iname, Sign.NOT_SIGNED, 0, simd_type, constraints,
+                         weight)
+
+        # Booleans
+        self.aligned = aligned
+
+    def match(self, match_info):
+        return self.has_support() and self.match_simd_type(
+            match_info.simd_type) and (
+                (match_info.aligned is self.aligned) or
+                (self.aligned is False)) and (match_info.full is True)
+
+
+class SIMD_Mask_Store(SIMD_Instruction):
+    def __init__(self, iname, T_size, aligned, raw_N, simd_type, constraints,
+                 weight):
+        super().__init__(iname, Sign.NOT_SIGNED, T_size, simd_type,
+                         constraints, weight)
+        self.raw_N = raw_N
+        self.aligned = aligned
+
+    def match(self, match_info):
+        return self.has_support() and self.match_sort_type(
+            match_info.sort_type) and self.match_simd_type(
+                match_info.simd_type) and ((match_info.aligned is self.aligned)
+                                           or (self.aligned is False))
+
+    def generate_instruction(self):
+        return self.iname.replace("[LOAD_MASK]",
+                                  str(hex((int(1) << self.raw_N) - 1)))
+
+
+class SIMD_Partial_Store_m64(SIMD_Instruction):
+    def __init__(self, T_size, raw_N, simd_type, constraints, weight):
+        super().__init__("Override Error: " + self.__class__.__name__,
+                         Sign.NOT_SIGNED, T_size, simd_type, constraints,
+                         weight)
+
+        self.raw_N = raw_N
+
+    def generate_instruction(self):
+        err_assert(self.raw_N * self.T_size <= 8,
+                   "Invalid Partial_Store_m64 sort_bytes")
+        err_assert(self.simd_type.sizeof() == 8,
+                   "Using __m64 partial store for non __m64 register")
+
+        instruction = "__builtin_memcpy(&[V], [ARR], [SIZE])".replace(
+            "[SIZE]", str(self.raw_N * self.T_size))
+        return instruction
+
+
+class SIMD_Mask_Store_Fallback_As_Epi32(SIMD_Instruction):
+    def __init__(self, sort_type, raw_N, simd_type, constraints, weight):
+        super().__init__("Override Error: " + self.__class__.__name__,
+                         Sign.NOT_SIGNED, sort_type.sizeof(), simd_type,
+                         constraints, weight)
+        self.raw_N = raw_N
+        self.sort_type = sort_type
+
+    def build_store_bool_vec(self):
+        err_assert(self.simd_type.sizeof() > 8,
+                   self.__class__.__name__ + " not applicable for __m64")
+        if self.T_size < 4:
+            return self.build_store_bool_vec_lt()
+        else:
+            return self.build_store_bool_vec_ge()
+
+    def build_store_bool_vec_ge(self):
+        T_size = self.T_size
+        err_assert(T_size >= 4, "mask_load requires sizeof(T) >= 4")
+
+        SIMD_size = self.simd_type.sizeof()
+        err_assert(SIMD_size > 8, "mask_store not supported by __m64")
+
+        ele_per_register = int(SIMD_size / T_size)
+        scale = int(T_size / 4)
+        set_arr = []
+        for i in range(0, ele_per_register):
+            for j in range(0, scale):
+                if self.raw_N >= (i + 1):
+                    set_arr.append(int(1) << (31))
+                else:
+                    set_arr.append(0)
+
+        set_arr_ret = []
+        for i in range(0, len(set_arr)):
+            set_arr_ret.append(set_arr[len(set_arr) - (i + 1)])
+
+        return set_arr_ret
+
+    def build_store_bool_vec_lt(self):
+        T_size = self.T_size
+        err_assert(T_size < 4, "building fallback unnecissarily")
+
+        SIMD_size = self.simd_type.sizeof()
+        err_assert(SIMD_size > 8, "mask_store not supported by __m64")
+
+        ele_per_int32 = int(4 / T_size)
+        int32_per_register = int(SIMD_size / 4)
+
+        set_arr = []
+        for i in range(0, int32_per_register):
+            if self.raw_N >= ((i + 1) * ele_per_int32):
+                set_arr.append(int(1) << 31)
+            else:
+                set_arr.append(0)
+
+        err_assert(int32_per_register == len(set_arr), "didn't set all values")
+        set_arr_ret = []
+        for i in range(0, len(set_arr)):
+            set_arr_ret.append(set_arr[len(set_arr) - (i + 1)])
+
+        return set_arr_ret
+
+    def generate_instruction(self):
+        header.stdint = True
+        if self.T_size < 4:
+            return self.generate_instruction_lt()
+        else:
+            return self.generate_instruction_ge()
+
+    def generate_instruction_ge(self):
+        store_bool_vec = self.build_store_bool_vec()
+        list_store_bool_vec = arr_to_csv(store_bool_vec, True)
+
+        instruction = "{}_maskstore_epi32((int32_t * const)[ARR], {}_set_epi_32([STORE_BOOLS]), [V])".format(
+            self.simd_type.prefix(),
+            self.simd_type.prefix()).replace("[STORE_BOOLS]",
+                                             list_store_bool_vec)
+        return instruction
+
+    def generate_instruction_lt(self):
+        T_size = self.T_size
+        err_assert(T_size < 4, "building lt with T_size >= 4")
+        instruction = self.generate_instruction_ge()
+
+        round_base = int(4 / T_size)
+        if self.raw_N % round_base == 0:
+            return instruction
+
+        instruction += ";"
+        instruction += "\n"
+
+        remainder = self.raw_N % round_base
+        err_assert(round_base != 0, "fucked up my logic")
+
+        truncated_N = self.raw_N - remainder
+        err_assert(truncated_N % round_base == 0, "fucked up my math")
+
+        instruction += "const uint32_t [TMP0] = {}_extract_epi32([V], [TAIL_IDX]);".format(
+            self.simd_type.prefix()).replace("[TAIL_IDX]",
+                                             str(int(self.raw_N / round_base)))
+        instruction += "\n"
+
+        shift = 8 * T_size
+        mask = (int(1) << shift) - 1
+        if remainder == 0:
+            err_assert(False, "this should be impossible")
+        if remainder == 1:
+            instruction += "[ARR][[PLACE_IDX0]] = [TMP0] & [EXTRACT_MASK]".replace(
+                "[PLACE_IDX0]",
+                str(truncated_N)).replace("[EXTRACT_MASK]", str(hex(mask)))
+        if remainder >= 2:
+            header.aliasing_int16 = True
+            instruction += "((_aliasing_int16_t_ *)[ARR])[[PLACE_IDX0]] = [TMP0] & [EXTRACT_MASK]".replace(
+                "[PLACE_IDX0]",
+                str(int(truncated_N / ((int(2 / T_size)))))).replace(
+                    "[EXTRACT_MASK]", str(hex(mask | (mask << shift))))
+        if remainder == 3:
+            instruction += ";"
+            instruction += "\n"
+            instruction += "[ARR][[PLACE_IDX2]] = ([TMP0] >> SHIFT2) & [EXTRACT_MASK]".replace(
+                "[PLACE_IDX2]", str(truncated_N + 2)).replace(
+                    "[SHIFT2]",
+                    str(2 * shift)).replace("[EXTRACT_MASK]", str(hex(mask)))
+
+        return instruction
+
+
+class SIMD_Store():
+    def __init__(self, raw_N, sort_type):
+        self.instructions = [
+            ###################################################################
+            SIMD_Full_Store("(*((_aliasing_m64_ *)[ARR])) = [V]", False,
+                            SIMD_m64(), ["MMX"], 0),
+            SIMD_Partial_Store_m64(1, raw_N, SIMD_m64(), ["MMX"], 1),
+            SIMD_Partial_Store_m64(2, raw_N, SIMD_m64(), ["MMX"], 1),
+            ###################################################################
+            # Universal __m128i stores
+            SIMD_Full_Store("_mm_store_si128((__m128i *)[ARR], [V])", True,
+                            SIMD_m128(), ["SSE2"], 0),
+            SIMD_Full_Store("_mm_storeu_si128((__m128i *)[ARR], [V])", False,
+                            SIMD_m128(), ["SSE2"], 1),
+
+            # Universal fallback
+            SIMD_Mask_Store_Fallback_As_Epi32(sort_type, raw_N, SIMD_m128(),
+                                              ["AVX2", "SSE4.1"], 100),
+            SIMD_Mask_Store("_mm_mask_storeu_epi8((void *)[ARR], [V])", 1,
+                            False, raw_N, SIMD_m128(),
+                            ["AVX512bw", "AVX512vl"], 2),
+            SIMD_Mask_Store("_mm_mask_storeu_epi16((void *)[ARR], [V])", 2,
+                            False, raw_N, SIMD_m128(),
+                            ["AVX512bw", "AVX512vl"], 2),
+            SIMD_Mask_Store("_mm_mask_store_epi32((void *)[ARR], [V])", 4,
+                            True, raw_N, SIMD_m128(), ["AVX512f", "AVX512vl"],
+                            2),
+            SIMD_Mask_Store("_mm_mask_storeu_epi32((void *)[ARR], [V])", 4,
+                            False, raw_N, SIMD_m128(), ["AVX512f", "AVX512vl"],
+                            3),
+            SIMD_Mask_Store("_mm_mask_store_epi64((void *)[ARR], [V])", 4,
+                            True, raw_N, SIMD_m128(), ["AVX512f", "AVX512vl"],
+                            2),
+            SIMD_Mask_Store("_mm_mask_storeu_epi64((void *)[ARR], [V])", 8,
+                            False, raw_N, SIMD_m128(), ["AVX512f", "AVX512vl"],
+                            3),
+            ###################################################################
+            # Universal __m256i stores
+            SIMD_Full_Store("_mm256_store_si256((__m256i *)[ARR], [V])", True,
+                            SIMD_m256(), ["AVX"], 0),
+            SIMD_Full_Store("_mm256_storeu_si256((__m256i *)[ARR], [V])",
+                            False, SIMD_m256(), ["AVX"], 1),
+
+            # Universal fallback
+            SIMD_Mask_Store_Fallback_As_Epi32(sort_type, raw_N, SIMD_m256(),
+                                              ["AVX2", "AVX"], 100),
+            SIMD_Mask_Store("_mm256_mask_storeu_epi8((void *)[ARR], [V])", 1,
+                            False, raw_N, SIMD_m256(),
+                            ["AVX512bw", "AVX512vl"], 2),
+            SIMD_Mask_Store("_mm256_mask_storeu_epi16((void *)[ARR], [V])", 2,
+                            False, raw_N, SIMD_m256(),
+                            ["AVX512bw", "AVX512vl"], 2),
+            SIMD_Mask_Store("_mm256_mask_store_epi32((void *)[ARR], [V])", 4,
+                            True, raw_N, SIMD_m256(), ["AVX512f", "AVX512vl"],
+                            2),
+            SIMD_Mask_Store("_mm256_mask_storeu_epi32((void *)[ARR], [V])", 4,
+                            False, raw_N, SIMD_m256(), ["AVX512f", "AVX512vl"],
+                            3),
+            SIMD_Mask_Store("_mm256_mask_store_epi64((void *)[ARR], [V])", 4,
+                            True, raw_N, SIMD_m256(), ["AVX512f", "AVX512vl"],
+                            2),
+            SIMD_Mask_Store("_mm256_mask_storeu_epi64((void *)[ARR], [V])", 8,
+                            False, raw_N, SIMD_m256(), ["AVX512f", "AVX512vl"],
+                            3),
+            ###################################################################
+            # Universal __m512i stores
+            SIMD_Full_Store("_mm512_store_si512((__m512i *)[ARR], [V])", True,
+                            SIMD_m512(), ["AVX512f"], 0),
+            SIMD_Full_Store("_mm512_storeu_si512((__m512i *)[ARR], [V])",
+                            False, SIMD_m512(), ["AVX512f"], 1),
+
+            # Universal fallback
+            SIMD_Mask_Store("_mm512_mask_storeu_epi8((void *)[ARR], [V])", 1,
+                            False, raw_N, SIMD_m512(),
+                            ["AVX512bw", "AVX512vl"], 2),
+            SIMD_Mask_Store("_mm512_mask_storeu_epi16((void *)[ARR], [V])", 2,
+                            False, raw_N, SIMD_m512(),
+                            ["AVX512bw", "AVX512vl"], 2),
+            SIMD_Mask_Store("_mm512_mask_store_epi32((void *)[ARR], [V])", 4,
+                            True, raw_N, SIMD_m512(), ["AVX512f", "AVX512vl"],
+                            2),
+            SIMD_Mask_Store("_mm512_mask_storeu_epi32((void *)[ARR], [V])", 4,
+                            False, raw_N, SIMD_m512(), ["AVX512f", "AVX512vl"],
+                            3),
+            SIMD_Mask_Store("_mm512_mask_store_epi64((void *)[ARR], [V])", 4,
+                            True, raw_N, SIMD_m512(), ["AVX512f", "AVX512vl"],
+                            2),
+            SIMD_Mask_Store("_mm512_mask_storeu_epi64((void *)[ARR], [V])", 8,
+                            False, raw_N, SIMD_m512(), ["AVX512f", "AVX512vl"],
+                            3),
+            ###################################################################
+        ]
+
+
+######################################################################
 def instruction_filter(instructions,
                        sort_type,
                        simd_type,
@@ -1606,6 +1947,343 @@ def best_instruction(instructions):
 
 ######################################################################
 # Compare Exchange
+
+
+def make_returnable(raw_str, simd_type_str):
+    ops = raw_str.split("\n")
+    err_assert(len(ops) > 0, "empty string")
+    nops = len(ops)
+    ops[nops - 1] = "[VTYPE] [V] = " + ops[nops - 1] + ";"
+
+    out = ""
+    for op in ops:
+        out += op.replace("[VTYPE]", simd_type_str) + "\n"
+    return out
+
+
+def order_str_tmps(raw_str, base):
+    ntmps = 0
+    for i in range(0, 100):
+        new_tmps = raw_str.count("[TMP{}]".format(i))
+        if new_tmps == 0:
+            break
+        ntmps += 1
+
+    for i in range(0, ntmps):
+        raw_str = raw_str.replace("[TMP{}]".format(i),
+                                  "[TMP{}]".format(i + base))
+    return ntmps, raw_str
+
+
+class Output_Generator():
+    def __init__(self, header_info, CAS_info, algorithm_name, depth, N,
+                 sort_type):
+        self.header_info = header_info
+        self.CAS_info = CAS_info
+        self.algorithm_name = algorithm_name
+        self.N = N
+        self.sort_type = sort_type
+
+        self.simd_type = get_simd_type(N * sort_type.sizeof())
+        self.CAS_info_str = self.CAS_info.get()
+        self.loadnstore_ops = self.CAS_info.load.count(
+            self.simd_type.prefix()) + self.CAS_info.store.count(
+                self.simd_type.prefix())
+        self.logic_ops = self.CAS_info_str.count(
+            self.simd_type.prefix()) - self.loadnstore_ops
+
+        self.sort_to_str = "{}_{}_{}".format(algorithm_name, N,
+                                             sort_type.to_string())
+
+        full_load_and_store = EXTRA_MEMORY
+        if full_load_and_store is False:
+            full_load_and_store = N * sort_type.sizeof(
+            ) == self.simd_type.sizeof()
+
+        simd_restrictions = SIMD_RESTRICTIONS
+        if simd_restrictions != "":
+            simd_restrictions += "*"
+        else:
+            simd_restrictions = "None"
+
+        self.impl_info = [
+            "Sorting Network Information:",
+            "\tSort Size                        : {}".format(self.N),
+            "\tUnderlying Sort Type             : {}".format(
+                self.sort_type.to_string()),
+            "\tNetwork Generation Algorithm     : {}".format(algorithm_name),
+            "\tNetwork Depth                    : {}".format(depth),
+            "\tSIMD Instructions                : {} / {}".format(
+                self.loadnstore_ops, self.logic_ops),
+            "\tSIMD Type                        : {}".format(
+                self.simd_type.to_string()),
+            "\tSIMD Instruction Set(s) Used     : {}".format(
+                arr_to_csv(self.CAS_info.get_instruction_sets())),
+            "\tSIMD Instruction Set(s) Excluded : {}".format(
+                simd_restrictions),
+            "\tAligned Load & Store             : {}".format(
+                str(ALIGNED_ACCESS)),
+            "\tFull Load & Store                : {}".format(
+                str(full_load_and_store))
+        ]
+
+        self.perf_notes = [
+            "Performance Notes:",
+            "1) If you are sorting an array where there IS valid memory up to the nearest sizeof a SIMD register, you will get an improvement enable \"EXTRA_MEMORY\" (this turns on \"Full Load & Store\". Note that enabling \"Full Load & Store\" will not modify any of the memory not being sorted.",
+            "2) If your sort size is not a power of 2 you are likely running into less efficient instructions. This is especially noticable when sorting 8 bit and 16 bit values. If rounding you sort size up to the next power of 2 will not cost any additional depth it almost definetly worth doing so. The \"Best\" Network Algorithm automatically does this in many cases"
+        ]
+
+        for i in range(1, len(self.perf_notes)):
+            words = self.perf_notes[i].split()
+            self.perf_notes[i] = ""
+
+            line_len = 0
+            for w in words:
+                line_len += (len(w) + 1)
+                self.perf_notes[i] += w + " "
+                if line_len > 64:
+                    line_len = 0
+                    self.perf_notes[i] += "\n"
+
+            s = self.perf_notes[i].split("\n")
+            self.perf_notes[i] = s[0] + "\n"
+            for j in range(1, len(s)):
+                self.perf_notes[i] += "   " + s[j].strip()
+                if j != len(s) - 1:
+                    self.perf_notes[i] += "\n"
+
+    def get(self):
+        return self.get_header() + self.get_content() + self.get_tail()
+
+    def get_header(self):
+        head = "#ifndef _SIMD_SORT_{}_H_".format(self.sort_to_str)
+        head += "\n"
+        head += "#define _SIMD_SORT_{}_H_".format(self.sort_to_str)
+        head += "\n\n"
+        head += "/*"
+        head += "\n"
+        head += arr_to_str(self.impl_info)
+        head += "\n\n"
+        head += arr_to_str(self.perf_notes)
+        head += "\n"
+        head += " */"
+        head += "\n\n"
+        head += self.header_info.get_headers(self.sort_type)
+        head += "\n\n"
+
+        return head
+
+    def get_content(self):
+        return self.CAS_info.get().replace("[FUNCNAME]", self.sort_to_str)
+
+    def get_tail(self):
+        tail = "\n\n"
+        tail += "#endif"
+        return tail
+
+
+class CAS_Output_Generator():
+    def __init__(self, N, sort_type):
+        self.simd_type = get_simd_type(N * sort_type.sizeof())
+        self.sort_type = sort_type
+        self.N = N
+
+        self.load = ""
+        self.CAS = []
+        self.store = ""
+
+        self.constraints = []
+
+        self.tmp_count = 0
+
+        self.arr_name = "arr"
+        self.v_name = "v"
+        self.last_v_name = ""
+        self.tmp_name = "_tmp"
+
+        self.already_prepared_content = False
+
+    def append_cas(self, cas):
+        self.CAS.append(cas)
+        self.add_constraints(cas.constraints)
+
+    def add_constraints(self, constraints):
+        self.constraints += constraints
+
+    def add_load(self, load):
+        self.load = load
+
+    def add_store(self, store):
+        self.store = store
+
+    def get(self):
+        self.prepare_content()
+        return self.get_inner() + "\n\n\n" + self.get_wrapper()
+
+    def get_wrapper(self):
+        return self.get_wrapper_head() + "\n" + self.get_wrapper_content(
+        ) + "\n" + self.get_wrapper_tail()
+
+    def get_inner(self):
+        return self.get_inner_head() + "\n" + self.get_inner_content(
+        ) + "\n" + self.get_inner_tail()
+
+    def get_instruction_sets(self):
+        return list(dict.fromkeys(self.constraints))
+
+    def prepare_content(self):
+        if self.already_prepared_content is True:
+            return
+
+        self.already_prepared_content = True
+
+        self.load = make_returnable(self.load, self.simd_type.to_string())
+        self.tmp_count, self.load = order_str_tmps(self.load, 0)
+        for i in range(0, self.tmp_count):
+            self.load = self.load.replace("[TMP{}]".format(i),
+                                          "{}{}".format(self.tmp_name, i))
+        self.load = self.load.replace("[ARR]", self.arr_name)
+        self.load = self.load.replace("[V]", self.v_name)
+
+        for i in range(0, len(self.CAS)):
+            last_v = self.v_name
+            if i != 0:
+                last_v = "{}{}".format(self.v_name, i - 1)
+            v_names = [
+                "perm{}".format(i), "min{}".format(i), "max{}".format(i),
+                "{}{}".format(self.v_name, i)
+            ]
+            self.last_v_name = v_names[3]
+
+            self.tmp_count = self.CAS[i].make_operation(
+                last_v, v_names, self.tmp_count, self.tmp_name,
+                self.simd_type.to_string())
+
+        tmp_max, self.store = order_str_tmps(self.store, self.tmp_count)
+        for i in range(self.tmp_count, tmp_max):
+            self.store = self.store.replace("[TMP{}]".format(i),
+                                            "{}{}".format(self.tmp_name, i))
+
+        self.store = self.store.replace("[ARR]", self.arr_name)
+        self.store = self.store.replace("[V]", self.v_name)
+        self.store = self.store.replace("[VTYPE]", self.simd_type.to_string())
+        self.store += ";\n"
+
+    def get_wrapper_head(self):
+        head = "/* Wrapper For SIMD Sort */"
+        head += "\n"
+        head += "void inline __attribute__((always_inline)) [FUNCNAME]([VTYPE] * const [ARR]) {".replace(
+            "[ARR]", self.arr_name).replace("[VTYPE]",
+                                            self.sort_type.to_string())
+        head += "\n"
+        return head
+
+    def get_wrapper_content(self):
+        content = self.load
+        content += "[V] = [FUNCNAME]_vec([V]);".replace("[V]", self.v_name)
+        content += "\n"
+        content += self.store
+        return content
+
+    def get_wrapper_tail(self):
+        tail = "}\n"
+        return tail
+
+    def get_inner_head(self):
+        head = "/* SIMD Sort */"
+        head += "\n"
+        head += "[VTYPE] __attribute__((const)) [FUNCNAME]_vec([VTYPE] [V]) {".replace(
+            "[VTYPE]", self.simd_type.to_string()).replace("[V]", self.v_name)
+        head += "\n"
+        return head
+
+    def get_inner_content(self):
+        content = ""
+        for i in range(0, len(self.CAS)):
+            content += self.CAS[i].get_operation()
+            if i != len(self.CAS) - 1:
+                content += "\n"
+        return content
+
+    def get_inner_tail(self):
+        tail = "return [V];\n".replace("[V]", self.last_v_name)
+        tail += "}\n"
+        return tail
+
+
+class Compare_Exchange():
+    def __init__(self, raw_perm, raw_min, raw_max, raw_blend, constraints):
+        self.raw_perm = raw_perm
+        self.raw_min = raw_min
+        self.raw_max = raw_max
+        self.raw_blend = raw_blend
+
+        self.constraints = constraints
+
+        self.tmps_start = 0
+        self.tmps_end = 0
+
+    def get_operation(self):
+        return self.raw_perm + self.raw_min + self.raw_max + self.raw_blend
+
+    def make_operation(self, last_v, v_names, tmp_base, tmp_name,
+                       simd_type_str):
+        tmp_base = self.order_temporaries(tmp_base)
+        self.make_strings(last_v, v_names, tmp_name, simd_type_str)
+        return tmp_base
+
+    def make_strings(self, last_v, v_names, tmp_name, simd_type_str):
+        self.set_complete(simd_type_str)
+        self.set_v(v_names)
+        self.set_tmp(tmp_name)
+        self.set_input_arguments(last_v, v_names)
+
+    def set_complete(self, simd_type_str):
+        self.raw_perm = make_returnable(self.raw_perm, simd_type_str)
+        self.raw_min = make_returnable(self.raw_min, simd_type_str)
+        self.raw_max = make_returnable(self.raw_max, simd_type_str)
+        self.raw_blend = make_returnable(self.raw_blend, simd_type_str)
+
+    def set_v(self, v_names):
+        self.raw_perm = self.raw_perm.replace("[V]", v_names[0])
+        self.raw_min = self.raw_min.replace("[V]", v_names[1])
+        self.raw_max = self.raw_max.replace("[V]", v_names[2])
+        self.raw_blend = self.raw_blend.replace("[V]", v_names[3])
+
+    def set_tmp(self, tmp_name):
+        for i in range(self.tmps_start, self.tmps_end):
+            self.raw_perm = self.raw_perm.replace("[TMP{}]".format(i),
+                                                  "{}{}".format(tmp_name, i))
+            self.raw_min = self.raw_min.replace("[TMP{}]".format(i),
+                                                "{}{}".format(tmp_name, i))
+            self.raw_max = self.raw_max.replace("[TMP{}]".format(i),
+                                                "{}{}".format(tmp_name, i))
+            self.raw_blend = self.raw_blend.replace("[TMP{}]".format(i),
+                                                    "{}{}".format(tmp_name, i))
+
+    def set_input_arguments(self, last_v, v_names):
+        self.raw_perm = self.raw_perm.replace("[V1]", last_v)
+        self.raw_min = self.raw_min.replace("[V1]", last_v).replace(
+            "[V2]", v_names[0])
+        self.raw_max = self.raw_max.replace("[V1]", last_v).replace(
+            "[V2]", v_names[0])
+        self.raw_blend = self.raw_blend.replace("[V1]", v_names[2]).replace(
+            "[V2]", v_names[1])
+
+    def order_temporaries(self, base):
+        self.tmps_start = base
+        ntmps, self.raw_perm = order_str_tmps(self.raw_perm, base)
+        base += ntmps
+        ntmps, self.raw_min = order_str_tmps(self.raw_min, base)
+        base += ntmps
+        ntmps, self.raw_max = order_str_tmps(self.raw_max, base)
+        base += ntmps
+        ntmps, self.raw_blend = order_str_tmps(self.raw_blend, base)
+        base += ntmps
+        self.tmps_end = base
+        return base
+
+
 class Compare_Exchange_Generator():
     def __init__(self, pairs, N, sort_type):
         self.pairs = copy.deepcopy(pairs)
@@ -1615,27 +2293,46 @@ class Compare_Exchange_Generator():
         err_assert(self.simd_type.sizeof() >= self.sort_N * sort_type.sizeof(),
                    "invalid SIMD type selection")
 
+        header.immintrin = True
+        if self.simd_type.sizeof() == 8:
+            header.xmmintrin = True
+
         self.SIMD_min = instruction_filter(SIMD_Min().instructions,
                                            self.sort_type, self.simd_type)
-        self.SIMD_max = instruction_filter(SIMD_Min().instructions,
+        self.SIMD_max = instruction_filter(SIMD_Max().instructions,
                                            self.sort_type, self.simd_type)
 
-        do_full_load = EXTRA_MEMORY
-        if self.simd_type.sizeof() == N * sort_type.sizeof():
-            do_full_load = True
+        self.cas_output_generator = CAS_Output_Generator(N, sort_type)
 
-        print("DO_FULL_LOAD: " + str(do_full_load))
+        do_full = EXTRA_MEMORY
+        if self.simd_type.sizeof() == N * sort_type.sizeof():
+            do_full = True
+
+        if do_full is True and self.simd_type.sizeof() == 8:
+            header.aliasing_m64 = True
+
         self.SIMD_load = instruction_filter(
             SIMD_Load(N, sort_type).instructions, self.sort_type,
-            self.simd_type, ALIGNED_ACCESS, do_full_load)
+            self.simd_type, ALIGNED_ACCESS, do_full)
+
+        self.SIMD_store = instruction_filter(
+            SIMD_Store(N, sort_type).instructions, self.sort_type,
+            self.simd_type, ALIGNED_ACCESS, do_full)
 
     def Generate_Instructions(self):
         best_load = best_instruction(self.SIMD_load)
-        print(best_load.generate_instruction())
-        for i in range(0, int(len(self.pairs) / self.sort_N)):
-            self.Compare_Exchange(i)
+        self.cas_output_generator.add_constraints(best_load.constraints)
+        self.cas_output_generator.add_load(best_load.generate_instruction())
 
-    def Compare_Exchange(self, cas_idx):
+        for i in range(0, int(len(self.pairs) / self.sort_N)):
+            self.cas_output_generator.append_cas(self.Make_Compare_Exchange(i))
+
+        best_store = best_instruction(self.SIMD_store)
+        self.cas_output_generator.add_constraints(best_store.constraints)
+        self.cas_output_generator.add_store(best_store.generate_instruction())
+        return self.cas_output_generator
+
+    def Make_Compare_Exchange(self, cas_idx):
         cas_perm = []
         for i in range(cas_idx * self.sort_N, (cas_idx + 1) * self.sort_N):
             cas_perm.append(self.pairs[i])
@@ -1651,10 +2348,13 @@ class Compare_Exchange_Generator():
         best_max = best_instruction(self.SIMD_max)
         best_blend = best_instruction(SIMD_blend)
 
-        print(best_permutate.generate_instruction())
-        print(best_min.generate_instruction())
-        print(best_max.generate_instruction())
-        print(best_blend.generate_instruction())
+        compare_exchange = Compare_Exchange(
+            best_permutate.generate_instruction(),
+            best_min.generate_instruction(), best_max.generate_instruction(),
+            best_blend.generate_instruction(),
+            best_permutate.constraints + best_min.constraints +
+            best_max.constraints + best_blend.constraints)
+        return compare_exchange
 
 
 ######################################################################
@@ -1688,7 +2388,7 @@ class Transform():
 
         self.pairs = copy.deepcopy(pairs)
 
-        self.N_groups = -1
+        self.depth = -1
 
     def unidirectional(self):
         for i in range(0, len(self.pairs), 2):
@@ -1743,23 +2443,23 @@ class Transform():
             for j in range(0, len(grouped_pairs[i])):
                 self.pairs[pidx] = grouped_pairs[i][j]
                 pidx += 1
-        self.N_groups = len(grouped_pairs)
+        self.depth = len(grouped_pairs)
         err_assert(pidx == pairs_len,
                    "not all pairs processed {} != {}".format(pidx, pairs_len))
 
     def permutation(self):
-        err_assert(self.N_groups != -1, "permutating before grouping")
+        err_assert(self.depth != -1, "permutating before grouping")
 
         sort_N = sort_n(self.N, self.sort_type.sizeof())
 
         perm_arr = []
-        for i in range(0, self.N_groups * sort_N):
+        for i in range(0, self.depth * sort_N):
             perm_arr.append((sort_N - 1) - (i % sort_N))
 
         current_group = int(0)
         idx = 0
 
-        for i in range(0, self.N_groups):
+        for i in range(0, self.depth):
             while idx < len(self.pairs):
                 if (current_group &
                     (int(1) << int(self.pairs[idx]))) != int(0) or (
@@ -1867,12 +2567,12 @@ class Algorithms():
     def get_algorithm(self, algorithm):
 
         for i in range(0, len(self.algorithms)):
-            if algorithm == self.algorithms[i]:
+            if algorithm.lower() == self.algorithms[i]:
                 return self.implementations[i]
         err_assert(False, "No matching algorithm for " + algorithm)
 
     def valid_algorithm(self, algorithm):
-        return algorithm in self.algorithms
+        return algorithm.lower() in self.algorithms
 
 
 class Network():
@@ -1886,29 +2586,39 @@ class Network():
         self.N = N
         self.sort_type = sort_type
         self.algorithm = Algorithms(N).get_algorithm(algorithm_name)
+        self.depth = int(-1)
 
     def create_pairs(self):
         return self.algorithm.create_pairs()
 
-    def build_network(self):
+    def get_network(self):
         transformer = Transform(self.N, self.sort_type, self.create_pairs())
         transformer.group()
         transformer.permutation()
+        self.depth = transformer.depth
         return transformer.pairs
 
 
-sizes = [1, 2, 4, 8]
-for s in sizes:
-    n_max = int(32 / s) + 1
-    n_min = 4
-    if s == 1:
-        n_min = 8
-    for i in range(n_min, n_max):
-        print("[{}][{}]".format(s, i))
-        network = Network(i, Sort_Type(s, Sign.UNSIGNED), "bitonic")
+class Builder():
+    def __init__(self, N, sort_type, algorithm_name):
+        header.reset()
+        self.N = N
+        self.sort_type = sort_type
+        self.algorithm_name = algorithm_name
 
-        cas_generator = Compare_Exchange_Generator(network.build_network(),
-                                                   network.N,
-                                                   network.sort_type)
+        self.network = Network(N, sort_type, algorithm_name)
 
-        cas_generator.Generate_Instructions()
+        self.cas_generator = Compare_Exchange_Generator(
+            self.network.get_network(), self.network.N, self.network.sort_type)
+
+        self.cas_info = self.cas_generator.Generate_Instructions()
+
+    def Build(self):
+        full_output = Output_Generator(header, self.cas_info,
+                                       self.algorithm_name, self.network.depth,
+                                       self.N, self.sort_type)
+        return full_output.get()
+
+
+network_builder = Builder(64, Sort_Type(1, Sign.UNSIGNED), "Bitonic")
+print(network_builder.Build())
