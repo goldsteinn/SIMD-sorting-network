@@ -1288,6 +1288,7 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
 
         constexpr uint64_t blend_mask = vop_support::blend_mask;
         if constexpr (sizeof(T) == sizeof(uint8_t)) {
+            // optimize for blend_epi32
             if constexpr (simd_set >= simd_instructions::AVX512 &&
                           internal::avail_instructions::AVX512VL &&
                           internal::avail_instructions::AVX512BW) {

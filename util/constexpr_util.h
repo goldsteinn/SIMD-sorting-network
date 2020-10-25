@@ -40,7 +40,7 @@ ulog2(uint32_t v) {
 }
 
 template<typename T>
-constexpr T ALWAYS_INLINE CONST_ATTR
+constexpr T
 get_max() {
     if constexpr (std::is_signed<T>::value) {
         return (T)(((1UL) << (8 * sizeof(T) - 1)) - 1);

@@ -1,0 +1,116 @@
+#! /usr/bin/env python3
+
+import cpufeature
+import copy
+import enum
+
+
+def err_assert(check, msg):
+    if check is False:
+        print("Error: " + msg)
+        exit(-1)
+
+
+class SIMD_m64():
+    def __init__(self):
+        self.SIMD_constraints = SIMD_Constraints(["MMX"])
+
+    def type_to_string():
+        return "__m64"
+
+    def instruction_prefix():
+        return "_mm_"
+
+    def instruction_full_postfix():
+        return "_si64"
+
+    def sizeof():
+        return 8
+
+    def has_support(self):
+        return self.SIMD_constraints.has_support()
+
+
+class SIMD_m128():
+    def __init__(self):
+        self.SIMD_constraints = SIMD_Constraints(["SSE2"])
+
+    def type_to_string():
+        return "__m128i"
+
+    def instruction_prefix():
+        return "_mm_"
+
+    def instruction_full_postfix():
+        return "_si128"
+
+    def sizeof():
+        return 16
+
+    def has_support(self):
+        return self.SIMD_constraints.has_support()
+
+
+class SIMD_m256():
+    def __init__(self):
+        self.SIMD_constraints = SIMD_Constraints(["AVX2"])
+
+    def type_to_string():
+        return "__m256i"
+
+    def instruction_prefix():
+        return "_mm256_"
+
+    def instruction_full_postfix():
+        return "_si256"
+
+    def sizeof():
+        return 32
+
+    def has_support(self):
+        return self.SIMD_constraints.has_support()
+
+
+class SIMD_m512():
+    def __init__(self):
+        self.SIMD_constraints = SIMD_Constraints(["AVX512f"])
+
+    def type_to_string():
+        return "__m512i"
+
+    def instruction_prefix():
+        return "_mm512_"
+
+    def instruction_full_postfix():
+        return "_si512"
+
+    def sizeof():
+        return 32
+
+    def has_support(self):
+        return self.SIMD_constraints.has_support()
+
+
+class Signed(Enum):
+    SIGNED = 0
+    UNSIGNED = 1
+    NOT_SIGNED = 2
+
+
+class Sort_Type():
+    def __init__(self, size, signed):
+        self.size = int(size)
+        err_assert(
+            self.size == 1 or self.size == 2 or self.size == 4
+            or self.size == 8, "Invalid sort_type size")
+
+        self.signed = signed
+
+    def signed(self):
+        return self.signed
+
+    def sizeof(self):
+        return self.size
+
+    def sizeof_bits(self):
+        return 8 * self.sizeof()
