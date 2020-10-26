@@ -4,6 +4,7 @@ import cpufeature
 import copy
 from enum import Enum
 import traceback
+import itertools
 
 
 def err_assert(check, msg):
@@ -1218,6 +1219,7 @@ class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
         self.to_use = None
         self.modified_perm = None
         self.perm64_mask = None
+        self.modified_weight = False
 
     def match(self, match_info):
         return self.has_support() and self.match_sort_type(
@@ -1237,32 +1239,22 @@ class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
         mask = int(0)
         for i in range(0, N_lanes):
             first_p = scaled_perm[i * ele_per_lane]
-            target_lane = 3 - int(first_p / ele_per_lane)
-            err_assert((mask & (int(i) << (2 * target_lane))) == 0,
+            target_lane = int(first_p / ele_per_lane)
+            from_lane = (N_lanes - 1) - i
+            err_assert((mask & (int(from_lane) << (2 * target_lane))) == 0,
                        "overlapping lane assignments")
-            mask |= int(i) << (2 * target_lane)
+            mask |= int(from_lane) << (2 * target_lane)
         return mask
 
-    def shuffle_mask(self):
-        err_assert(self.simd_type.sizeof() == 32,
-                   "using lane reshuffle for none __m256i")
-        scaled_perm = scale_perm(self.T_size, 1, self.perm)
-        if grouped_by_lanes(8, 1, scaled_perm) is False:
-            return int(-1)
-
-        perm64_mask = self.perm64_shuffle_mask()
-        err_assert(perm64_mask != 0, "invalid perm64 mask")
-        err_assert((perm64_mask & 0xff) == perm64_mask, "invalid perm64 mask")
-
+    def create_mod_perm(self, scaled_perm, perm64_mask):
+        ele_per_epi64 = 8
         modified_perm_list = []
         for i in range(0, len(scaled_perm)):
             modified_perm_list.append(int(-1))
-
-        ele_per_epi64 = 8
-
+            
         for i in range(0, 8, 2):
-            to_idx = int(i / 2)
-            from_idx = (perm64_mask >> i) & 0x3
+            to_idx = 3 - int(i / 2)
+            from_idx = 3 - ((perm64_mask >> i) & 0x3)
             for j in range(0, ele_per_epi64):
                 tidx = to_idx * ele_per_epi64 + j
                 fidx = from_idx * ele_per_epi64 + j
@@ -1273,6 +1265,16 @@ class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
                 modified_perm_list[i] != int(-1),
                 "index {} not correctly set\n\t{}\n\t{}\n\t{}".format(
                     i, perm64_mask, str(self.perm), str(modified_perm_list)))
+        print("----------------------------------------------------------------------")
+        print("Mask: {}".format(hex(perm64_mask)))
+        print("Old : {}".format(str(self.perm)))
+        print("New : {}".format(str(modified_perm_list)))
+        print("----------------------------------------------------------------------")
+        return modified_perm_list
+
+    def test_possible_instructions(self, modified_perm_list):
+        if in_same_lanes(16, 1, modified_perm_list) is False:
+            return int(-1), None
 
         possible_instructions = [
             SIMD_Shuffle_As_Epi32(1, modified_perm_list, SIMD_m256(), ["AVX2"],
@@ -1283,25 +1285,58 @@ class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
                                  3)
         ]
 
-        err_assert(
-            in_same_lanes(16, 1, modified_perm_list) is True,
-            "fucked up my logic")
+       
 
         for i in range(0, len(possible_instructions)):
             if possible_instructions[i].match(
                     Match_Info(Sort_Type(1, Sign.UNSIGNED),
                                SIMD_m256())) is True:
-                if i != 0:
-                    # if we get epi16 or epi8 adjust weight based on
-                    # optimization strategy i.e if we are optimizing
-                    # for space then epi16 will add cost of 1 and epi8
-                    # cost of 2, otherwise will be reverse
-                    self.weight += choose_if(Optimization.SPACE, i, (3 - i))
+                return choose_if(Optimization.SPACE, i, (3 - i)), possible_instructions[i]
+        return int(-1), None
 
-                self.to_use = possible_instructions[i]
-                self.modified_perm = copy.deepcopy(modified_perm_list)
-                self.perm64_mask = perm64_mask
-                return int(0)
+        
+
+    def shuffle_mask(self):
+        err_assert(self.simd_type.sizeof() == 32,
+                   "using lane reshuffle for none __m256i")
+        scaled_perm = scale_perm(self.T_size, 1, self.perm)
+        if grouped_by_lanes(8, 1, scaled_perm) is False:
+            return int(-1)
+
+        min_weight = 100
+        best_p = None
+        best_perm64_mask = 0
+
+        all_perms = itertools.permutations([0, 1, 2, 3])
+        for perm64_lists in list(all_perms):
+            pmask = perm64_lists[0]
+            pmask |= perm64_lists[1] << 2
+            pmask |= perm64_lists[2] << 4
+            pmask |= perm64_lists[3] << 6
+            if pmask == 0xe4:
+                continue
+            rweight, p = self.test_possible_instructions(self.create_mod_perm(scaled_perm, pmask))
+            if rweight == int(-1):
+                continue
+            elif rweight < min_weight:
+                min_weight = rweight
+                best_p = p
+                best_perm64_mask = pmask
+
+        if min_weight != 100 and self.modified_weight is False:
+            # if we get epi16 or epi8 adjust weight based on
+            # optimization strategy i.e if we are optimizing
+            # for space then epi16 will add cost of 1 and epi8
+            # cost of 2, otherwise will be reverse
+            self.modified_weight = True
+            self.weight += min_weight
+
+            self.to_use = best_p
+            self.modified_perm = []
+            self.perm64_mask = best_perm64_mask
+
+        if min_weight != 100:
+            return int(0)
 
         return int(-1)
 
@@ -1362,7 +1397,7 @@ class SIMD_Permutex_Fallback(SIMD_Instruction):
         same_lane_list_vec = arr_to_csv(same_lane_vec)
         other_lane_list_vec = arr_to_csv(other_lane_vec)
 
-        instruction = "__m256i [TMP0] = _mm256_permute4x64_epi64(v, 0x4e);"
+        instruction = "__m256i [TMP0] = _mm256_permute4x64_epi64([V1], 0x4e);"
         instruction += "\n"
         instruction += "__m256i [TMP1] = _mm256_shuffle_epi8([V1], _mm256_set_epi8([SAME_LANE_VEC]));".replace(
             "[SAME_LANE_VEC]", same_lane_list_vec)
@@ -2208,9 +2243,9 @@ class Output_Generator():
 
         self.perf_notes = [
             "Performance Notes:",
-            "1) If you are sorting an array where there IS valid memory up to the nearest sizeof a SIMD register, you will get an improvement enable \"EXTRA_MEMORY\" (this turns on \"Full Load & Store\". Note that enabling \"Full Load & Store\" will not modify any of the memory not being sorted.",
+            "1) If you are sorting an array where there IS valid memory up to the nearest sizeof a SIMD register, you will get an improvement enable \"EXTRA_MEMORY\" (this turns on \"Full Load & Store\". Note that enabling \"Full Load & Store\" will not modify any of the memory not being sorted and will not affect the sort in any way. i.e sort(3) [4, 3, 2, 1] with full load will still return [2, 3, 4, 1].",
             "2) If your sort size is not a power of 2 you are likely running into less efficient instructions. This is especially noticable when sorting 8 bit and 16 bit values. If rounding you sort size up to the next power of 2 will not cost any additional depth it almost definetly worth doing so. The \"Best\" Network Algorithm automatically does this in many cases.",
-            "3) There are two optimization settings, \"Optimization.SPACE\" and \"Optimization.UOP\". The former will essentially break ties by picking the instruction that uses less memory (i.e doesn't have to store a register's initializing in memory. The latter will break ties but simply selecting whatever instructions use the least UOPs. Which is best is probably application dependent. Note that while \"Optimization.SPACE\" will save .data memory it will often cost more in .text memory."
+            "3) There are two optimization settings, \"Optimization.SPACE\" and \"Optimization.UOP\". The former will essentially break ties by picking the instruction that uses less memory (i.e doesn't have to store a register's initializing in memory. The latter will break ties but simply selecting whatever instructions use the least UOPs. Which is best is probably application dependent. Note that while \"Optimization.SPACE\" will save .rodata memory it will often cost more in .text memory."
         ]
 
         for i in range(1, len(self.perf_notes)):
@@ -2539,7 +2574,7 @@ class Compare_Exchange_Generator():
         return compare_exchange
 
 
-######################################################################
+
 ######################################################################
 # Network Generation
 ######################################################################
