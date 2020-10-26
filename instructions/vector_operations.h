@@ -1297,6 +1297,14 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
             }
             else {
                 // AVX2
+                fprintf(stderr,
+                        "------------------------------------------------------"
+                        "----------------\n");
+                fprintf(stderr, "Blend:\t");
+                show(typename vop_support::blend_vec_initialize{});
+                fprintf(stderr,
+                        "----------------------------------------------"
+                        "------------------------\n");
                 return _mm256_blendv_epi8(
                     v1,
                     v2,
@@ -1391,6 +1399,18 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
                     build_set_vec_wrapper<0>(
                         typename shuffle_across_lane_support<T, n, e...>::
                             across_lanes_other_vec_initialize{}));
+                fprintf(stderr,
+                        "------------------------------------------------------"
+                        "----------------\n");
+                fprintf(stderr, "Same:\t");
+                show(typename shuffle_across_lane_support<T, n, e...>::
+                         across_lanes_same_vec_initialize{});
+                fprintf(stderr, "Other:\t");
+                show(typename shuffle_across_lane_support<T, n, e...>::
+                         across_lanes_other_vec_initialize{});
+                fprintf(stderr,
+                        "----------------------------------------------"
+                        "------------------------\n");
                 // AVX2
                 return _mm256_or_si256(same_lane, other_lane);
             }

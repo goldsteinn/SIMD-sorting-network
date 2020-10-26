@@ -34,7 +34,22 @@ def arr_to_csv(arr, HEX=None):
     return arr_str
 
 
-SIMD_RESTRICTIONS = ""
+class Optimization(Enum):
+    SPACE = 0
+    UOP = 1
+
+
+INSTRUCTION_OPT = Optimization.SPACE
+
+
+def choose_if(Opt, weight1, weight2):
+    if Opt == INSTRUCTION_OPT:
+        return weight1
+    else:
+        return weight2
+
+
+SIMD_RESTRICTIONS = "AVX512"
 ALIGNED_ACCESS = False
 EXTRA_MEMORY = False
 
@@ -71,14 +86,14 @@ class Headers():
             alignment = sort_type.sizeof()
             if ALIGNED_ACCESS is True:
                 alignment = 8
-            ret += "typedef __m64 _aliasing_m64_ __attribute__((aligned({}), may_alias))".format(
+            ret += "typedef __m64 _aliasing_m64_ __attribute__((aligned({}), may_alias));".format(
                 alignment)
             ret += "\n"
         if self.aliasing_int16 is True:
             alignment = sort_type.sizeof()
             if ALIGNED_ACCESS is True:
                 alignment = max(alignment, 2)
-            ret += "typedef uint16_t _aliasing_int16_t_ __attribute__((aligned({}), may_alias))".format(
+            ret += "typedef uint16_t _aliasing_int16_t_ __attribute__((aligned({}), may_alias));".format(
                 alignment)
             ret += "\n"
         return ret
@@ -450,7 +465,7 @@ class SIMD_Min():
 class SIMD_Max_Fallback_m64_s8(SIMD_Instruction):
     def __init__(self, weight):
         super().__init__("Override Error: " + self.__class__.__name__,
-                         Sign.SIGNED, 1, SIMD_m64, ["MMX"], weight)
+                         Sign.SIGNED, 1, SIMD_m64(), ["MMX"], weight)
 
     def generate_instruction(self):
         instruction = "__m64 [TMP0] = _mm_cmpgt_pi8([V1], [V2]);"
@@ -462,7 +477,7 @@ class SIMD_Max_Fallback_m64_s8(SIMD_Instruction):
 class SIMD_Max_Fallback_m64_u16(SIMD_Instruction):
     def __init__(self, weight):
         super().__init__("Override Error: " + self.__class__.__name__,
-                         Sign.UNSIGNED, 2, SIMD_m64, ["MMX"], weight)
+                         Sign.UNSIGNED, 2, SIMD_m64(), ["MMX"], weight)
 
     def generate_instruction(self):
         instruction = "__m64 [TMP0] = _mm_set1_pi16(1 << 15);"
@@ -685,7 +700,7 @@ class SIMD_Blend_Generator(SIMD_Instruction):
                 # run can only be scale or -scale if
                 # all epi8/epi16 mapped the same way
                 if run == scale:
-                    blend_mask |= (int(1) << (int(i / 4)))
+                    blend_mask |= (int(1) << (int(i / scale)))
                 elif run == ((-1) * scale):
                     # do nothing
                     blend_mask = blend_mask
@@ -696,8 +711,16 @@ class SIMD_Blend_Generator(SIMD_Instruction):
 
         return blend_mask
 
+    def finalize_mask(self, blend_mask):
+        if self.T_target == 2:
+            # this is unique to epi16
+            return blend_mask & 0xff
+        else:
+            return blend_mask
+
     def generate_instruction(self):
-        return self.iname.replace("[BLEND_MASK]", str(hex(self.blend_mask())))
+        return self.iname.replace(
+            "[BLEND_MASK]", str(hex(self.finalize_mask(self.blend_mask()))))
 
 
 class SIMD_Blend_As_Epi8_Generator(SIMD_Instruction):
@@ -729,11 +752,14 @@ class SIMD_Blend_As_Epi8_Generator(SIMD_Instruction):
             n_shift_v != 0 and n_shift_v != N,
             "MISSED OPTIMIZATION AT BLEND_EPI8: {}".format(str(self.perm)))
 
-        return vec
+        ret_vec = []
+        for i in range(0, len(vec)):
+            ret_vec.append(vec[len(vec) - (i + 1)])
+        return ret_vec
 
     def generate_instruction(self):
         vec = self.blend_vec()
-        list_vec = arr_to_csv(vec, True)
+        list_vec = arr_to_csv(vec)
 
         instruction = "{}_blendv_epi8([V1], [V2], {}_set_epi8([BLEND_VEC]))".format(
             self.simd_type.prefix(),
@@ -933,6 +959,24 @@ def shuffle_mask_impl(lane_size, ele_per_lane, slot_bits, offset, perm):
         mask = lane_mask
 
     return mask
+
+
+def grouped_by_lanes(lane_size, T_size, perm):
+    N = len(perm)
+
+    ele_per_lane = int(lane_size / T_size)
+    N_lanes = int(N / ele_per_lane)
+
+    for i in range(0, N_lanes):
+        first_p = perm[i * ele_per_lane]
+        target_lane = int(first_p / ele_per_lane)
+        for j in range(ele_per_lane * i, ele_per_lane * (i + 1)):
+            p = perm[j]
+            if int(p / ele_per_lane) == target_lane:
+                continue
+            else:
+                return False
+    return True
 
 
 def in_same_lanes(lane_size, T_size, perm):
@@ -1164,6 +1208,113 @@ class SIMD_Shuffle_As_Epi8(SIMD_Instruction):
         return instruction
 
 
+class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
+    def __init__(self, T_size, perm, simd_type, constraints, weight):
+        super().__init__("Override Error: " + self.__class__.__name__,
+                         Sign.NOT_SIGNED, T_size, simd_type, constraints,
+                         weight)
+
+        self.perm = copy.deepcopy(perm)
+        self.to_use = None
+        self.modified_perm = None
+        self.perm64_mask = None
+
+    def match(self, match_info):
+        return self.has_support() and self.match_sort_type(
+            match_info.sort_type) and self.match_simd_type(
+                match_info.simd_type) and (self.shuffle_mask() != int(-1))
+
+    def perm64_shuffle_mask(self):
+        err_assert(self.simd_type.sizeof() == 32,
+                   "using lane reshuffle for none __m256i")
+        scaled_perm = scale_perm(self.T_size, 1, self.perm)
+        lane_size = 8
+        N = len(scaled_perm)
+
+        ele_per_lane = int(lane_size)
+        N_lanes = int(N / ele_per_lane)
+
+        mask = int(0)
+        for i in range(0, N_lanes):
+            first_p = scaled_perm[i * ele_per_lane]
+            target_lane = 3 - int(first_p / ele_per_lane)
+            err_assert((mask & (int(i) << (2 * target_lane))) == 0,
+                       "overlapping lane assignments")
+            mask |= int(i) << (2 * target_lane)
+        return mask
+
+    def shuffle_mask(self):
+        err_assert(self.simd_type.sizeof() == 32,
+                   "using lane reshuffle for none __m256i")
+        scaled_perm = scale_perm(self.T_size, 1, self.perm)
+        if grouped_by_lanes(8, 1, scaled_perm) is False:
+            return int(-1)
+
+        perm64_mask = self.perm64_shuffle_mask()
+        err_assert(perm64_mask != 0, "invalid perm64 mask")
+        err_assert((perm64_mask & 0xff) == perm64_mask, "invalid perm64 mask")
+
+        modified_perm_list = []
+        for i in range(0, len(scaled_perm)):
+            modified_perm_list.append(int(-1))
+
+        ele_per_epi64 = 8
+
+        for i in range(0, 8, 2):
+            to_idx = int(i / 2)
+            from_idx = (perm64_mask >> i) & 0x3
+            for j in range(0, ele_per_epi64):
+                tidx = to_idx * ele_per_epi64 + j
+                fidx = from_idx * ele_per_epi64 + j
+                modified_perm_list[tidx] = scaled_perm[fidx]
+
+        for i in range(0, len(modified_perm_list)):
+            err_assert(
+                modified_perm_list[i] != int(-1),
+                "index {} not correctly set\n\t{}\n\t{}\n\t{}".format(
+                    i, perm64_mask, str(self.perm), str(modified_perm_list)))
+
+        possible_instructions = [
+            SIMD_Shuffle_As_Epi32(1, modified_perm_list, SIMD_m256(), ["AVX2"],
+                                  0),
+            SIMD_Shuffle_As_Epi16(1, modified_perm_list, SIMD_m256(), ["AVX2"],
+                                  2),
+            SIMD_Shuffle_As_Epi8(1, modified_perm_list, SIMD_m256(), ["AVX2"],
+                                 3)
+        ]
+
+        err_assert(
+            in_same_lanes(16, 1, modified_perm_list) is True,
+            "fucked up my logic")
+
+        for i in range(0, len(possible_instructions)):
+            if possible_instructions[i].match(
+                    Match_Info(Sort_Type(1, Sign.UNSIGNED),
+                               SIMD_m256())) is True:
+                if i != 0:
+                    # if we get epi16 or epi8 adjust weight based on
+                    # optimization strategy i.e if we are optimizing
+                    # for space then epi16 will add cost of 1 and epi8
+                    # cost of 2, otherwise will be reverse
+                    self.weight += choose_if(Optimization.SPACE, i, (3 - i))
+
+                self.to_use = possible_instructions[i]
+                self.modified_perm = copy.deepcopy(modified_perm_list)
+                self.perm64_mask = perm64_mask
+                return int(0)
+
+        return int(-1)
+
+    def generate_instruction(self):
+        instruction = "{} [TMP0] = _mm256_permute4x64_epi64([V1], [SHUFFLE_MASK]);".format(
+            self.simd_type.to_string()).replace("[SHUFFLE_MASK]",
+                                                str(hex(self.perm64_mask)))
+        instruction += "\n"
+        instruction += self.to_use.generate_instruction().replace(
+            "[V1]", "[TMP0]")
+        return instruction
+
+
 class SIMD_Permutex_Fallback(SIMD_Instruction):
     def __init__(self, T_size, perm, simd_type, constraints, weight):
         super().__init__("Override Error: " + self.__class__.__name__,
@@ -1190,10 +1341,10 @@ class SIMD_Permutex_Fallback(SIMD_Instruction):
                     if cross_lane is True:
                         vec.append(1 << 7)
                     else:
-                        vec.append(p)
+                        vec.append(p % lane_size)
                 else:
                     if cross_lane is True:
-                        vec.append(p)
+                        vec.append(p % lane_size)
                     else:
                         vec.append(1 << 7)
         return vec
@@ -1238,18 +1389,22 @@ class SIMD_Permute():
         self.instructions = [
             ###################################################################
             SIMD_Permutex_Generate(
-                "_mm_shuffle_epi8([V1], _mm_set_pi8([PERM_LIST]))", 1, perm,
+                "_mm_shuffle_epi8(_mm_set_pi8([PERM_LIST]), [V1])", 1, perm,
                 SIMD_m64(), ["MMX", "SSSE3"], 0),
             SIMD_Shuffle_As_Epi16(2, perm, SIMD_m64(), ["SSE"], 0),
             ###################################################################
             # __m128i epi8 ordering
             SIMD_Shuffle_As_Epi32(1, perm, SIMD_m128(), ["SSE2"], 0),
-            SIMD_Shuffle_As_Epi16(1, perm, SIMD_m128(), ["SSE2"], 1),
-            SIMD_Shuffle_As_Epi8(1, perm, SIMD_m128(), ["SSSE3"], 2),
+            SIMD_Shuffle_As_Epi16(1, perm, SIMD_m128(), ["SSE2"],
+                                  choose_if(Optimization.SPACE, 1, 2)),
+            SIMD_Shuffle_As_Epi8(1, perm, SIMD_m128(), ["SSSE3"],
+                                 choose_if(Optimization.UOP, 2, 1)),
             # __m128i epi16 ordering
             SIMD_Shuffle_As_Epi32(2, perm, SIMD_m128(), ["SSE2"], 0),
-            SIMD_Shuffle_As_Epi16(2, perm, SIMD_m128(), ["SSE2"], 1),
-            SIMD_Shuffle_As_Epi8(2, perm, SIMD_m128(), ["SSSE3"], 2),
+            SIMD_Shuffle_As_Epi16(2, perm, SIMD_m128(), ["SSE2"],
+                                  choose_if(Optimization.SPACE, 1, 2)),
+            SIMD_Shuffle_As_Epi8(2, perm, SIMD_m128(), ["SSSE3"],
+                                 choose_if(Optimization.UOP, 1, 2)),
             # __m128i epi32 ordering
             SIMD_Shuffle_As_Epi32(4, perm, SIMD_m128(), ["SSE2"], 0),
             # __m128i epi32 ordering
@@ -1258,57 +1413,82 @@ class SIMD_Permute():
             # __m256i epi8 ordering
             SIMD_Shuffle_As_Epi32(1, perm, SIMD_m256(), ["AVX2"], 0),
             SIMD_Shuffle_As_Epi64(1, perm, SIMD_m256(), ["AVX2"], 1),
-            SIMD_Shuffle_As_Epi16(1, perm, SIMD_m256(), ["AVX2"], 2),
-            SIMD_Shuffle_As_Epi8(1, perm, SIMD_m256(), ["AVX2"], 3),
+            SIMD_Shuffle_As_Epi16(1, perm, SIMD_m256(), ["AVX2"],
+                                  choose_if(Optimization.SPACE, 2, 3)),
+            SIMD_Shuffle_As_Epi8(1, perm, SIMD_m256(), ["AVX2"],
+                                 choose_if(Optimization.UOP, 2, 3)),
             SIMD_Permutex_Generate(
-                "_mm256_permutexvar_epi8([V1], _mm256_set_epi8([PERM_LIST]))",
+                "_mm256_permutexvar_epi8(_mm256_set_epi8([PERM_LIST]), [V1])",
                 1, perm, SIMD_m256(), ["AVX512vbmi", "AVX512vl", "AVX"], 4),
-            SIMD_Permutex_Fallback(1, perm, SIMD_m256(), ["AVX2", "AVX"], 5),
+            SIMD_Permute_Move_Lanes_Shuffle(1, perm, SIMD_m256(),
+                                            ["AVX2", "AVX"], 5),
+            # this is a super poorly optimized case. irrelivant of what we select with Move_Lanes
+            SIMD_Permutex_Fallback(1, perm, SIMD_m256(), ["AVX2", "AVX"], 100),
             # __m256i epi16 ordering
             SIMD_Shuffle_As_Epi32(2, perm, SIMD_m256(), ["AVX2"], 0),
             SIMD_Shuffle_As_Epi64(1, perm, SIMD_m256(), ["AVX2"], 1),
-            SIMD_Shuffle_As_Epi16(2, perm, SIMD_m256(), ["AVX2"], 2),
-            SIMD_Shuffle_As_Epi8(2, perm, SIMD_m256(), ["AVX2"], 4),
+            SIMD_Shuffle_As_Epi16(2, perm, SIMD_m256(), ["AVX2"],
+                                  choose_if(Optimization.SPACE, 2, 3)),
+            SIMD_Shuffle_As_Epi8(2, perm, SIMD_m256(), ["AVX2"],
+                                 choose_if(Optimization.UOP, 2, 3)),
             SIMD_Permutex_Generate(
-                "_mm256_permutexvar_epi16([V1], _mm256_set_epi16([PERM_LIST]))",
+                "_mm256_permutexvar_epi16(_mm256_set_epi16([PERM_LIST]), [V1])",
                 2, perm, SIMD_m256(), ["AVX512bw", "AVX512vl", "AVX"], 4),
-            SIMD_Permutex_Fallback(2, perm, SIMD_m256(), ["AVX2", "AVX"], 5),
+            SIMD_Permute_Move_Lanes_Shuffle(2, perm, SIMD_m256(),
+                                            ["AVX2", "AVX"], 5),
+            # this is a super poorly optimized case. irrelivant of what we select with Move_Lanes
+            SIMD_Permutex_Fallback(2, perm, SIMD_m256(), ["AVX2", "AVX"], 100),
             # __m256i epi32 ordering
             SIMD_Shuffle_As_Epi32(4, perm, SIMD_m256(), ["AVX2"], 0),
             SIMD_Shuffle_As_Epi64(1, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Shuffle_As_Epi8(4, perm, SIMD_m256(), ["AVX2"], 2),
+
+            # these are setup so that if optimizing for space we will
+            # use Move_Lanes iff we can permute -> shuffle_epi32 (will
+            # cost 3, epi16 or epi8 will add +1/2 and ordering will
+            # take permutevar). If not optimizing for space then will
+            # always use permutevar
             SIMD_Permutex_Generate(
-                "_mm256_permutevar8x32_epi32([V1], _mm256_set_epi32([PERM_LIST]))",
-                4, perm, SIMD_m256(), ["AVX2", "AVX"], 3),
+                "_mm256_permutevar8x32_epi32(_mm256_set_epi32([PERM_LIST]), [V1])",
+                4, perm, SIMD_m256(), ["AVX2", "AVX"],
+                choose_if(Optimization.UOP, 3, 4)),
+            SIMD_Permute_Move_Lanes_Shuffle(
+                4, perm, SIMD_m256(), ["AVX2", "AVX"],
+                choose_if(Optimization.SPACE, 3, 4)),
+
             # __m256i epi64 ordering
             SIMD_Shuffle_As_Epi32(8, perm, SIMD_m256(), ["AVX2"], 0),
             SIMD_Shuffle_As_Epi64(8, perm, SIMD_m256(), ["AVX2"], 1),
             ###################################################################
             # __m512i epi8 ordering
             SIMD_Shuffle_As_Epi32(1, perm, SIMD_m512(), ["AVX512f"], 0),
-            SIMD_Shuffle_As_Epi16(1, perm, SIMD_m512(), ["AVX512bw"], 1),
-            SIMD_Shuffle_As_Epi8(1, perm, SIMD_m512(), ["AVX512bw"], 2),
+            SIMD_Shuffle_As_Epi16(1, perm, SIMD_m512(), ["AVX512bw"],
+                                  choose_if(Optimization.SPACE, 1, 2)),
+            SIMD_Shuffle_As_Epi8(1, perm, SIMD_m512(), ["AVX512bw"],
+                                 choose_if(Optimization.UOP, 1, 2)),
             SIMD_Permutex_Generate(
-                "_mm512_permutexvar_epi8([V1], _mm512_set_epi8([PERM_LIST]))",
+                "_mm512_permutexvar_epi8(_mm512_set_epi8([PERM_LIST]), [V1])",
                 1, perm, SIMD_m512(), ["AVX512vbmi", "AVX512f"], 3),
             # __m512i epi16 ordering
             SIMD_Shuffle_As_Epi32(2, perm, SIMD_m512(), ["AVX512f"], 0),
-            SIMD_Shuffle_As_Epi16(2, perm, SIMD_m512(), ["AVX512bw"], 1),
-            SIMD_Shuffle_As_Epi8(2, perm, SIMD_m512(), ["AVX512bw"], 2),
+            SIMD_Shuffle_As_Epi16(2, perm, SIMD_m512(), ["AVX512bw"],
+                                  choose_if(Optimization.SPACE, 1, 2)),
+            SIMD_Shuffle_As_Epi8(2, perm, SIMD_m512(), ["AVX512bw"],
+                                 choose_if(Optimization.UOP, 1, 2)),
             SIMD_Permutex_Generate(
-                "_mm512_permutexvar_epi16([V1], _mm512_set_epi16([PERM_LIST]))",
+                "_mm512_permutexvar_epi16(_mm512_set_epi16([PERM_LIST]), [V1])",
                 2, perm, SIMD_m512(), ["AVX512bw", "AVX512f"], 3),
             # __m512i epi32 ordering
             SIMD_Shuffle_As_Epi32(4, perm, SIMD_m512(), ["AVX512f"], 0),
             SIMD_Shuffle_As_Epi8(4, perm, SIMD_m512(), ["AVX512bw"], 1),
             SIMD_Permutex_Generate(
-                "_mm512_permutexvar_epi32([V1], _mm512_set_epi32([PERM_LIST]))",
+                "_mm512_permutexvar_epi32(_mm512_set_epi32([PERM_LIST]), [V1])",
                 4, perm, SIMD_m512(), ["AVX512f"], 2),
             # __m512i epi64 ordering
             SIMD_Shuffle_As_Epi32(8, perm, SIMD_m512(), ["AVX512f"], 0),
             SIMD_Shuffle_As_Epi8(8, perm, SIMD_m512(), ["AVX512bw"], 1),
             SIMD_Permutex_Generate(
-                "_mm512_permutexvar_epi64([V1], _mm512_set_epi64([PERM_LIST]))",
+                "_mm512_permutexvar_epi64(_mm512_set_epi64([PERM_LIST]), [V1])",
                 8, perm, SIMD_m512(), ["AVX512f"], 2)
         ]
 
@@ -1478,7 +1658,7 @@ class SIMD_Mask_Load_Fallback_As_Epi32(SIMD_Instruction):
         load_bool_vec = self.build_load_bool_vec()
         list_load_bool_vec = arr_to_csv(load_bool_vec, True)
 
-        instruction = "{}_maskload_epi32((int32_t * const)[ARR], {}_set_epi_32([LOAD_BOOLS]))".format(
+        instruction = "{}_maskload_epi32((int32_t * const)[ARR], {}_set_epi32([LOAD_BOOLS]))".format(
             self.simd_type.prefix(),
             self.simd_type.prefix()).replace("[LOAD_BOOLS]",
                                              list_load_bool_vec)
@@ -1672,7 +1852,7 @@ class SIMD_Mask_Store(SIMD_Instruction):
                                            or (self.aligned is False))
 
     def generate_instruction(self):
-        return self.iname.replace("[LOAD_MASK]",
+        return self.iname.replace("[STORE_MASK]",
                                   str(hex((int(1) << self.raw_N) - 1)))
 
 
@@ -1769,7 +1949,7 @@ class SIMD_Mask_Store_Fallback_As_Epi32(SIMD_Instruction):
         store_bool_vec = self.build_store_bool_vec()
         list_store_bool_vec = arr_to_csv(store_bool_vec, True)
 
-        instruction = "{}_maskstore_epi32((int32_t * const)[ARR], {}_set_epi_32([STORE_BOOLS]), [V])".format(
+        instruction = "{}_maskstore_epi32((int32_t * const)[ARR], {}_set_epi32([STORE_BOOLS]), [V])".format(
             self.simd_type.prefix(),
             self.simd_type.prefix()).replace("[STORE_BOOLS]",
                                              list_store_bool_vec)
@@ -1815,7 +1995,7 @@ class SIMD_Mask_Store_Fallback_As_Epi32(SIMD_Instruction):
         if remainder == 3:
             instruction += ";"
             instruction += "\n"
-            instruction += "[ARR][[PLACE_IDX2]] = ([TMP0] >> SHIFT2) & [EXTRACT_MASK]".replace(
+            instruction += "[ARR][[PLACE_IDX2]] = ([TMP0] >> [SHIFT2]) & [EXTRACT_MASK]".replace(
                 "[PLACE_IDX2]", str(truncated_N + 2)).replace(
                     "[SHIFT2]",
                     str(2 * shift)).replace("[EXTRACT_MASK]", str(hex(mask)))
@@ -1841,24 +2021,24 @@ class SIMD_Store():
             # Universal fallback
             SIMD_Mask_Store_Fallback_As_Epi32(sort_type, raw_N, SIMD_m128(),
                                               ["AVX2", "SSE4.1"], 100),
-            SIMD_Mask_Store("_mm_mask_storeu_epi8((void *)[ARR], [V])", 1,
-                            False, raw_N, SIMD_m128(),
-                            ["AVX512bw", "AVX512vl"], 2),
-            SIMD_Mask_Store("_mm_mask_storeu_epi16((void *)[ARR], [V])", 2,
-                            False, raw_N, SIMD_m128(),
-                            ["AVX512bw", "AVX512vl"], 2),
-            SIMD_Mask_Store("_mm_mask_store_epi32((void *)[ARR], [V])", 4,
-                            True, raw_N, SIMD_m128(), ["AVX512f", "AVX512vl"],
-                            2),
-            SIMD_Mask_Store("_mm_mask_storeu_epi32((void *)[ARR], [V])", 4,
-                            False, raw_N, SIMD_m128(), ["AVX512f", "AVX512vl"],
-                            3),
-            SIMD_Mask_Store("_mm_mask_store_epi64((void *)[ARR], [V])", 4,
-                            True, raw_N, SIMD_m128(), ["AVX512f", "AVX512vl"],
-                            2),
-            SIMD_Mask_Store("_mm_mask_storeu_epi64((void *)[ARR], [V])", 8,
-                            False, raw_N, SIMD_m128(), ["AVX512f", "AVX512vl"],
-                            3),
+            SIMD_Mask_Store(
+                "_mm_mask_storeu_epi8((void *)[ARR], [STORE_MASK], [V])", 1,
+                False, raw_N, SIMD_m128(), ["AVX512bw", "AVX512vl"], 2),
+            SIMD_Mask_Store(
+                "_mm_mask_storeu_epi16((void *)[ARR], [STORE_MASK], [V])", 2,
+                False, raw_N, SIMD_m128(), ["AVX512bw", "AVX512vl"], 2),
+            SIMD_Mask_Store(
+                "_mm_mask_store_epi32((void *)[ARR], [STORE_MASK], [V])", 4,
+                True, raw_N, SIMD_m128(), ["AVX512f", "AVX512vl"], 2),
+            SIMD_Mask_Store(
+                "_mm_mask_storeu_epi32((void *)[ARR], [STORE_MASK], [V])", 4,
+                False, raw_N, SIMD_m128(), ["AVX512f", "AVX512vl"], 3),
+            SIMD_Mask_Store(
+                "_mm_mask_store_epi64((void *)[ARR], [STORE_MASK], [V])", 8,
+                True, raw_N, SIMD_m128(), ["AVX512f", "AVX512vl"], 2),
+            SIMD_Mask_Store(
+                "_mm_mask_storeu_epi64((void *)[ARR], [STORE_MASK], [V])", 8,
+                False, raw_N, SIMD_m128(), ["AVX512f", "AVX512vl"], 3),
             ###################################################################
             # Universal __m256i stores
             SIMD_Full_Store("_mm256_store_si256((__m256i *)[ARR], [V])", True,
@@ -1869,24 +2049,24 @@ class SIMD_Store():
             # Universal fallback
             SIMD_Mask_Store_Fallback_As_Epi32(sort_type, raw_N, SIMD_m256(),
                                               ["AVX2", "AVX"], 100),
-            SIMD_Mask_Store("_mm256_mask_storeu_epi8((void *)[ARR], [V])", 1,
-                            False, raw_N, SIMD_m256(),
-                            ["AVX512bw", "AVX512vl"], 2),
-            SIMD_Mask_Store("_mm256_mask_storeu_epi16((void *)[ARR], [V])", 2,
-                            False, raw_N, SIMD_m256(),
-                            ["AVX512bw", "AVX512vl"], 2),
-            SIMD_Mask_Store("_mm256_mask_store_epi32((void *)[ARR], [V])", 4,
-                            True, raw_N, SIMD_m256(), ["AVX512f", "AVX512vl"],
-                            2),
-            SIMD_Mask_Store("_mm256_mask_storeu_epi32((void *)[ARR], [V])", 4,
-                            False, raw_N, SIMD_m256(), ["AVX512f", "AVX512vl"],
-                            3),
-            SIMD_Mask_Store("_mm256_mask_store_epi64((void *)[ARR], [V])", 4,
-                            True, raw_N, SIMD_m256(), ["AVX512f", "AVX512vl"],
-                            2),
-            SIMD_Mask_Store("_mm256_mask_storeu_epi64((void *)[ARR], [V])", 8,
-                            False, raw_N, SIMD_m256(), ["AVX512f", "AVX512vl"],
-                            3),
+            SIMD_Mask_Store(
+                "_mm256_mask_storeu_epi8((void *)[ARR], [STORE_MASK], [V])", 1,
+                False, raw_N, SIMD_m256(), ["AVX512bw", "AVX512vl"], 2),
+            SIMD_Mask_Store(
+                "_mm256_mask_storeu_epi16((void *)[ARR], [STORE_MASK], [V])",
+                2, False, raw_N, SIMD_m256(), ["AVX512bw", "AVX512vl"], 2),
+            SIMD_Mask_Store(
+                "_mm256_mask_store_epi32((void *)[ARR], [STORE_MASK], [V])", 4,
+                True, raw_N, SIMD_m256(), ["AVX512f", "AVX512vl"], 2),
+            SIMD_Mask_Store(
+                "_mm256_mask_storeu_epi32((void *)[ARR], [STORE_MASK], [V])",
+                4, False, raw_N, SIMD_m256(), ["AVX512f", "AVX512vl"], 3),
+            SIMD_Mask_Store(
+                "_mm256_mask_store_epi64((void *)[ARR], [STORE_MASK], [V])", 8,
+                True, raw_N, SIMD_m256(), ["AVX512f", "AVX512vl"], 2),
+            SIMD_Mask_Store(
+                "_mm256_mask_storeu_epi64((void *)[ARR], [STORE_MASK], [V])",
+                8, False, raw_N, SIMD_m256(), ["AVX512f", "AVX512vl"], 3),
             ###################################################################
             # Universal __m512i stores
             SIMD_Full_Store("_mm512_store_si512((__m512i *)[ARR], [V])", True,
@@ -1895,24 +2075,24 @@ class SIMD_Store():
                             False, SIMD_m512(), ["AVX512f"], 1),
 
             # Universal fallback
-            SIMD_Mask_Store("_mm512_mask_storeu_epi8((void *)[ARR], [V])", 1,
-                            False, raw_N, SIMD_m512(),
-                            ["AVX512bw", "AVX512vl"], 2),
-            SIMD_Mask_Store("_mm512_mask_storeu_epi16((void *)[ARR], [V])", 2,
-                            False, raw_N, SIMD_m512(),
-                            ["AVX512bw", "AVX512vl"], 2),
-            SIMD_Mask_Store("_mm512_mask_store_epi32((void *)[ARR], [V])", 4,
-                            True, raw_N, SIMD_m512(), ["AVX512f", "AVX512vl"],
-                            2),
-            SIMD_Mask_Store("_mm512_mask_storeu_epi32((void *)[ARR], [V])", 4,
-                            False, raw_N, SIMD_m512(), ["AVX512f", "AVX512vl"],
-                            3),
-            SIMD_Mask_Store("_mm512_mask_store_epi64((void *)[ARR], [V])", 4,
-                            True, raw_N, SIMD_m512(), ["AVX512f", "AVX512vl"],
-                            2),
-            SIMD_Mask_Store("_mm512_mask_storeu_epi64((void *)[ARR], [V])", 8,
-                            False, raw_N, SIMD_m512(), ["AVX512f", "AVX512vl"],
-                            3),
+            SIMD_Mask_Store(
+                "_mm512_mask_storeu_epi8((void *)[ARR], [STORE_MASK], [V])", 1,
+                False, raw_N, SIMD_m512(), ["AVX512bw", "AVX512vl"], 2),
+            SIMD_Mask_Store(
+                "_mm512_mask_storeu_epi16((void *)[ARR], [STORE_MASK], [V])",
+                2, False, raw_N, SIMD_m512(), ["AVX512bw", "AVX512vl"], 2),
+            SIMD_Mask_Store(
+                "_mm512_mask_store_epi32((void *)[ARR], [STORE_MASK], [V])", 4,
+                True, raw_N, SIMD_m512(), ["AVX512f", "AVX512vl"], 2),
+            SIMD_Mask_Store(
+                "_mm512_mask_storeu_epi32((void *)[ARR], [STORE_MASK], [V])",
+                4, False, raw_N, SIMD_m512(), ["AVX512f", "AVX512vl"], 3),
+            SIMD_Mask_Store(
+                "_mm512_mask_store_epi64((void *)[ARR], [STORE_MASK], [V])", 8,
+                True, raw_N, SIMD_m512(), ["AVX512f", "AVX512vl"], 2),
+            SIMD_Mask_Store(
+                "_mm512_mask_storeu_epi64((void *)[ARR], [STORE_MASK], [V])",
+                8, False, raw_N, SIMD_m512(), ["AVX512f", "AVX512vl"], 3),
             ###################################################################
         ]
 
@@ -1928,7 +2108,6 @@ def instruction_filter(instructions,
         if operation.match(Match_Info(sort_type, simd_type, aligned,
                                       full_load)) is True:
             ops.append(operation)
-
     err_assert(
         len(ops) > 0,
         "no operations left after filter {} / {}".format(0, len(instructions)))
@@ -1971,7 +2150,7 @@ def order_str_tmps(raw_str, base):
 
     for i in range(0, ntmps):
         raw_str = raw_str.replace("[TMP{}]".format(i),
-                                  "[TMP{}]".format(i + base))
+                                  "[OTMP{}]".format(i + base))
     return ntmps, raw_str
 
 
@@ -2030,7 +2209,8 @@ class Output_Generator():
         self.perf_notes = [
             "Performance Notes:",
             "1) If you are sorting an array where there IS valid memory up to the nearest sizeof a SIMD register, you will get an improvement enable \"EXTRA_MEMORY\" (this turns on \"Full Load & Store\". Note that enabling \"Full Load & Store\" will not modify any of the memory not being sorted.",
-            "2) If your sort size is not a power of 2 you are likely running into less efficient instructions. This is especially noticable when sorting 8 bit and 16 bit values. If rounding you sort size up to the next power of 2 will not cost any additional depth it almost definetly worth doing so. The \"Best\" Network Algorithm automatically does this in many cases"
+            "2) If your sort size is not a power of 2 you are likely running into less efficient instructions. This is especially noticable when sorting 8 bit and 16 bit values. If rounding you sort size up to the next power of 2 will not cost any additional depth it almost definetly worth doing so. The \"Best\" Network Algorithm automatically does this in many cases.",
+            "3) There are two optimization settings, \"Optimization.SPACE\" and \"Optimization.UOP\". The former will essentially break ties by picking the instruction that uses less memory (i.e doesn't have to store a register's initializing in memory. The latter will break ties but simply selecting whatever instructions use the least UOPs. Which is best is probably application dependent. Note that while \"Optimization.SPACE\" will save .data memory it will often cost more in .text memory."
         ]
 
         for i in range(1, len(self.perf_notes)):
@@ -2048,9 +2228,10 @@ class Output_Generator():
             s = self.perf_notes[i].split("\n")
             self.perf_notes[i] = s[0] + "\n"
             for j in range(1, len(s)):
+                if len(s[j].strip()) == 0:
+                    continue
                 self.perf_notes[i] += "   " + s[j].strip()
-                if j != len(s) - 1:
-                    self.perf_notes[i] += "\n"
+                self.perf_notes[i] += "\n"
 
     def get(self):
         return self.get_header() + self.get_content() + self.get_tail()
@@ -2061,7 +2242,7 @@ class Output_Generator():
         head += "#define _SIMD_SORT_{}_H_".format(self.sort_to_str)
         head += "\n\n"
         head += "/*"
-        head += "\n"
+        head += "\n\n"
         head += arr_to_str(self.impl_info)
         head += "\n\n"
         head += arr_to_str(self.perf_notes)
@@ -2140,7 +2321,7 @@ class CAS_Output_Generator():
         self.load = make_returnable(self.load, self.simd_type.to_string())
         self.tmp_count, self.load = order_str_tmps(self.load, 0)
         for i in range(0, self.tmp_count):
-            self.load = self.load.replace("[TMP{}]".format(i),
+            self.load = self.load.replace("[OTMP{}]".format(i),
                                           "{}{}".format(self.tmp_name, i))
         self.load = self.load.replace("[ARR]", self.arr_name)
         self.load = self.load.replace("[V]", self.v_name)
@@ -2160,8 +2341,9 @@ class CAS_Output_Generator():
                 self.simd_type.to_string())
 
         tmp_max, self.store = order_str_tmps(self.store, self.tmp_count)
+        tmp_max += self.tmp_count
         for i in range(self.tmp_count, tmp_max):
-            self.store = self.store.replace("[TMP{}]".format(i),
+            self.store = self.store.replace("[OTMP{}]".format(i),
                                             "{}{}".format(self.tmp_name, i))
 
         self.store = self.store.replace("[ARR]", self.arr_name)
@@ -2252,13 +2434,13 @@ class Compare_Exchange():
 
     def set_tmp(self, tmp_name):
         for i in range(self.tmps_start, self.tmps_end):
-            self.raw_perm = self.raw_perm.replace("[TMP{}]".format(i),
+            self.raw_perm = self.raw_perm.replace("[OTMP{}]".format(i),
                                                   "{}{}".format(tmp_name, i))
-            self.raw_min = self.raw_min.replace("[TMP{}]".format(i),
+            self.raw_min = self.raw_min.replace("[OTMP{}]".format(i),
                                                 "{}{}".format(tmp_name, i))
-            self.raw_max = self.raw_max.replace("[TMP{}]".format(i),
+            self.raw_max = self.raw_max.replace("[OTMP{}]".format(i),
                                                 "{}{}".format(tmp_name, i))
-            self.raw_blend = self.raw_blend.replace("[TMP{}]".format(i),
+            self.raw_blend = self.raw_blend.replace("[OTMP{}]".format(i),
                                                     "{}{}".format(tmp_name, i))
 
     def set_input_arguments(self, last_v, v_names):
@@ -2620,5 +2802,5 @@ class Builder():
         return full_output.get()
 
 
-network_builder = Builder(64, Sort_Type(1, Sign.UNSIGNED), "Bitonic")
+network_builder = Builder(31, Sort_Type(1, Sign.UNSIGNED), "Bitonic")
 print(network_builder.Build())
