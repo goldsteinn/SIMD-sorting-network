@@ -55,8 +55,8 @@ struct sarr {
 
 int
 main(int argc, char ** argv) {
-    sarr<uint8_t, 31> s;
+    sarr<uint16_t, 9> s;
     s.binit();
-    vsort::sortu<uint8_t, 31, vsort::bitonic, vsort::simd_instructions::AVX2, vsort::builtin_usage::BUILTIN_NONE>(s.arr);
+    vsort::sortu<uint16_t, 9, vsort::bitonic, vsort::simd_instructions::AVX2, vsort::builtin_usage::BUILTIN_NONE>(s.arr);
     s.show();
 }

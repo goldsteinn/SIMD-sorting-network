@@ -1297,14 +1297,6 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
             }
             else {
                 // AVX2
-                fprintf(stderr,
-                        "------------------------------------------------------"
-                        "----------------\n");
-                fprintf(stderr, "Blend:\t");
-                show(typename vop_support::blend_vec_initialize{});
-                fprintf(stderr,
-                        "----------------------------------------------"
-                        "------------------------\n");
                 return _mm256_blendv_epi8(
                     v1,
                     v2,
@@ -1317,17 +1309,44 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
                 // epi16 blend uses mask_index % 8 so needs to be mirror for
                 // this to work
                 // AVX2
+                fprintf(
+                    stderr,
+                    "----------------------------------------------------------"
+                    "------------\n");
+
+                fprintf(stderr,
+                        "Blend 0: %lx -> %x\n",
+                        blend_mask,
+                        blend_mask & 0xff);
+                fprintf(
+                    stderr,
+                    "----------------------------------------------------------"
+                    "------------\n");
+
                 return _mm256_blend_epi16(v1, v2, blend_mask & 0xff);
             }
             else if constexpr (simd_set >= simd_instructions::AVX512 &&
                                internal::avail_instructions::AVX512VL &&
                                internal::avail_instructions::AVX512BW) {
                 // AVX512VL & AVX512BW
+
                 return _mm256_mask_mov_epi16(v1, blend_mask, v2);
             }
 
             else {
                 // AVX2
+                fprintf(
+                    stderr,
+                    "----------------------------------------------------------"
+                    "------------\n");
+
+                fprintf(stderr, "Blend 1: ");
+
+                show(typename vop_support::blend_vec_initialize{});
+                fprintf(stderr,
+                        "------------------------------------------------------"
+                        "----------------\n");
+
                 return _mm256_blendv_epi8(
                     v1,
                     v2,
@@ -1399,33 +1418,41 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
                     build_set_vec_wrapper<0>(
                         typename shuffle_across_lane_support<T, n, e...>::
                             across_lanes_other_vec_initialize{}));
-                fprintf(stderr,
-                        "------------------------------------------------------"
-                        "----------------\n");
-                fprintf(stderr, "Same:\t");
-                show(typename shuffle_across_lane_support<T, n, e...>::
-                         across_lanes_same_vec_initialize{});
-                fprintf(stderr, "Other:\t");
-                show(typename shuffle_across_lane_support<T, n, e...>::
-                         across_lanes_other_vec_initialize{});
-                fprintf(stderr,
-                        "----------------------------------------------"
-                        "------------------------\n");
                 // AVX2
                 return _mm256_or_si256(same_lane, other_lane);
             }
         }
         else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+            fprintf(stderr,
+                    "------------------------------------------------------"
+                    "----------------\n");
+
             if constexpr (shuffle_mask) {
 
                 if constexpr (shuffle_mask &
                               vop_support::shuffle_as_epi32_flag) {
+
                     // AVX2
+                    fprintf(stderr, "Case 0\n");
+                    fprintf(stderr, "M: %x", shuffle_mask);
+                    fprintf(
+                        stderr,
+                        "------------------------------------------------------"
+                        "----------------\n");
+
                     return _mm256_shuffle_epi32(v, shuffle_mask & 0xff);
                 }
                 else {
                     constexpr uint32_t shuffle_mask_lo = shuffle_mask;
                     constexpr uint32_t shuffle_mask_hi = (shuffle_mask >> 32);
+
+                    fprintf(stderr, "Case 1\n");
+                    fprintf(stderr, "Lo: %x", shuffle_mask_lo);
+                    fprintf(stderr, "Hi: %x", shuffle_mask_hi);
+                    fprintf(
+                        stderr,
+                        "------------------------------------------------------"
+                        "----------------\n");
 
                     // AVX2
                     return _mm256_shufflehi_epi16(
@@ -1435,6 +1462,13 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
             }
             else if constexpr (vop_support::in_same_lanes) {
                 // AVX2
+                fprintf(stderr, "Case 2\n");
+                fprintf(stderr, "Other: ");
+                show(typename vop_support::shuffle_vec_initialize{});
+                fprintf(stderr,
+                        "------------------------------------------------------"
+                        "----------------\n");
+
                 return _mm256_shuffle_epi8(
                     v,
                     build_set_vec_wrapper<sizeof(uint8_t)>(
@@ -1468,6 +1502,16 @@ struct vector_ops<T, simd_set, builtin_perm, sizeof(__m256i)> {
                     build_set_vec_wrapper<sizeof(uint8_t)>(
                         typename shuffle_across_lane_support<T, n, e...>::
                             across_lanes_other_vec_initialize{}));
+                fprintf(stderr, "Case 3\n");
+                fprintf(stderr, "Same: ");
+                show(typename shuffle_across_lane_support<T, n, e...>::
+                         across_lanes_same_vec_initialize{});
+                fprintf(stderr, "Other: ");
+                show(typename shuffle_across_lane_support<T, n, e...>::
+                         across_lanes_other_vec_initialize{});
+                fprintf(stderr,
+                        "------------------------------------------------------"
+                        "----------------\n");
 
 
                 // AVX2

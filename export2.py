@@ -5,6 +5,67 @@ import copy
 from enum import Enum
 import traceback
 import itertools
+import argparse
+import signal
+
+
+def sig_exit(signum, empty):
+    print("Exiting on Signal({})".format(str(signum)))
+    sys.exit(-1)
+
+
+signal.signal(signal.SIGINT, sig_exit)
+
+parser = argparse.ArgumentParser(
+    description="Export SIMD sorting network implementation as C code")
+
+parser.add_argument("--size",
+                    action="store",
+                    default="",
+                    help="Set size of sorted element")
+parser.add_argument("-s",
+                    "--signed",
+                    action="store_true",
+                    default=False,
+                    help="Set sign of sorted type")
+parser.add_argument("-u",
+                    "--unsigned",
+                    action="store_true",
+                    default=False,
+                    help="Set sign of sorted type")
+parser.add_argument("-T",
+                    "--type",
+                    action="store",
+                    default="",
+                    help="Set type of sorted type")
+parser.add_argument("-N",
+                    action="store",
+                    default="",
+                    help="Set number of elements for sort")
+parser.add_argument("-a",
+                    "--algorithm",
+                    action="store",
+                    default="",
+                    help="Set sorting network generation algorithm")
+parser.add_argument("-O",
+                    "--optimization",
+                    action="store",
+                    default="space",
+                    help="Set optimization, either \"space\" or \"uop\"")
+parser.add_argument("-e",
+                    "--extra-memory",
+                    action="store_true",
+                    default=False,
+                    help="Set to enable extra memory load & store")
+parser.add_argument("--aligned",
+                    action="store_true",
+                    default=False,
+                    help="Set to enable aligned load & store")
+parser.add_argument("-c",
+                    "--constraint",
+                    action="store",
+                    default="",
+                    help="Set to enable aligned load & store")
 
 
 def err_assert(check, msg):
@@ -12,6 +73,24 @@ def err_assert(check, msg):
         print("Error: " + msg)
         traceback.print_stack()
         exit(-1)
+
+
+class Optimization(Enum):
+    SPACE = 0
+    UOP = 1
+
+
+INSTRUCTION_OPT = Optimization.SPACE
+SIMD_RESTRICTIONS = ""
+ALIGNED_ACCESS = False
+EXTRA_MEMORY = False
+
+
+def choose_if(Opt, weight1, weight2):
+    if Opt == INSTRUCTION_OPT:
+        return weight1
+    else:
+        return weight2
 
 
 def arr_to_str(arr):
@@ -33,26 +112,6 @@ def arr_to_csv(arr, HEX=None):
         else:
             arr_str += str(arr[i])
     return arr_str
-
-
-class Optimization(Enum):
-    SPACE = 0
-    UOP = 1
-
-
-INSTRUCTION_OPT = Optimization.SPACE
-
-
-def choose_if(Opt, weight1, weight2):
-    if Opt == INSTRUCTION_OPT:
-        return weight1
-    else:
-        return weight2
-
-
-SIMD_RESTRICTIONS = "AVX512"
-ALIGNED_ACCESS = False
-EXTRA_MEMORY = False
 
 
 class Headers():
@@ -274,6 +333,26 @@ class Sort_Type():
 
         return "{}({})".format(self.to_string(), str(hex(val)))
 
+    def is_valid(self, T):
+        if T == "None":
+            return False
+        if T in self.unsigned_casts:
+            return True
+        if T in self.signed_casts:
+            return True
+
+    def string_to_T(self, T):
+        err_assert(self.is_valid(T),
+                   "Trying to build sort type from unknown string")
+        sign = Sign.SIGNED
+        if T in self.unsigned_casts:
+            sign = Sign.UNSIGNED
+
+        for i in range(0, len(self.unsigned_casts)):
+            if T == self.unsigned_casts[i] or T == self.signed_casts[i]:
+                return Sort_Type(i, sign)
+        err_assert(False, "was unable to find match")
+
 
 class Match_Info():
     def __init__(self, sort_type, simd_type, aligned=None, full=None):
@@ -370,7 +449,7 @@ class SIMD_Min_Fallback_u64(SIMD_Instruction):
                          Sign.UNSIGNED, 8, simd_type, constraints, weight)
 
     def generate_instruction(self):
-        instruction = "{} [TMP0] = {}_set1_epi64x(1UL) << 63);\n".format(
+        instruction = "{} [TMP0] = {}_set1_epi64x((1UL) << 63);\n".format(
             self.simd_type.to_string(), self.simd_type.prefix())
         instruction += "{} [TMP1] = {}_cmpgt_epi64({}_xor_{}([V1], [TMP0]), {}_xor_{}([V2], [TMP0]));\n".format(
             self.simd_type.to_string(), self.simd_type.prefix(),
@@ -509,12 +588,12 @@ class SIMD_Max_Fallback_u64(SIMD_Instruction):
                          Sign.UNSIGNED, 8, simd_type, constraints, weight)
 
     def generate_instruction(self):
-        instruction = "{} [TMP0] = {}_set1_epi64x(1UL) << 63);\n".format(
+        instruction = "{} [TMP0] = {}_set1_epi64x((1UL) << 63);\n".format(
             self.simd_type.to_string(), self.simd_type.prefix())
         instruction += "{} [TMP1] = {}_cmpgt_epi64({}_xor_{}([V1], [TMP0]), {}_xor_{}([V2], [TMP0]));\n".format(
             self.simd_type.to_string(), self.simd_type.prefix(),
-            self.simd_type.postfix(), self.simd_type.prefix(),
-            self.simd_type.postfix())
+            self.simd_type.prefix(), self.simd_type.postfix(),
+            self.simd_type.prefix(), self.simd_type.postfix())
         instruction += "{}_blendv_epi8([V2], [V1], [TMP1])".format(
             self.simd_type.prefix())
         return instruction
@@ -596,13 +675,69 @@ class SIMD_Max():
 ######################################################################
 # Blend
 
-
 # Minimal optimization logic. Choice order is:
 # 1: blend_epi32 -> requires that as movement in can grouped
 # 2: blend_epi16 (if epi8/epi16) -> ibid
 # 3: mask_mov -> requires AVX512
 # 4: blendv_epi8 -> fallback basically.
 ######################################################################
+
+
+def blend_mask_lt_T(perm, T_size, T_target):
+    N = len(perm)
+    T_size = T_size
+    T_target = T_target
+
+    scale = int(T_target / T_size)
+    err_assert(scale == 1 or scale == 2 or scale == 4, "invalid scale")
+
+    blend_mask = int(0)
+
+    # logic here is basically we build epi32 mask and check that
+    # all adjacent epi8/epi16 in a given epi32 map the same
+    # way. If they don't return -1 to indicate failure
+    run_idx = 0
+    run = 0
+    for i in range(0, N):
+        run_idx += 1
+        if perm[(N - 1) - i] > i:
+            run += 1
+        else:
+            run -= 1
+        if run_idx == scale:
+
+            # run can only be scale or -scale if
+            # all epi8/epi16 mapped the same way
+            if run == scale:
+                blend_mask |= (int(1) << (int(i / scale)))
+            elif run == ((-1) * scale):
+                # do nothing
+                blend_mask = blend_mask
+            else:
+                return int(-1)
+            run = 0
+            run_idx = 0
+
+    return blend_mask
+
+
+def blend_mask_ge_T(perm, T_size, T_target):
+    N = len(perm)
+    T_size = T_size
+    T_target = T_target
+
+    scale = int(T_size / T_target)
+    scaled_mask = (int(1) << scale) - 1
+    err_assert(scale == 1 or scale == 2 or scale == 4, "invalid scale")
+
+    blend_mask = int(0)
+    for i in range(0, N):
+        if perm[(N - 1) - i] > i:
+            blend_mask |= scaled_mask << (scale * i)
+
+    return blend_mask
+
+
 class SIMD_Blend_Generator(SIMD_Instruction):
     def __init__(self, iname, T_size, T_target, perm, simd_type, constraints,
                  weight):
@@ -625,21 +760,10 @@ class SIMD_Blend_Generator(SIMD_Instruction):
 
         if self.T_target == self.T_size:
             return True
-        if self.T_target == 4:
+        elif self.T_target == 4:
             return blend_mask != (int(-1))
-        if self.T_target == 2:
-            lane_size = 16
-            ele_per_lane = 8
-            lane_mask = 0xff
-
-            N = self.simd_type.sizeof()
-            N_lanes = int(N / lane_size)
-
-            lane_0 = blend_mask & lane_mask
-            for i in range(1, N_lanes):
-                if ((blend_mask >> (ele_per_lane * i)) & lane_mask) != lane_0:
-                    return False
-            return True
+        else:
+            err_assert(False, "invalid blend target")
 
     def match(self, match_info):
         return self.has_support() and self.match_sort_type(
@@ -655,73 +779,67 @@ class SIMD_Blend_Generator(SIMD_Instruction):
         err_assert(T_size * len(self.perm) == N, "Invalid permutation map")
 
         if T_size < self.T_target:
-            return self.blend_mask_lt_T()
+            return blend_mask_lt_T(self.perm, self.T_size, self.T_target)
         else:
-            return self.blend_mask_ge_T()
-
-    def blend_mask_ge_T(self):
-        N = len(self.perm)
-        T_size = self.T_size
-        T_target = self.T_target
-
-        scale = int(T_size / T_target)
-        scaled_mask = (int(1) << scale) - 1
-        err_assert(scale == 1 or scale == 2 or scale == 4, "invalid scale")
-
-        blend_mask = int(0)
-        for i in range(0, N):
-            if self.perm[(N - 1) - i] > i:
-                blend_mask |= scaled_mask << (scale * i)
-
-        return blend_mask
-
-    def blend_mask_lt_T(self):
-        N = len(self.perm)
-        T_size = self.T_size
-        T_target = self.T_target
-
-        scale = int(T_target / T_size)
-        err_assert(scale == 1 or scale == 2 or scale == 4, "invalid scale")
-
-        blend_mask = int(0)
-
-        # logic here is basically we build epi32 mask and check that
-        # all adjacent epi8/epi16 in a given epi32 map the same
-        # way. If they don't return -1 to indicate failure
-        run_idx = 0
-        run = 0
-        for i in range(0, N):
-            run_idx += 1
-            if self.perm[(N - 1) - i] > i:
-                run += 1
-            else:
-                run -= 1
-            if run_idx == scale:
-
-                # run can only be scale or -scale if
-                # all epi8/epi16 mapped the same way
-                if run == scale:
-                    blend_mask |= (int(1) << (int(i / scale)))
-                elif run == ((-1) * scale):
-                    # do nothing
-                    blend_mask = blend_mask
-                else:
-                    return int(-1)
-                run = 0
-                run_idx = 0
-
-        return blend_mask
-
-    def finalize_mask(self, blend_mask):
-        if self.T_target == 2:
-            # this is unique to epi16
-            return blend_mask & 0xff
-        else:
-            return blend_mask
+            return blend_mask_ge_T(self.perm, self.T_size, self.T_target)
 
     def generate_instruction(self):
-        return self.iname.replace(
-            "[BLEND_MASK]", str(hex(self.finalize_mask(self.blend_mask()))))
+        return self.iname.replace("[BLEND_MASK]", str(hex(self.blend_mask())))
+
+
+class SIMD_Blend_As_Epi16_Generator(SIMD_Instruction):
+    def __init__(self, T_size, perm, simd_type, constraints, weight):
+        super().__init__("Override Error: " + self.__class__.__name__,
+                         Sign.NOT_SIGNED, T_size, simd_type, constraints,
+                         weight)
+
+        self.perm = copy.deepcopy(perm)
+
+    def match(self, match_info):
+        return self.has_support() and self.match_sort_type(
+            match_info.sort_type) and self.match_simd_type(
+                match_info.simd_type) and self.valid_blend(self.blend_mask())
+
+    def valid_blend(self, blend_mask):
+        if blend_mask == int(-1):
+            return False
+
+        N_bits = int((self.simd_type.sizeof() / 2))
+        full_mask = (int(1) << N_bits) - 1
+        err_assert(
+            blend_mask != 0 and blend_mask != full_mask,
+            "MISSED OPTIMIZATION AT BLEND: {}\n\tPerm: {}".format(
+                str(hex(blend_mask)), str(self.perm)))
+
+        lane_size = 16
+        ele_per_lane = 8
+        lane_mask = 0xff
+
+        N = self.simd_type.sizeof()
+        N_lanes = int(N / lane_size)
+
+        lane_0 = blend_mask & lane_mask
+        for i in range(1, N_lanes):
+            if ((blend_mask >> (ele_per_lane * i)) & lane_mask) != lane_0:
+                return False
+        return True
+
+    def blend_mask(self):
+        N = self.simd_type.sizeof()
+        T_size = self.T_size
+
+        err_assert(T_size * len(self.perm) != 8, "Cant do for __m64")
+        err_assert(T_size * len(self.perm) == N, "Invalid permutation map")
+
+        if T_size < 2:
+            return blend_mask_lt_T(self.perm, self.T_size, 2)
+        else:
+            return blend_mask_ge_T(self.perm, self.T_size, 2)
+
+    def generate_instruction(self):
+        return "{}_blend_epi16([V1], [V2], [BLEND_MASK])".format(
+            self.simd_type.prefix()).replace(
+                "[BLEND_MASK]", str(hex(self.blend_mask() & 0xff)))
 
 
 class SIMD_Blend_As_Epi8_Generator(SIMD_Instruction):
@@ -733,11 +851,11 @@ class SIMD_Blend_As_Epi8_Generator(SIMD_Instruction):
         self.perm = copy.deepcopy(perm)
 
     def blend_vec(self):
-        N = self.simd_type.sizeof()
+        N = len(self.perm)
         T_size = self.T_size
 
-        err_assert(T_size * len(self.perm) == N, "Invalid permutation map")
-        err_assert(T_size * N != 8, "Cant use blend_epi8 for __m64")
+        err_assert(self.simd_type.sizeof() != 8,
+                   "Cant use blend_epi8 for __m64")
 
         n_shift_v = 0
         vec = []
@@ -813,8 +931,7 @@ class SIMD_Blend():
             # __m128i epi8 ordering
             SIMD_Blend_Generator("_mm_blend_epi32([V1], [V2], [BLEND_MASK])",
                                  1, 4, perm, SIMD_m128(), ["AVX2"], 0),
-            SIMD_Blend_Generator("_mm_blend_epi16([V1], [V2], [BLEND_MASK])",
-                                 1, 2, perm, SIMD_m128(), ["SSE4.1"], 1),
+            SIMD_Blend_As_Epi16_Generator(1, perm, SIMD_m128(), ["SSE4.1"], 1),
             SIMD_Blend_Generator("_mm_mask_mov_epi8([V1], [BLEND_MASK], [V2])",
                                  1, 1, perm, SIMD_m128(),
                                  ["AVX512vl", "AVX512bw"], 2),
@@ -822,8 +939,7 @@ class SIMD_Blend():
             # __m128i epi16 ordering
             SIMD_Blend_Generator("_mm_blend_epi32([V1], [V2], [BLEND_MASK])",
                                  2, 4, perm, SIMD_m128(), ["AVX2"], 0),
-            SIMD_Blend_Generator("_mm_blend_epi16([V1], [V2], [BLEND_MASK])",
-                                 2, 2, perm, SIMD_m128(), ["SSE4.1"], 1),
+            SIMD_Blend_As_Epi16_Generator(2, perm, SIMD_m128(), ["SSE4.1"], 1),
             SIMD_Blend_Generator(
                 "_mm_mask_mov_epi16([V1], [BLEND_MASK], [V2])", 2, 2, perm,
                 SIMD_m128(), ["AVX512vl", "AVX512bw"], 2),
@@ -847,9 +963,7 @@ class SIMD_Blend():
             SIMD_Blend_Generator(
                 "_mm256_blend_epi32([V1], [V2], [BLEND_MASK])", 1, 4, perm,
                 SIMD_m256(), ["AVX2"], 0),
-            SIMD_Blend_Generator(
-                "_mm256_blend_epi16([V1], [V2], [BLEND_MASK])", 1, 2, perm,
-                SIMD_m256(), ["AVX2"], 1),
+            SIMD_Blend_As_Epi16_Generator(1, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Blend_Generator(
                 "_mm256_mask_mov_epi8([V1], [BLEND_MASK], [V2])", 1, 1, perm,
                 SIMD_m256(), ["AVX512vl", "AVX512bw"], 2),
@@ -858,9 +972,7 @@ class SIMD_Blend():
             SIMD_Blend_Generator(
                 "_mm256_blend_epi32([V1], [V2], [BLEND_MASK])", 2, 4, perm,
                 SIMD_m256(), ["AVX2"], 0),
-            SIMD_Blend_Generator(
-                "_mm256_blend_epi16([V1], [V2], [BLEND_MASK])", 2, 2, perm,
-                SIMD_m256(), ["AVX2"], 1),
+            SIMD_Blend_As_Epi16_Generator(2, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Blend_Generator(
                 "_mm256_mask_mov_epi16([V1], [BLEND_MASK], [V2])", 2, 2, perm,
                 SIMD_m256(), ["AVX512vl", "AVX512bw"], 2),
@@ -875,7 +987,7 @@ class SIMD_Blend():
             SIMD_Blend_As_Epi8_Generator(4, perm, SIMD_m256(), ["AVX2"], 2),
             # __m256i epi64 ordering
             SIMD_Blend_Generator(
-                "_mm256_blend_epi64([V1], [V2], [BLEND_MASK])", 8, 4, perm,
+                "_mm256_blend_epi32([V1], [V2], [BLEND_MASK])", 8, 4, perm,
                 SIMD_m256(), ["AVX2"], 0),
             SIMD_Blend_Generator(
                 "_mm256_mask_mov_epi64([V1], [BLEND_MASK], [V2])", 8, 8, perm,
@@ -1060,27 +1172,32 @@ class SIMD_Shuffle_As_Epi64(SIMD_Instruction):
                 match_info.simd_type) and (self.shuffle_mask() != int(-1))
 
     def shuffle_mask(self):
-        err_assert(self.simd_type.sizeof() == 32,
-                   "Shuffle_As_Epi64 only valid for __m256i")
+        err_assert(self.simd_type.sizeof() >= 32,
+                   "Shuffle_As_Epi64 only valid for __m256i and __m512i")
 
         T_size = self.T_size
         if can_shrink(T_size, 8, self.perm) is False:
             return int(-1)
 
         new_perm = scale_perm(T_size, 8, self.perm)
-        err_assert(len(new_perm) == 4, "Any other value should be impossible")
+        err_assert(
+            len(new_perm) == int(self.simd_type.sizeof() / 8),
+            "Any other value should be impossible")
 
-        mask = int(0)
-        for i in range(0, len(new_perm)):
-            p = new_perm[i]
-            err_assert((mask & (int(p) << (2 * i))) == 0,
-                       "overlapping indices")
-            mask |= int(p) << (2 * i)
+        if self.simd_type.sizeof() == 64:
+            if in_same_lanes(32, 8, new_perm) is False:
+                return int(-1)
+
+        mask = shuffle_mask_impl(4, 4, 2, 0, new_perm)
         return mask
 
     def generate_instruction(self):
-        return "_mm256_permute4x64_epi64([V1], [SHUFFLE_MASK])".replace(
-            "[SHUFFLE_MASK]", str(hex(self.shuffle_mask())))
+        if self.simd_type.sizeof() == 32:
+            return "_mm256_permute4x64_epi64([V1], [SHUFFLE_MASK])".replace(
+                "[SHUFFLE_MASK]", str(hex(self.shuffle_mask())))
+        else:
+            return "_mm512_permutex_epi64([V1], [SHUFFLE_MASK])".replace(
+                "[SHUFFLE_MASK]", str(hex(self.shuffle_mask())))
 
 
 class SIMD_Shuffle_As_Epi32(SIMD_Instruction):
@@ -1170,7 +1287,7 @@ class SIMD_Shuffle_As_Epi16(SIMD_Instruction):
     def build_shuffle_mask(self, new_perm):
         shuffle_mask_lo = shuffle_mask_impl(8, 4, 2, 4, new_perm)
         shuffle_mask_hi = shuffle_mask_impl(8, 4, 2, 0, new_perm)
-        if shuffle_mask_lo == int(0) or shuffle_mask_hi == int(0):
+        if shuffle_mask_lo == int(-1) or shuffle_mask_hi == int(-1):
             return int(-1)
         return shuffle_mask_lo | (shuffle_mask_hi << 32)
 
@@ -1251,7 +1368,7 @@ class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
         modified_perm_list = []
         for i in range(0, len(scaled_perm)):
             modified_perm_list.append(int(-1))
-            
+
         for i in range(0, 8, 2):
             to_idx = 3 - int(i / 2)
             from_idx = 3 - ((perm64_mask >> i) & 0x3)
@@ -1265,11 +1382,7 @@ class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
                 modified_perm_list[i] != int(-1),
                 "index {} not correctly set\n\t{}\n\t{}\n\t{}".format(
                     i, perm64_mask, str(self.perm), str(modified_perm_list)))
-        print("----------------------------------------------------------------------")
-        print("Mask: {}".format(hex(perm64_mask)))
-        print("Old : {}".format(str(self.perm)))
-        print("New : {}".format(str(modified_perm_list)))
-        print("----------------------------------------------------------------------")
+
         return modified_perm_list
 
     def test_possible_instructions(self, modified_perm_list):
@@ -1285,16 +1398,13 @@ class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
                                  3)
         ]
 
-       
-
         for i in range(0, len(possible_instructions)):
             if possible_instructions[i].match(
                     Match_Info(Sort_Type(1, Sign.UNSIGNED),
                                SIMD_m256())) is True:
-                return choose_if(Optimization.SPACE, i, (3 - i)), possible_instructions[i]
+                return choose_if(Optimization.SPACE, i,
+                                 (3 - i)), possible_instructions[i]
         return int(-1), None
-
-        
 
     def shuffle_mask(self):
         err_assert(self.simd_type.sizeof() == 32,
@@ -1315,7 +1425,8 @@ class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
             pmask |= perm64_lists[3] << 6
             if pmask == 0xe4:
                 continue
-            rweight, p = self.test_possible_instructions(self.create_mod_perm(scaled_perm, pmask))
+            rweight, p = self.test_possible_instructions(
+                self.create_mod_perm(scaled_perm, pmask))
             if rweight == int(-1):
                 continue
             elif rweight < min_weight:
@@ -1484,7 +1595,7 @@ class SIMD_Permute():
             # take permutevar). If not optimizing for space then will
             # always use permutevar
             SIMD_Permutex_Generate(
-                "_mm256_permutevar8x32_epi32(_mm256_set_epi32([PERM_LIST]), [V1])",
+                "_mm256_permutevar8x32_epi32([V1], _mm256_set_epi32([PERM_LIST]))",
                 4, perm, SIMD_m256(), ["AVX2", "AVX"],
                 choose_if(Optimization.UOP, 3, 4)),
             SIMD_Permute_Move_Lanes_Shuffle(
@@ -1497,34 +1608,38 @@ class SIMD_Permute():
             ###################################################################
             # __m512i epi8 ordering
             SIMD_Shuffle_As_Epi32(1, perm, SIMD_m512(), ["AVX512f"], 0),
+            SIMD_Shuffle_As_Epi64(4, perm, SIMD_m512(), ["AVX512f"], 1),
             SIMD_Shuffle_As_Epi16(1, perm, SIMD_m512(), ["AVX512bw"],
-                                  choose_if(Optimization.SPACE, 1, 2)),
+                                  choose_if(Optimization.SPACE, 2, 3)),
             SIMD_Shuffle_As_Epi8(1, perm, SIMD_m512(), ["AVX512bw"],
-                                 choose_if(Optimization.UOP, 1, 2)),
+                                 choose_if(Optimization.UOP, 2, 3)),
             SIMD_Permutex_Generate(
                 "_mm512_permutexvar_epi8(_mm512_set_epi8([PERM_LIST]), [V1])",
-                1, perm, SIMD_m512(), ["AVX512vbmi", "AVX512f"], 3),
+                1, perm, SIMD_m512(), ["AVX512vbmi", "AVX512f"], 4),
             # __m512i epi16 ordering
             SIMD_Shuffle_As_Epi32(2, perm, SIMD_m512(), ["AVX512f"], 0),
+            SIMD_Shuffle_As_Epi64(4, perm, SIMD_m512(), ["AVX512f"], 1),
             SIMD_Shuffle_As_Epi16(2, perm, SIMD_m512(), ["AVX512bw"],
-                                  choose_if(Optimization.SPACE, 1, 2)),
+                                  choose_if(Optimization.SPACE, 2, 3)),
             SIMD_Shuffle_As_Epi8(2, perm, SIMD_m512(), ["AVX512bw"],
-                                 choose_if(Optimization.UOP, 1, 2)),
+                                 choose_if(Optimization.UOP, 2, 3)),
             SIMD_Permutex_Generate(
                 "_mm512_permutexvar_epi16(_mm512_set_epi16([PERM_LIST]), [V1])",
-                2, perm, SIMD_m512(), ["AVX512bw", "AVX512f"], 3),
+                2, perm, SIMD_m512(), ["AVX512bw", "AVX512f"], 4),
             # __m512i epi32 ordering
             SIMD_Shuffle_As_Epi32(4, perm, SIMD_m512(), ["AVX512f"], 0),
-            SIMD_Shuffle_As_Epi8(4, perm, SIMD_m512(), ["AVX512bw"], 1),
+            SIMD_Shuffle_As_Epi64(4, perm, SIMD_m512(), ["AVX512f"], 1),
+            SIMD_Shuffle_As_Epi8(4, perm, SIMD_m512(), ["AVX512bw"], 2),
             SIMD_Permutex_Generate(
                 "_mm512_permutexvar_epi32(_mm512_set_epi32([PERM_LIST]), [V1])",
-                4, perm, SIMD_m512(), ["AVX512f"], 2),
+                4, perm, SIMD_m512(), ["AVX512f"], 3),
             # __m512i epi64 ordering
             SIMD_Shuffle_As_Epi32(8, perm, SIMD_m512(), ["AVX512f"], 0),
-            SIMD_Shuffle_As_Epi8(8, perm, SIMD_m512(), ["AVX512bw"], 1),
+            SIMD_Shuffle_As_Epi64(8, perm, SIMD_m512(), ["AVX512f"], 1),
+            SIMD_Shuffle_As_Epi8(8, perm, SIMD_m512(), ["AVX512bw"], 2),
             SIMD_Permutex_Generate(
                 "_mm512_permutexvar_epi64(_mm512_set_epi64([PERM_LIST]), [V1])",
-                8, perm, SIMD_m512(), ["AVX512f"], 2)
+                8, perm, SIMD_m512(), ["AVX512f"], 3)
         ]
 
 
@@ -1617,8 +1732,8 @@ class SIMD_Mask_Load_Fallback_As_Epi32(SIMD_Instruction):
         SIMD_size = self.simd_type.sizeof()
 
         baseline_vec = []
-        for i in range(0, SIMD_size):
-            if i < (SIMD_size - self.raw_N):
+        for i in range(0, int(SIMD_size / T_size)):
+            if (T_size * i) < (SIMD_size - (T_size * self.raw_N)):
                 if MIN_VAL is True:
                     baseline_vec.append(self.sort_type.min_value())
                 else:
@@ -2574,7 +2689,6 @@ class Compare_Exchange_Generator():
         return compare_exchange
 
 
-
 ######################################################################
 # Network Generation
 ######################################################################
@@ -2818,6 +2932,7 @@ class Network():
 
 class Builder():
     def __init__(self, N, sort_type, algorithm_name):
+        algorithm_name = algorithm_name.lower()
         header.reset()
         self.N = N
         self.sort_type = sort_type
@@ -2837,5 +2952,69 @@ class Builder():
         return full_output.get()
 
 
-network_builder = Builder(31, Sort_Type(1, Sign.UNSIGNED), "Bitonic")
+######################################################################
+# Main()
+args = parser.parse_args()
+
+user_opt = args.optimization
+err_assert(user_opt == "space" or user_opt == "uop",
+           "Invalid \"optimization\" flag")
+user_aligned = args.aligned
+user_extra_mem = args.extra_memory
+user_Constraint = args.constraint
+
+if user_opt == "space":
+    INSTRUCTION_OPT = Optimization.SPACE
+elif user_opt == "uop":
+    INSTRUCTION_OPT = Optimization.UOP
+else:
+    err_assert(False, "have no idea wtf happened")
+
+SIMD_RESTRICTIONS = user_Constraint
+ALIGNED_ACCESS = user_aligned
+EXTRA_MEMORY = user_extra_mem
+
+user_N = args.N
+try:
+    err_assert(user_N != "", "No \"N\" flag")
+    user_N = int(user_N)
+except ValueError:
+    err_assert(False, "\"N\" flag not valid int type")
+
+user_T = args.type
+user_Size = args.size
+user_Signed = args.signed
+user_Unsigned = args.unsigned
+
+set_T = False
+if user_T != "":
+    if Sort_Type(1, Sign.SIGNED).is_valid(user_T) is True:
+        if user_Size != "" or user_Signed is not False or user_Unsigned is not False:
+            print(
+                "Overriding \"signed\", \"unsigned\", and \"size\" flags with \"type\" flag"
+            )
+        set_T = True
+        user_T = Sort_Type(1, Sign.SIGNED).string_to_T(user_T)
+
+if set_T is False:
+    err_assert(user_Size != "",
+               "\"size\" flag is required if \"type\" is not specified")
+    try:
+        user_Size = int(user_Size)
+    except ValueError:
+        err_assert(False, "\"size\" flag is not valid integer type")
+
+    if user_Signed is True:
+        user_T = Sort_Type(user_Size, Sign.SIGNED)
+    elif user_Unsigned is True:
+        user_T = Sort_Type(user_Size, Sign.UNSIGNED)
+    else:
+        err_assert(False, "neither \"signed\" nor \"unsigned\" flag specified")
+
+user_Algorithm = args.algorithm
+err_assert(
+    Algorithms(0).valid_algorithm(user_Algorithm) is True,
+    "\"algorithm\" flag doesn't match")
+
+network_builder = Builder(user_N, user_T, user_Algorithm)
 print(network_builder.Build())
