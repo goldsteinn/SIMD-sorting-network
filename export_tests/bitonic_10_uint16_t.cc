@@ -112,7 +112,7 @@ return v8;
 void inline __attribute__((always_inline)) bitonic_10_uint16_t(uint16_t * const arr) {
 
 __m256i _tmp0 = _mm256_set1_epi16(uint16_t(0xffff));
-__m256i v = _mm256_mask_load_epi32(_tmp0, 0x3f, (int32_t * const)arr);
+__m256i v = _mm256_mask_load_epi32(_tmp0, 0x1f, (int32_t * const)arr);
 
 v = bitonic_10_uint16_t_vec(v);
 

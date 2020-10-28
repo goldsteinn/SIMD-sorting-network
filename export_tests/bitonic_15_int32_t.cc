@@ -19,8 +19,8 @@ Sorting Network Information:
 	SIMD Type                        : __m512i
 	SIMD Instruction Set(s) Used     : AVX512f, AVX512bw, AVX512vl
 	SIMD Instruction Set(s) Excluded : None
-	Aligned Load & Store             : False
-	Full Load & Store                : False
+	Aligned Load & Store             : True
+	Full Load & Store                : True
 
 Performance Notes:
 1) If you are sorting an array where there IS valid memory up to 
@@ -117,11 +117,11 @@ return v9;
 void inline __attribute__((always_inline)) bitonic_15_int32_t(int32_t * const arr) {
 
 __m512i _tmp0 = _mm512_set1_epi32(int32_t(0x7fffffff));
-__m512i v = _mm512_mask_loadu_epi32(_tmp0, 0x7fff, arr);
+__m512i v = _mm512_mask_load_epi32(_tmp0, 0x7fff, arr);
 
 v = bitonic_15_int32_t_vec(v);
 
-_mm512_mask_storeu_epi32((void *)arr, 0x7fff, v);
+_mm512_mask_store_epi32((void *)arr, 0x7fff, v);
 
 }
 

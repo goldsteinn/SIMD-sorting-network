@@ -10,12 +10,13 @@ types = [
     "int32_t", "int64_t"
 ]
 sizes = [1, 2, 4, 8, 1, 2, 4, 8]
-max_b = [64]
+max_b = [32, 64]
 extra_flags = [
     "", "-i", "-O space", "-O space -i", "-O uop", "-O uop -i", "-e",
-    "--aligned", "-e --aligned", "-tmp", "-i -tmp", "-O space -tmp",
-    "-O space -i -tmp", "-O uop -tmp", "-O uop -i -tmp", "-e -tmp",
-    "--aligned -tmp", "-e --aligned -tmp"
+    "--aligned", "-e --aligned", "-e -i", "--aligned -i", "-e --aligned -i",
+    "-tmp", "-i -tmp", "-O space -tmp", "-O space -i -tmp", "-O uop -tmp",
+    "-O uop -i -tmp", "-e -tmp", "--aligned -tmp", "-e --aligned -tmp",
+    "-e -i -tmp", "--aligned -i -tmp", "-e --aligned -i -tmp"
 ]
 
 
@@ -33,7 +34,7 @@ for max_bytes in max_b:
         min_N = max(4, int(4 / sizes[i]))
         max_N = int(max_bytes / sizes[i]) + 1
         for n in range(min_N, max_N):
-           
+
             for f in extra_flags:
                 os.system("rm -f export_tests/.tmp")
                 cmd = ""
