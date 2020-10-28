@@ -18,8 +18,8 @@ Sorting Network Information:
 	SIMD Instructions                : 2 / 25
 	SIMD Type                        : __m256i
 	SIMD Instruction Set(s) Used     : AVX, AVX2
-	SIMD Instruction Set(s) Excluded : None
-	Aligned Load & Store             : False
+	SIMD Instruction Set(s) Excluded : AVX512*
+	Aligned Load & Store             : True
 	Full Load & Store                : True
 
 Performance Notes:
@@ -28,7 +28,10 @@ Performance Notes:
    "EXTRA_MEMORY" (this turns on "Full Load & Store". Note that enabling
    "Full Load & Store" will not modify any of the memory not being sorted
    and will not affect the sort in any way. i.e sort(3) [4, 3, 2, 1]
-   with full load will still return [2, 3, 4, 1].
+   with full load will still return [2, 3, 4, 1]. Note even if you don't
+   have enough memory for a full SIMD register, enabling "INT_ALIGNED"
+   will also improve load efficiency and only requires that there is
+   valid memory up the next factor of sizeof(int).
 
 2) If your sort size is not a power of 2 you are likely running into 
    less efficient instructions. This is especially noticable when sorting
@@ -94,9 +97,11 @@ return v5;
 /* Wrapper For SIMD Sort */
 void inline __attribute__((always_inline)) bitonic_8_uint32_t(uint32_t * const arr) {
 
-__m256i v = _mm256_loadu_si256((__m256i *)arr);
+__m256i v = _mm256_load_si256((__m256i *)arr);
+
 v = bitonic_8_uint32_t_vec(v);
-_mm256_storeu_si256((__m256i *)arr, v);
+
+_mm256_store_si256((__m256i *)arr, v);
 
 }
 

@@ -28,7 +28,10 @@ Performance Notes:
    "EXTRA_MEMORY" (this turns on "Full Load & Store". Note that enabling
    "Full Load & Store" will not modify any of the memory not being sorted
    and will not affect the sort in any way. i.e sort(3) [4, 3, 2, 1]
-   with full load will still return [2, 3, 4, 1].
+   with full load will still return [2, 3, 4, 1]. Note even if you don't
+   have enough memory for a full SIMD register, enabling "INT_ALIGNED"
+   will also improve load efficiency and only requires that there is
+   valid memory up the next factor of sizeof(int).
 
 2) If your sort size is not a power of 2 you are likely running into 
    less efficient instructions. This is especially noticable when sorting
@@ -94,7 +97,9 @@ return v5;
 void inline __attribute__((always_inline)) bitonic_8_uint64_t(uint64_t * const arr) {
 
 __m512i v = _mm512_loadu_si512((__m512i *)arr);
+
 v = bitonic_8_uint64_t_vec(v);
+
 _mm512_storeu_si512((__m512i *)arr, v);
 
 }

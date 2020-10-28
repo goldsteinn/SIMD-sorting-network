@@ -28,7 +28,10 @@ Performance Notes:
    "EXTRA_MEMORY" (this turns on "Full Load & Store". Note that enabling
    "Full Load & Store" will not modify any of the memory not being sorted
    and will not affect the sort in any way. i.e sort(3) [4, 3, 2, 1]
-   with full load will still return [2, 3, 4, 1].
+   with full load will still return [2, 3, 4, 1]. Note even if you don't
+   have enough memory for a full SIMD register, enabling "INT_ALIGNED"
+   will also improve load efficiency and only requires that there is
+   valid memory up the next factor of sizeof(int).
 
 2) If your sort size is not a power of 2 you are likely running into 
    less efficient instructions. This is especially noticable when sorting
@@ -138,8 +141,11 @@ return v14;
 /* Wrapper For SIMD Sort */
 void inline __attribute__((always_inline)) bitonic_25_uint16_t(uint16_t * const arr) {
 
-__m512i v = _mm512_mask_loadu_epi16(_mm512_set1_epi16(uint16_t(0xffff)), 0x1ffffff, arr);
+__m512i _tmp0 = _mm512_set1_epi16(uint16_t(0xffff));
+__m512i v = _mm512_mask_loadu_epi16(_tmp0, 0x1ffffff, arr);
+
 v = bitonic_25_uint16_t_vec(v);
+
 _mm512_mask_storeu_epi16((void *)arr, 0x1ffffff, v);
 
 }
