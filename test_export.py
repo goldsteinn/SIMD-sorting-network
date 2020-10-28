@@ -33,6 +33,7 @@ for max_bytes in max_b:
         min_N = max(4, int(4 / sizes[i]))
         max_N = int(max_bytes / sizes[i]) + 1
         for n in range(min_N, max_N):
+           
             for f in extra_flags:
                 os.system("rm -f export_tests/.tmp")
                 cmd = ""
@@ -43,7 +44,7 @@ for max_bytes in max_b:
                     cmd = "./export2.py -N {} -T {} {} --algorithm bitonic > export_tests/.tmp".format(
                         n, types[i], f)
 
-                print("Running: {}".format(cmd))
+                # print("Running: {}".format(cmd))
                 os.system(cmd)
 
                 sort_impl = ""

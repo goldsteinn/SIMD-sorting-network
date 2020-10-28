@@ -15,7 +15,7 @@ Sorting Network Information:
 	Underlying Sort Type             : int8_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 3
-	SIMD Instructions                : 0 / 39
+	SIMD Instructions                : 1 / 39
 	SIMD Type                        : __m64
 	SIMD Instruction Set(s) Used     : MMX, SSSE3
 	SIMD Instruction Set(s) Excluded : AVX512*
@@ -61,28 +61,28 @@ typedef __m64 _aliasing_m64_ __attribute__((aligned(8), may_alias));
 __m64 __attribute__((const)) bitonic_4_int8_t_vec(__m64 v) {
 
 __m64 perm0 = _mm_shuffle_pi8(v, _mm_set_pi8(7, 6, 5, 4, 2, 3, 0, 1));
-__m64 _tmp0 = _mm_cmpgt_pi8(perm0, v);
-__m64 min0 = _mm_or_si64(_mm_and_si64(_tmp0, v), _mm_andnot_si64(_tmp0, perm0));
-__m64 _tmp1 = _mm_cmpgt_pi8(v, perm0);
-__m64 max0 = _mm_or_si64(_mm_and_si64(_tmp1, v), _mm_andnot_si64(_tmp1, perm0));
-__m64 _tmp2 = (__m64)(0xff00ffUL);
-__m64 v0 = _mm_or_si64(_mm_and_si64(_tmp2, min0), _mm_andnot_si64(_tmp2, max0));
+__m64 _tmp1 = _mm_cmpgt_pi8(perm0, v);
+__m64 min0 = _mm_or_si64(_mm_and_si64(_tmp1, v), _mm_andnot_si64(_tmp1, perm0));
+__m64 _tmp2 = _mm_cmpgt_pi8(v, perm0);
+__m64 max0 = _mm_or_si64(_mm_and_si64(_tmp2, v), _mm_andnot_si64(_tmp2, perm0));
+__m64 _tmp3 = (__m64)(0xff00ffUL);
+__m64 v0 = _mm_or_si64(_mm_and_si64(_tmp3, min0), _mm_andnot_si64(_tmp3, max0));
 
 __m64 perm1 = _mm_shuffle_pi8(v0, _mm_set_pi8(7, 6, 5, 4, 0, 1, 2, 3));
-__m64 _tmp3 = _mm_cmpgt_pi8(perm1, v0);
-__m64 min1 = _mm_or_si64(_mm_and_si64(_tmp3, v0), _mm_andnot_si64(_tmp3, perm1));
-__m64 _tmp4 = _mm_cmpgt_pi8(v0, perm1);
-__m64 max1 = _mm_or_si64(_mm_and_si64(_tmp4, v0), _mm_andnot_si64(_tmp4, perm1));
-__m64 _tmp5 = (__m64)(0xffffUL);
-__m64 v1 = _mm_or_si64(_mm_and_si64(_tmp5, min1), _mm_andnot_si64(_tmp5, max1));
+__m64 _tmp4 = _mm_cmpgt_pi8(perm1, v0);
+__m64 min1 = _mm_or_si64(_mm_and_si64(_tmp4, v0), _mm_andnot_si64(_tmp4, perm1));
+__m64 _tmp5 = _mm_cmpgt_pi8(v0, perm1);
+__m64 max1 = _mm_or_si64(_mm_and_si64(_tmp5, v0), _mm_andnot_si64(_tmp5, perm1));
+__m64 _tmp6 = (__m64)(0xffffUL);
+__m64 v1 = _mm_or_si64(_mm_and_si64(_tmp6, min1), _mm_andnot_si64(_tmp6, max1));
 
 __m64 perm2 = _mm_shuffle_pi8(v1, _mm_set_pi8(7, 6, 5, 4, 2, 3, 0, 1));
-__m64 _tmp6 = _mm_cmpgt_pi8(perm2, v1);
-__m64 min2 = _mm_or_si64(_mm_and_si64(_tmp6, v1), _mm_andnot_si64(_tmp6, perm2));
-__m64 _tmp7 = _mm_cmpgt_pi8(v1, perm2);
-__m64 max2 = _mm_or_si64(_mm_and_si64(_tmp7, v1), _mm_andnot_si64(_tmp7, perm2));
-__m64 _tmp8 = (__m64)(0xff00ffUL);
-__m64 v2 = _mm_or_si64(_mm_and_si64(_tmp8, min2), _mm_andnot_si64(_tmp8, max2));
+__m64 _tmp7 = _mm_cmpgt_pi8(perm2, v1);
+__m64 min2 = _mm_or_si64(_mm_and_si64(_tmp7, v1), _mm_andnot_si64(_tmp7, perm2));
+__m64 _tmp8 = _mm_cmpgt_pi8(v1, perm2);
+__m64 max2 = _mm_or_si64(_mm_and_si64(_tmp8, v1), _mm_andnot_si64(_tmp8, perm2));
+__m64 _tmp9 = (__m64)(0xff00ffUL);
+__m64 v2 = _mm_or_si64(_mm_and_si64(_tmp9, min2), _mm_andnot_si64(_tmp9, max2));
 
 return v2;
 }
@@ -92,11 +92,13 @@ return v2;
 /* Wrapper For SIMD Sort */
 void inline __attribute__((always_inline)) bitonic_4_int8_t(int8_t * const arr) {
 
-__m64 v = (*((_aliasing_m64_ *)arr));
+__m64 _tmp0 = _mm_set1_pi8(int8_t(0x7f));
+__builtin_memcpy(&_tmp0, arr, 4);
+__m64 v = _tmp0;
 
 v = bitonic_4_int8_t_vec(v);
 
-(*((_aliasing_m64_ *)arr)) = v;
+__builtin_memcpy(arr, &v, 4);
 
 }
 

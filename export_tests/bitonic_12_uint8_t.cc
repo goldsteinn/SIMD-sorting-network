@@ -15,12 +15,12 @@ Sorting Network Information:
 	Underlying Sort Type             : uint8_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 10
-	SIMD Instructions                : 4 / 58
+	SIMD Instructions                : 6 / 58
 	SIMD Type                        : __m128i
 	SIMD Instruction Set(s) Used     : AVX2, SSE2, SSSE3, SSE4.1
 	SIMD Instruction Set(s) Excluded : AVX512*
-	Aligned Load & Store             : False
-	Full Load & Store                : False
+	Aligned Load & Store             : True
+	Full Load & Store                : True
 
 Performance Notes:
 1) If you are sorting an array where there IS valid memory up to 
@@ -116,7 +116,9 @@ return v9;
 /* Wrapper For SIMD Sort */
 void inline __attribute__((always_inline)) bitonic_12_uint8_t(uint8_t * const arr) {
 
-__m128i v = _mm_maskload_epi32((int32_t * const)arr, _mm_set_epi32(0x0, 0x80000000, 0x80000000, 0x80000000));
+__m128i _tmp0 = _mm_maskload_epi32((int32_t * const)arr, _mm_set_epi32(0x0, 0x80000000, 0x80000000, 0x80000000));
+__m128i _tmp1 = _mm_set1_epi8(uint8_t(0xff));
+__m128i v = _mm_blend_epi32(_tmp1, _tmp0, 0x7);
 
 v = bitonic_12_uint8_t_vec(v);
 

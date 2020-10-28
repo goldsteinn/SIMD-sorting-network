@@ -57,11 +57,14 @@ parser.add_argument("-e",
                     action="store_true",
                     default=False,
                     help="Set to enable extra memory load & store")
-parser.add_argument("-i",
-                    "--int-aligned",
-                    action="store_true",
-                    default=False,
-                    help="Set to indicate that memory accesses can be rounded up to nearest sizeof int.")
+parser.add_argument(
+    "-i",
+    "--int-aligned",
+    action="store_true",
+    default=False,
+    help=
+    "Set to indicate that memory accesses can be rounded up to nearest sizeof int."
+)
 parser.add_argument("--aligned",
                     action="store_true",
                     default=False,
@@ -1555,7 +1558,8 @@ class SIMD_Shuffle_m64(SIMD_Instruction):
         return shuffle_mask_impl(4, 4, 2, 0, new_perm)
 
     def generate_instruction(self):
-        return "_mm_shuffle_pi16([V1], [SHUFFLE_MASK])".replace("[SHUFFLE_MASK]", str(hex(self.shuffle_mask())))
+        return "_mm_shuffle_pi16([V1], [SHUFFLE_MASK])".replace(
+            "[SHUFFLE_MASK]", str(hex(self.shuffle_mask())))
 
 
 class SIMD_Permutex_Generate(SIMD_Instruction):
@@ -1719,20 +1723,21 @@ def build_mask_bool_vec(alignment_incr, raw_N, sort_type, simd_type):
 
 
 class SIMD_Full_Load(SIMD_Instruction):
-    def __init__(self, iname, full, aligned, simd_type, constraints, weight):
+    def __init__(self, iname, fill, aligned, simd_type, constraints, weight):
         # T_size doesn't matter, only register size
         super().__init__(iname, Sign.NOT_SIGNED, 0, simd_type, constraints,
                          weight)
 
         # Booleans
         self.aligned = aligned
-        self.full = full
+        self.fill = fill
 
     def match(self, match_info):
         return self.has_support() and self.match_simd_type(
             match_info.simd_type) and (
                 (match_info.aligned is self.aligned) or
-                (self.aligned is False)) and (match_info.full is True) and (self.full is False)
+                (self.aligned is False)) and (match_info.full is
+                                              True) and (self.fill is False)
 
 
 class SIMD_Partial_Load_m64(SIMD_Instruction):
@@ -1781,7 +1786,8 @@ class SIMD_Mask_Load_Epi32(SIMD_Instruction):
 
     def can_do_epi32(self):
         sort_bytes = self.raw_N * self.sort_type.sizeof()
-        return (sort_bytes % 4) == 0
+        return (sort_bytes % 4) == 0 or (self.fill is False
+                                         and INT_ALIGNED is True)
 
     def generate_instruction(self):
         epi32_n = 0
@@ -1853,7 +1859,7 @@ class SIMD_Mask_Load(SIMD_Instruction):
 
 
 class SIMD_Mask_Load_Fallback_As_Epi32(SIMD_Instruction):
-    def __init__(self, sort_type, full, raw_N, simd_type, constraints, weight):
+    def __init__(self, sort_type, fill, raw_N, simd_type, constraints, weight):
         super().__init__("Override Error: " + self.__class__.__name__,
                          Sign.NOT_SIGNED, sort_type.sizeof(), simd_type,
                          constraints, weight)
@@ -1861,7 +1867,7 @@ class SIMD_Mask_Load_Fallback_As_Epi32(SIMD_Instruction):
         self.raw_N = raw_N
         self.sort_type = sort_type
         self.extra_insert = False
-        self.full = full
+        self.fill = fill
 
     def build_baseline_vec(self, MIN_VAL):
         T_size = self.sort_type.sizeof()
@@ -1883,7 +1889,7 @@ class SIMD_Mask_Load_Fallback_As_Epi32(SIMD_Instruction):
 
     def build_mask_bool_vec_wrapper(self):
         sort_bytes = self.raw_N * self.sort_type.sizeof()
-        if INT_ALIGNED is False:
+        if INT_ALIGNED is False or self.fill is True:
             if (sort_bytes % 4) != 0:
                 self.extra_insert = True
             return build_mask_bool_vec(0, self.raw_N, self.sort_type,
@@ -1910,12 +1916,12 @@ class SIMD_Mask_Load_Fallback_As_Epi32(SIMD_Instruction):
         return instruction
 
     def generate_instruction(self):
-        if self.full is True:
-            return self.generate_instruction_full()
+        if self.fill is True:
+            return self.generate_instruction_fill()
         else:
             return self.generate_instruction_norm()
 
-    def generate_instruction_full(self):
+    def generate_instruction_fill(self):
         err_assert(self.simd_type.sizeof() <= 32,
                    "using fallback with AVX512 available")
         header.stdint = True
@@ -1946,13 +1952,15 @@ class SIMD_Mask_Load_Fallback_As_Epi32(SIMD_Instruction):
                     str(int(self.raw_N / int(4 / self.sort_type.sizeof()))))
             instruction += "\n"
 
+        blend_shift = int(0)
+        if self.sort_type.sizeof() > 4:
+            blend_shift = 2 * self.raw_N
+        else:
+            blend_shift = self.raw_N / int(4 / self.sort_type.sizeof())
+
         instruction += "{}_blend_epi32([TMP1], [TMP0], [BLEND_MASK])".format(
             self.simd_type.prefix(), self.simd_type.postfix()).replace(
-                "[BLEND_MASK]",
-                str(
-                    hex((int(1) << int(self.raw_N /
-                                       int(4 / self.sort_type.sizeof()))) -
-                        1)))
+                "[BLEND_MASK]", str(hex((int(1) << int(blend_shift)) - 1)))
 
         return instruction
 
@@ -1982,15 +1990,15 @@ class SIMD_Load():
     def __init__(self, raw_N, sort_type, scaled_sort_N):
         self.instructions = [
             ###################################################################
-            SIMD_Full_Load("(*((_aliasing_m64_ *)[ARR]))", scaled_sort_N, False, SIMD_m64(),
-                           ["MMX"], 0),
+            SIMD_Full_Load("(*((_aliasing_m64_ *)[ARR]))", scaled_sort_N,
+                           False, SIMD_m64(), ["MMX"], 0),
             SIMD_Partial_Load_m64(sort_type, raw_N, SIMD_m64(), ["MMX"], 1),
             ###################################################################
             # These are universal best instructions if applicable
-            SIMD_Full_Load("_mm_load_si128((__m128i *)[ARR])", scaled_sort_N, True,
-                           SIMD_m128(), ["SSE2"], 0),
-            SIMD_Full_Load("_mm_loadu_si128((__m128i *)[ARR])",scaled_sort_N,  False,
-                           SIMD_m128(), ["SSE2"], 1),
+            SIMD_Full_Load("_mm_load_si128((__m128i *)[ARR])", scaled_sort_N,
+                           True, SIMD_m128(), ["SSE2"], 0),
+            SIMD_Full_Load("_mm_loadu_si128((__m128i *)[ARR])", scaled_sort_N,
+                           False, SIMD_m128(), ["SSE2"], 1),
 
             # This is universal fallback and always lowest priority
             SIMD_Mask_Load_Fallback_As_Epi32(sort_type, scaled_sort_N, raw_N,
@@ -2046,10 +2054,10 @@ class SIMD_Load():
                 ["AVX512vl", "AVX512f", "SSE2"], 5),
             ###################################################################
             # These are universal best instructions if applicable
-            SIMD_Full_Load("_mm256_load_si256((__m256i *)[ARR])", scaled_sort_N, True,
-                           SIMD_m256(), ["AVX"], 0),
-            SIMD_Full_Load("_mm256_loadu_si256((__m256i *)[ARR])", scaled_sort_N, False,
-                           SIMD_m256(), ["AVX"], 1),
+            SIMD_Full_Load("_mm256_load_si256((__m256i *)[ARR])",
+                           scaled_sort_N, True, SIMD_m256(), ["AVX"], 0),
+            SIMD_Full_Load("_mm256_loadu_si256((__m256i *)[ARR])",
+                           scaled_sort_N, False, SIMD_m256(), ["AVX"], 1),
 
             # This is universal fallback and always lowest priority
             SIMD_Mask_Load_Fallback_As_Epi32(sort_type, scaled_sort_N, raw_N,
@@ -2106,10 +2114,10 @@ class SIMD_Load():
                 ["AVX512vl", "AVX512f", "AVX"], 5),
             ###################################################################
             # These are universal best instructions if applicable
-            SIMD_Full_Load("_mm512_load_si512((__m512i *)[ARR])", scaled_sort_N, True,
-                           SIMD_m512(), ["AVX512f"], 0),
-            SIMD_Full_Load("_mm512_loadu_si512((__m512i *)[ARR])",scaled_sort_N, False,
-                           SIMD_m512(), ["AVX512f"], 1),
+            SIMD_Full_Load("_mm512_load_si512((__m512i *)[ARR])",
+                           scaled_sort_N, True, SIMD_m512(), ["AVX512f"], 0),
+            SIMD_Full_Load("_mm512_loadu_si512((__m512i *)[ARR])",
+                           scaled_sort_N, False, SIMD_m512(), ["AVX512f"], 1),
             SIMD_Mask_Load(
                 "_mm512_mask_loadu_epi8([FILL_TMP], [LOAD_MASK], [ARR])",
                 sort_type, 1, scaled_sort_N, False, raw_N, SIMD_m512(),
@@ -2147,20 +2155,21 @@ class SIMD_Load():
 
 
 class SIMD_Full_Store(SIMD_Instruction):
-    def __init__(self, iname, full, aligned, simd_type, constraints, weight):
+    def __init__(self, iname, fill, aligned, simd_type, constraints, weight):
         # T_size doesn't matter, only register size
         super().__init__(iname, Sign.NOT_SIGNED, 0, simd_type, constraints,
                          weight)
 
         # Booleans
         self.aligned = aligned
-        self.full = full
+        self.fill = fill
 
     def match(self, match_info):
         return self.has_support() and self.match_simd_type(
             match_info.simd_type) and (
                 (match_info.aligned is self.aligned) or
-                (self.aligned is False)) and (match_info.full is True) and (self.full is False)
+                (self.aligned is False)) and (match_info.full is
+                                              True) and (self.fill is False)
 
 
 class SIMD_Mask_Store(SIMD_Instruction):
@@ -2202,21 +2211,21 @@ class SIMD_Partial_Store_m64(SIMD_Instruction):
 
 
 class SIMD_Mask_Store_Fallback_As_Epi32(SIMD_Instruction):
-    def __init__(self, full, sort_type, raw_N, simd_type, constraints, weight):
+    def __init__(self, fill, sort_type, raw_N, simd_type, constraints, weight):
         super().__init__("Override Error: " + self.__class__.__name__,
                          Sign.NOT_SIGNED, sort_type.sizeof(), simd_type,
                          constraints, weight)
         self.raw_N = raw_N
         self.sort_type = sort_type
         self.extra_insert = False
-        self.full = full
+        self.fill = fill
 
     def build_store_bool_vec_wrapper(self):
         err_assert(self.simd_type.sizeof() > 8,
                    self.__class__.__name__ + " not applicable for __m64")
 
         sort_bytes = self.raw_N * self.sort_type.sizeof()
-        if INT_ALIGNED is False or self.full is True:
+        if INT_ALIGNED is False or self.fill is True:
             return build_mask_bool_vec(0, self.raw_N, self.sort_type,
                                        self.simd_type)
         else:
@@ -2225,9 +2234,9 @@ class SIMD_Mask_Store_Fallback_As_Epi32(SIMD_Instruction):
 
     def generate_instruction(self):
         header.stdint = True
-        
+
         sort_bytes = self.raw_N * self.sort_type.sizeof()
-        if INT_ALIGNED is False or self.full is True:
+        if INT_ALIGNED is False or self.fill is True:
             if (sort_bytes % 4) != 0:
                 self.extra_insert = True
 
@@ -2298,20 +2307,21 @@ class SIMD_Store():
     def __init__(self, raw_N, sort_type, scaled_sort_N):
         self.instructions = [
             ###################################################################
-            SIMD_Full_Store("(*((_aliasing_m64_ *)[ARR])) = [V]", scaled_sort_N, False,
-                            SIMD_m64(), ["MMX"], 0),
+            SIMD_Full_Store("(*((_aliasing_m64_ *)[ARR])) = [V]",
+                            scaled_sort_N, False, SIMD_m64(), ["MMX"], 0),
             SIMD_Partial_Store_m64(1, raw_N, SIMD_m64(), ["MMX"], 1),
             SIMD_Partial_Store_m64(2, raw_N, SIMD_m64(), ["MMX"], 1),
             ###################################################################
             # Universal __m128i stores
-            SIMD_Full_Store("_mm_store_si128((__m128i *)[ARR], [V])", scaled_sort_N,True,
-                            SIMD_m128(), ["SSE2"], 0),
-            SIMD_Full_Store("_mm_storeu_si128((__m128i *)[ARR], [V])", scaled_sort_N,False,
-                            SIMD_m128(), ["SSE2"], 1),
+            SIMD_Full_Store("_mm_store_si128((__m128i *)[ARR], [V])",
+                            scaled_sort_N, True, SIMD_m128(), ["SSE2"], 0),
+            SIMD_Full_Store("_mm_storeu_si128((__m128i *)[ARR], [V])",
+                            scaled_sort_N, False, SIMD_m128(), ["SSE2"], 1),
 
             # Universal fallback
-            SIMD_Mask_Store_Fallback_As_Epi32(scaled_sort_N,sort_type, raw_N, SIMD_m128(),
-                                              ["AVX2", "SSE4.1"], 100),
+            SIMD_Mask_Store_Fallback_As_Epi32(scaled_sort_N, sort_type, raw_N,
+                                              SIMD_m128(), ["AVX2", "SSE4.1"],
+                                              100),
             SIMD_Mask_Store(
                 "_mm_mask_storeu_epi8((void *)[ARR], [STORE_MASK], [V])", 1,
                 False, raw_N, SIMD_m128(), ["AVX512bw", "AVX512vl"], 2),
@@ -2332,14 +2342,15 @@ class SIMD_Store():
                 False, raw_N, SIMD_m128(), ["AVX512f", "AVX512vl"], 3),
             ###################################################################
             # Universal __m256i stores
-            SIMD_Full_Store("_mm256_store_si256((__m256i *)[ARR], [V])", scaled_sort_N,True,
-                            SIMD_m256(), ["AVX"], 0),
+            SIMD_Full_Store("_mm256_store_si256((__m256i *)[ARR], [V])",
+                            scaled_sort_N, True, SIMD_m256(), ["AVX"], 0),
             SIMD_Full_Store("_mm256_storeu_si256((__m256i *)[ARR], [V])",
-                            scaled_sort_N,False, SIMD_m256(), ["AVX"], 1),
+                            scaled_sort_N, False, SIMD_m256(), ["AVX"], 1),
 
             # Universal fallback
-            SIMD_Mask_Store_Fallback_As_Epi32(scaled_sort_N,sort_type, raw_N, SIMD_m256(),
-                                              ["AVX2", "AVX"], 100),
+            SIMD_Mask_Store_Fallback_As_Epi32(scaled_sort_N, sort_type, raw_N,
+                                              SIMD_m256(), ["AVX2", "AVX"],
+                                              100),
             SIMD_Mask_Store(
                 "_mm256_mask_storeu_epi8((void *)[ARR], [STORE_MASK], [V])", 1,
                 False, raw_N, SIMD_m256(), ["AVX512bw", "AVX512vl"], 2),
@@ -2360,10 +2371,10 @@ class SIMD_Store():
                 8, False, raw_N, SIMD_m256(), ["AVX512f", "AVX512vl"], 3),
             ###################################################################
             # Universal __m512i stores
-            SIMD_Full_Store("_mm512_store_si512((__m512i *)[ARR], [V])",scaled_sort_N, True,
-                            SIMD_m512(), ["AVX512f"], 0),
+            SIMD_Full_Store("_mm512_store_si512((__m512i *)[ARR], [V])",
+                            scaled_sort_N, True, SIMD_m512(), ["AVX512f"], 0),
             SIMD_Full_Store("_mm512_storeu_si512((__m512i *)[ARR], [V])",
-                            scaled_sort_N,False, SIMD_m512(), ["AVX512f"], 1),
+                            scaled_sort_N, False, SIMD_m512(), ["AVX512f"], 1),
 
             # Universal fallback
             SIMD_Mask_Store(
@@ -2779,7 +2790,7 @@ class Compare_Exchange_Generator():
 
         self.cas_output_generator = CAS_Output_Generator(N, sort_type)
 
-        scaled_sort_N = do_sort_N #False
+        scaled_sort_N = do_sort_N  #False
         do_full = EXTRA_MEMORY
         if self.simd_type.sizeof() == N * sort_type.sizeof():
             do_full = True
@@ -2788,12 +2799,12 @@ class Compare_Exchange_Generator():
             header.aliasing_m64 = True
 
         self.SIMD_load = instruction_filter(
-            SIMD_Load(N, sort_type, scaled_sort_N).instructions, self.sort_type,
-            self.simd_type, ALIGNED_ACCESS, do_full)
+            SIMD_Load(N, sort_type, scaled_sort_N).instructions,
+            self.sort_type, self.simd_type, ALIGNED_ACCESS, do_full)
 
         self.SIMD_store = instruction_filter(
-            SIMD_Store(N, sort_type, scaled_sort_N).instructions, self.sort_type,
-            self.simd_type, ALIGNED_ACCESS, do_full)
+            SIMD_Store(N, sort_type, scaled_sort_N).instructions,
+            self.sort_type, self.simd_type, ALIGNED_ACCESS, do_full)
 
     def Generate_Instructions(self):
         best_load = best_instruction(self.SIMD_load)
