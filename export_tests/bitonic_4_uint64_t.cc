@@ -5,6 +5,55 @@
 #include <stdint.h>
 #include <algorithm>
 
+
+template<typename T, uint32_t n>
+struct sarr {
+    typedef uint32_t aliasing_u32 __attribute__((aligned(1), may_alias));
+
+
+    T arr[64 / sizeof(T)] __attribute__((aligned(64)));
+
+    void
+    finit() {
+        for (uint32_t i = 0; i < n; ++i) {
+            arr[i] = i;
+        }
+    }
+
+    void
+    binit() {
+        for (uint32_t i = 0; i < n; ++i) {
+            arr[i] = (n - 1) - i;
+        }
+    }
+
+    void
+    show() {
+        for (uint32_t i = 0; i < n; ++i) {
+            fprintf(stderr, "%d: %d\n", i, (uint32_t)arr[i]);
+        }
+    }
+
+    void
+    verify() {
+        for (uint32_t i = 1; i < n; ++i) {
+            assert(arr[i] >= arr[i - 1]);
+        }
+    }
+
+    void
+    randomize() {
+        aliasing_u32 * _arr = (aliasing_u32 *)arr;
+        for (uint32_t i = 0; i < (64 / sizeof(uint32_t)); ++i) {
+            _arr[i] = rand();
+        }
+    }
+};
+
+#define TYPE uint64_t
+#define N 4
+#define SORT_NAME bitonic_4_uint64_t
+
 #ifndef _SIMD_SORT_bitonic_4_uint64_t_H_
 #define _SIMD_SORT_bitonic_4_uint64_t_H_
 
@@ -55,6 +104,14 @@ Performance Notes:
 
 
 
+void fill_works(__m256i v) {
+sarr<TYPE, N> t;
+memcpy(t.arr, &v, 32);
+int i = N;for (; i < 4; ++i) {
+assert(t.arr[i] == uint64_t(0xffffffffffffffff));
+}
+}
+
 /* SIMD Sort */
 __m256i __attribute__((const)) bitonic_4_uint64_t_vec(__m256i v) {
 
@@ -83,10 +140,10 @@ void inline __attribute__((always_inline)) bitonic_4_uint64_t(uint64_t * const a
 
 __m256i _tmp0 = _mm256_set1_epi64x(uint64_t(0xffffffffffffffff));
 __m256i v = _mm256_mask_load_epi32(_tmp0, 0xff, (int32_t * const)arr);
-
+fill_works(v);
 v = bitonic_4_uint64_t_vec(v);
 
-_mm256_mask_store_epi64((void *)arr, 0xf, v);
+fill_works(v);_mm256_mask_store_epi64((void *)arr, 0xf, v);
 
 }
 
@@ -94,53 +151,7 @@ _mm256_mask_store_epi64((void *)arr, 0xf, v);
 #endif
 
 
-#define TYPE uint64_t
-#define N 4
-#define SORT_NAME bitonic_4_uint64_t
 
-template<typename T, uint32_t n>
-struct sarr {
-    typedef uint32_t aliasing_u32 __attribute__((aligned(1), may_alias));
-
-
-    T arr[64 / sizeof(T)] __attribute__((aligned(64)));
-
-    void
-    finit() {
-        for (uint32_t i = 0; i < n; ++i) {
-            arr[i] = i;
-        }
-    }
-
-    void
-    binit() {
-        for (uint32_t i = 0; i < n; ++i) {
-            arr[i] = (n - 1) - i;
-        }
-    }
-
-    void
-    show() {
-        for (uint32_t i = 0; i < n; ++i) {
-            fprintf(stderr, "%d: %d\n", i, (uint32_t)arr[i]);
-        }
-    }
-
-    void
-    verify() {
-        for (uint32_t i = 1; i < n; ++i) {
-            assert(arr[i] >= arr[i - 1]);
-        }
-    }
-
-    void
-    randomize() {
-        aliasing_u32 * _arr = (aliasing_u32 *)arr;
-        for (uint32_t i = 0; i < (64 / sizeof(uint32_t)); ++i) {
-            _arr[i] = rand();
-        }
-    }
-};
 
 #define TSIZE 1000
 void test() {

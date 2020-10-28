@@ -476,7 +476,6 @@ class SIMD_Min_Fallback_u64(SIMD_Instruction):
             self.simd_type.prefix())
         return instruction
 
-
 class SIMD_Min():
     def __init__(self):
         self.instructions = [
@@ -2073,18 +2072,27 @@ class SIMD_Mask_Load_Fallback_As_Epi32_Fill(SIMD_Instruction):
                                              self.simd_type)
 
     def generate_tmp_set(self, tmp_name):
+        err_assert(self.sort_type.sizeof() < 4, "generating tmp with int aligned load")
         ub = self.raw_N
         lb = self.raw_N - (self.raw_N % int(4 / self.sort_type.sizeof()))
         dif = ub - lb
+        err_assert(dif > 0 and dif < 4, "no remainder for tmp generation")
+        
         instruction = "const uint32_t {} = ".format(tmp_name)
 
+        v = int(0)
+        for i in range(dif, int(4 / self.sort_type.sizeof())):
+            v |= self.sort_type.max_value_int() << (i * self.sort_type.sizeof_bits())
+            
+        instruction += "{} | ".format(str(hex(v)))
+            
         if dif == 1:
-            instruction += "{} | (uint32_t)[ARR][{}]".format(str(hex((int(1) << 32) ^ (int(1) << self.sort_type.sizeof_bits()))), lb)
+            instruction += "((uint32_t)[ARR][{}] & {})".format(lb, str(hex((int(1) << (self.sort_type.sizeof_bits())) - 1)))
         elif dif == 2:
-            instruction += "0xffff0000 | ((_aliasing_int16_t_ *)[ARR])[{}]".format(
+            instruction += "(((_aliasing_int16_t_ *)[ARR])[{}] & 0xffff)".format(
                 int(lb / 2))
         elif dif == 3:
-            instruction += "0xff000000 | (((uint32_t)((_aliasing_int16_t_ *)[ARR])[{}]) & 0xffff) | ((((uint32_t)[ARR][{}]) & 0xff) << 16)".format(
+            instruction += "(((uint32_t)((_aliasing_int16_t_ *)[ARR])[{}]) & 0xffff) | ((((uint32_t)[ARR][{}]) & 0xff) << 16)".format(
                 int(lb / 2), lb + 2)
 
         return instruction
@@ -2619,6 +2627,23 @@ def order_str_tmps(raw_str, base):
     return ntmps, raw_str
 
 
+def small_test(sort_type, simd_type):
+    test = "void fill_works({} v) ".format(simd_type.to_string())
+    test += "{\n"
+    test += "sarr<TYPE, N> t;\n"
+    test += "memcpy(t.arr, &v, {});\n".format(simd_type.sizeof())
+    test += "int i = N;"
+    test += "for (; i < {}; ++i) ".format(int(simd_type.sizeof() / sort_type.sizeof()))
+    test += "{\n"
+    test += "assert(t.arr[i] == {});\n".format(sort_type.max_value())
+    test += "}\n"
+    test += "}\n"
+    return test
+
+def call_test(name):
+    test = "fill_works({});".format(name)
+    return test
+    
 class Output_Generator():
     def __init__(self, header_info, CAS_info, algorithm_name, depth, N,
                  sort_type):
@@ -2720,7 +2745,7 @@ class Output_Generator():
         return head
 
     def get_content(self):
-        return self.CAS_info.get().replace("[FUNCNAME]", self.sort_to_str)
+        return small_test(self.sort_type, self.simd_type) + "\n" + self.CAS_info.get().replace("[FUNCNAME]", self.sort_to_str)
 
     def get_tail(self):
         tail = "\n\n"
@@ -2827,10 +2852,12 @@ class CAS_Output_Generator():
 
     def get_wrapper_content(self):
         content = self.load
+        content += call_test("v");
         content += "\n"
         content += "[V] = [FUNCNAME]_vec([V]);".replace("[V]", self.v_name)
         content += "\n"
         content += "\n"
+        content += call_test("v");
         content += self.store
         return content
 

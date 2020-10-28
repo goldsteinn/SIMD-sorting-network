@@ -36,6 +36,8 @@ for max_bytes in max_b:
         for n in range(min_N, max_N):
 
             for f in extra_flags:
+                if "-tmp" not in f:
+                    continue
                 os.system("rm -f export_tests/.tmp")
                 cmd = ""
                 if max_bytes == 32:
@@ -45,7 +47,7 @@ for max_bytes in max_b:
                     cmd = "./export2.py -N {} -T {} {} --algorithm bitonic > export_tests/.tmp".format(
                         n, types[i], f)
 
-                # print("Running: {}".format(cmd))
+                print("Running: {}".format(cmd))
                 os.system(cmd)
 
                 sort_impl = ""

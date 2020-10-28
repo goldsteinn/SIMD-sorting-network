@@ -5,11 +5,6 @@
 #include <stdint.h>
 #include <algorithm>
 
-[SORT_IMPL]
-
-#define TYPE [TYPE]
-#define N [N]
-#define SORT_NAME [SORT_NAME]
 
 template<typename T, uint32_t n>
 struct sarr {
@@ -54,6 +49,14 @@ struct sarr {
         }
     }
 };
+
+#define TYPE [TYPE]
+#define N [N]
+#define SORT_NAME [SORT_NAME]
+
+[SORT_IMPL]
+
+
 
 #define TSIZE 1000
 void test() {

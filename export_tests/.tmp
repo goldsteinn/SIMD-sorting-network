@@ -48,6 +48,14 @@ Performance Notes:
 
 
 
+void fill_works(__m512i v) {
+sarr<TYPE, N> t;
+memcpy(t.arr, &v, 64);
+int i = N;for (; i < 8; ++i) {
+assert(t.arr[i] == int64_t(0x7fffffffffffffff));
+}
+}
+
 /* SIMD Sort */
 __m512i __attribute__((const)) bitonic_8_int64_t_vec(__m512i v) {
 
@@ -91,10 +99,10 @@ void inline __attribute__((always_inline)) bitonic_8_int64_t(int64_t * const arr
 
 __m512i _tmp0 = _mm512_set1_epi64(int64_t(0x7fffffffffffffff));
 __m512i v = _mm512_mask_load_epi64(_tmp0, 0xff, arr);
-
+fill_works(v);
 v = bitonic_8_int64_t_vec(v);
 
-_mm512_mask_store_epi64((void *)arr, 0xff, v);
+fill_works(v);_mm512_mask_store_epi64((void *)arr, 0xff, v);
 
 }
 
