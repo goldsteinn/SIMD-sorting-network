@@ -15,11 +15,11 @@ Sorting Network Information:
 	Underlying Sort Type             : uint16_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 15
-	SIMD Instructions                : 2 / 70
+	SIMD Instructions                : 3 / 70
 	SIMD Type                        : __m512i
-	SIMD Instruction Set(s) Used     : AVX512f, AVX512bw
+	SIMD Instruction Set(s) Used     : AVX512f, AVX512bw, AVX, AVX512vl
 	SIMD Instruction Set(s) Excluded : None
-	Aligned Load & Store             : False
+	Aligned Load & Store             : True
 	Full Load & Store                : True
 
 Performance Notes:
@@ -141,11 +141,12 @@ return v14;
 /* Wrapper For SIMD Sort */
 void inline __attribute__((always_inline)) bitonic_32_uint16_t(uint16_t * const arr) {
 
-__m512i v = _mm512_loadu_si512((__m512i *)arr);
+__m512i _tmp0 = _mm512_set1_epi16(uint16_t(0xffff));
+__m512i v = _mm512_mask_loadu_epi16(_tmp0, 0xffffffff, arr);
 
 v = bitonic_32_uint16_t_vec(v);
 
-_mm512_storeu_si512((__m512i *)arr, v);
+_mm512_mask_storeu_epi16((void *)arr, 0xffffffff, v);
 
 }
 

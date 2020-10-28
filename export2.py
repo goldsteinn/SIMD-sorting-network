@@ -1740,6 +1740,7 @@ class SIMD_Full_Load(SIMD_Instruction):
                                               True) and (self.fill is False)
 
 
+
 class SIMD_Partial_Load_m64(SIMD_Instruction):
     def __init__(self, sort_type, raw_N, simd_type, constraints, weight):
         super().__init__("Override Error: " + self.__class__.__name__,
@@ -1791,9 +1792,11 @@ class SIMD_Mask_Load_Epi32(SIMD_Instruction):
 
     def generate_instruction(self):
         epi32_n = 0
+
         if self.sort_type.sizeof() < 4:
+            tdiv = int(4 / self.sort_type.sizeof())
             epi32_n = (int(1) << int(
-                self.raw_N / int(4 / self.sort_type.sizeof()))) - 1
+                (self.raw_N + (tdiv - 1)) / tdiv)) - 1
         else:
             epi32_n = (int(1) << int(
                 self.raw_N * int(self.sort_type.sizeof() / 4))) - 1

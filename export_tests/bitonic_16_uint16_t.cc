@@ -15,10 +15,10 @@ Sorting Network Information:
 	Underlying Sort Type             : uint16_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 10
-	SIMD Instructions                : 6 / 48
+	SIMD Instructions                : 3 / 47
 	SIMD Type                        : __m256i
-	SIMD Instruction Set(s) Used     : AVX2, AVX
-	SIMD Instruction Set(s) Excluded : AVX512*
+	SIMD Instruction Set(s) Used     : AVX512vl, AVX512f, SSE2, AVX2, AVX512bw, AVX
+	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Full Load & Store                : True
 
@@ -88,8 +88,7 @@ __m256i min5 = _mm256_min_epu16(v4, perm5);
 __m256i max5 = _mm256_max_epu16(v4, perm5);
 __m256i v5 = _mm256_blend_epi16(max5, min5, 0x55);
 
-__m256i _tmp2 = _mm256_permute4x64_epi64(v5, 0x1b);
-__m256i perm6 = _mm256_shufflehi_epi16(_mm256_shufflelo_epi16(_tmp2, 0x1b), 0x1b);
+__m256i perm6 = _mm256_permutexvar_epi16(_mm256_set_epi16(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15), v5);
 __m256i min6 = _mm256_min_epu16(v5, perm6);
 __m256i max6 = _mm256_max_epu16(v5, perm6);
 __m256i v6 = _mm256_blend_epi32(max6, min6, 0xf);
@@ -117,13 +116,12 @@ return v9;
 /* Wrapper For SIMD Sort */
 void inline __attribute__((always_inline)) bitonic_16_uint16_t(uint16_t * const arr) {
 
-__m256i _tmp0 = _mm256_maskload_epi32((int32_t * const)arr, _mm256_set_epi32(0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000));
-__m256i _tmp1 = _mm256_set1_epi16(uint16_t(0xffff));
-__m256i v = _mm256_blend_epi32(_tmp1, _tmp0, 0xff);
+__m256i _tmp0 = _mm256_set1_epi16(uint16_t(0xffff));
+__m256i v = _mm256_mask_load_epi32(_tmp0, 0x1ff, (int32_t * const)arr);
 
 v = bitonic_16_uint16_t_vec(v);
 
-_mm256_maskstore_epi32((int32_t * const)arr, _mm256_set_epi32(0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000), v);
+_mm256_mask_storeu_epi16((void *)arr, 0xffff, v);
 
 }
 

@@ -18,7 +18,7 @@ Sorting Network Information:
 	SIMD Instructions                : 1 / 78
 	SIMD Type                        : __m64
 	SIMD Instruction Set(s) Used     : MMX, SSSE3
-	SIMD Instruction Set(s) Excluded : AVX512*
+	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Full Load & Store                : True
 

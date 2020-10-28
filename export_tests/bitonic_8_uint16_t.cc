@@ -15,10 +15,10 @@ Sorting Network Information:
 	Underlying Sort Type             : uint16_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 6
-	SIMD Instructions                : 6 / 29
+	SIMD Instructions                : 3 / 29
 	SIMD Type                        : __m128i
-	SIMD Instruction Set(s) Used     : AVX2, SSE2, SSE4.1, SSSE3
-	SIMD Instruction Set(s) Excluded : AVX512*
+	SIMD Instruction Set(s) Used     : AVX512vl, AVX512f, SSE2, SSE4.1, AVX2, SSSE3, AVX512bw
+	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Full Load & Store                : True
 
@@ -96,13 +96,12 @@ return v5;
 /* Wrapper For SIMD Sort */
 void inline __attribute__((always_inline)) bitonic_8_uint16_t(uint16_t * const arr) {
 
-__m128i _tmp0 = _mm_maskload_epi32((int32_t * const)arr, _mm_set_epi32(0x80000000, 0x80000000, 0x80000000, 0x80000000));
-__m128i _tmp1 = _mm_set1_epi16(uint16_t(0xffff));
-__m128i v = _mm_blend_epi32(_tmp1, _tmp0, 0xf);
+__m128i _tmp0 = _mm_set1_epi16(uint16_t(0xffff));
+__m128i v = _mm_mask_load_epi32(_tmp0, 0x1f, (int32_t * const)arr);
 
 v = bitonic_8_uint16_t_vec(v);
 
-_mm_maskstore_epi32((int32_t * const)arr, _mm_set_epi32(0x80000000, 0x80000000, 0x80000000, 0x80000000), v);
+_mm_mask_storeu_epi16((void *)arr, 0xff, v);
 
 }
 

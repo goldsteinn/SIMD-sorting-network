@@ -15,9 +15,9 @@ Sorting Network Information:
 	Underlying Sort Type             : int32_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 5
-	SIMD Instructions                : 2 / 25
+	SIMD Instructions                : 6 / 25
 	SIMD Type                        : __m256i
-	SIMD Instruction Set(s) Used     : AVX, AVX2
+	SIMD Instruction Set(s) Used     : AVX2, AVX
 	SIMD Instruction Set(s) Excluded : AVX512*
 	Aligned Load & Store             : True
 	Full Load & Store                : True
@@ -91,11 +91,13 @@ return v4;
 /* Wrapper For SIMD Sort */
 void inline __attribute__((always_inline)) bitonic_5_int32_t(int32_t * const arr) {
 
-__m256i v = _mm256_load_si256((__m256i *)arr);
+__m256i _tmp0 = _mm256_maskload_epi32((int32_t * const)arr, _mm256_set_epi32(0x0, 0x0, 0x0, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000));
+__m256i _tmp1 = _mm256_set1_epi32(int32_t(0x7fffffff));
+__m256i v = _mm256_blend_epi32(_tmp1, _tmp0, 0x1f);
 
 v = bitonic_5_int32_t_vec(v);
 
-_mm256_store_si256((__m256i *)arr, v);
+_mm256_maskstore_epi32((int32_t * const)arr, _mm256_set_epi32(0x0, 0x0, 0x0, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000), v);
 
 }
 

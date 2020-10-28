@@ -19,8 +19,8 @@ Sorting Network Information:
 	SIMD Type                        : __m512i
 	SIMD Instruction Set(s) Used     : AVX512f, AVX512bw, AVX, AVX512vbmi, AVX512vl
 	SIMD Instruction Set(s) Excluded : None
-	Aligned Load & Store             : False
-	Full Load & Store                : False
+	Aligned Load & Store             : True
+	Full Load & Store                : True
 
 Performance Notes:
 1) If you are sorting an array where there IS valid memory up to 

@@ -10,7 +10,7 @@ types = [
     "int32_t", "int64_t"
 ]
 sizes = [1, 2, 4, 8, 1, 2, 4, 8]
-max_b = [32, 64]
+max_b = [64]
 extra_flags = [
     "", "-i", "-O space", "-O space -i", "-O uop", "-O uop -i", "-e",
     "--aligned", "-e --aligned", "-tmp", "-i -tmp", "-O space -tmp",

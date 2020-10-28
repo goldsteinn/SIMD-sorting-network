@@ -19,8 +19,8 @@ Sorting Network Information:
 	SIMD Type                        : __m256i
 	SIMD Instruction Set(s) Used     : AVX2, AVX
 	SIMD Instruction Set(s) Excluded : AVX512*
-	Aligned Load & Store             : False
-	Full Load & Store                : False
+	Aligned Load & Store             : True
+	Full Load & Store                : True
 
 Performance Notes:
 1) If you are sorting an array where there IS valid memory up to 

@@ -15,10 +15,10 @@ Sorting Network Information:
 	Underlying Sort Type             : uint8_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 15
-	SIMD Instructions                : 8 / 121
+	SIMD Instructions                : 3 / 75
 	SIMD Type                        : __m256i
-	SIMD Instruction Set(s) Used     : AVX2, AVX
-	SIMD Instruction Set(s) Excluded : AVX512*
+	SIMD Instruction Set(s) Used     : AVX512vl, AVX512bw, AVX, AVX2, AVX512vbmi
+	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Full Load & Store                : True
 
@@ -53,7 +53,6 @@ Performance Notes:
 #include <immintrin.h>
 #include <stdint.h>
 
-typedef uint16_t _aliasing_int16_t_ __attribute__((aligned(2), may_alias));
 
 
 /* SIMD Sort */
@@ -62,81 +61,57 @@ __m256i __attribute__((const)) bitonic_26_uint8_t_vec(__m256i v) {
 __m256i perm0 = _mm256_shuffle_epi8(v, _mm256_set_epi8(31, 30, 29, 28, 27, 26, 24, 25, 22, 23, 20, 21, 19, 17, 18, 16, 14, 15, 13, 11, 12, 9, 10, 7, 8, 6, 4, 5, 3, 1, 2, 0));
 __m256i min0 = _mm256_min_epu8(v, perm0);
 __m256i max0 = _mm256_max_epu8(v, perm0);
-__m256i v0 = _mm256_blendv_epi8(max0, min0, _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 128, 0, 128, 0, 128, 0, 0, 128, 0, 0, 128, 0, 0, 128, 0, 128, 0, 128, 0, 0, 128, 0, 0, 128, 0));
+__m256i v0 = _mm256_mask_mov_epi8(max0, 0x1524a92, min0);
 
 __m256i perm1 = _mm256_shuffle_epi8(v0, _mm256_set_epi8(31, 30, 29, 28, 27, 26, 22, 23, 24, 25, 21, 19, 20, 18, 16, 17, 13, 14, 15, 9, 10, 11, 12, 6, 7, 8, 3, 4, 5, 2, 0, 1));
 __m256i min1 = _mm256_min_epu8(v0, perm1);
 __m256i max1 = _mm256_max_epu8(v0, perm1);
-__m256i v1 = _mm256_blendv_epi8(max1, min1, _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 128, 128, 0, 0, 128, 0, 0, 128, 0, 0, 128, 0, 0, 128, 128, 0, 0, 128, 0, 0, 128, 0, 0, 128));
+__m256i v1 = _mm256_mask_mov_epi8(max1, 0xc92649, min1);
 
 __m256i perm2 = _mm256_shuffle_epi8(v1, _mm256_set_epi8(31, 30, 29, 28, 27, 26, 24, 25, 22, 23, 20, 21, 19, 17, 18, 16, 15, 13, 14, 11, 12, 9, 10, 8, 6, 7, 5, 3, 4, 1, 2, 0));
 __m256i min2 = _mm256_min_epu8(v1, perm2);
 __m256i max2 = _mm256_max_epu8(v1, perm2);
-__m256i v2 = _mm256_blendv_epi8(max2, min2, _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 128, 0, 128, 0, 128, 0, 0, 128, 0, 0, 0, 128, 0, 128, 0, 128, 0, 0, 128, 0, 0, 128, 0, 128, 0));
+__m256i v2 = _mm256_mask_mov_epi8(max2, 0x1522a4a, min2);
 
-__m256i _tmp3 = _mm256_permute4x64_epi64(v2, 0x4e);
-__m256i _tmp4 = _mm256_shuffle_epi8(v2, _mm256_set_epi8(15, 14, 13, 12, 11, 10, 3, 4, 5, 6, 7, 8, 9, 2, 128, 128, 15, 128, 128, 12, 6, 7, 8, 9, 10, 11, 1, 2, 3, 4, 5, 0));
-__m256i _tmp5 = _mm256_shuffle_epi8(_tmp3, _mm256_set_epi8(128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 13, 14, 128, 0, 1, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128));
-__m256i perm3 = _mm256_or_si256(_tmp4, _tmp5);
+__m256i perm3 = _mm256_permutexvar_epi8(_mm256_set_epi8(31, 30, 29, 28, 27, 26, 19, 20, 21, 22, 23, 24, 25, 18, 13, 14, 15, 16, 17, 12, 6, 7, 8, 9, 10, 11, 1, 2, 3, 4, 5, 0), v2);
 __m256i min3 = _mm256_min_epu8(v2, perm3);
 __m256i max3 = _mm256_max_epu8(v2, perm3);
-__m256i v3 = _mm256_blendv_epi8(max3, min3, _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 128, 128, 0, 0, 0, 0, 128, 128, 0, 0, 0, 0, 128, 128, 128, 0, 0, 0, 128, 128, 0));
+__m256i v3 = _mm256_mask_mov_epi8(max3, 0x3861c6, min3);
 
-__m256i _tmp6 = _mm256_permute4x64_epi64(v3, 0x4e);
-__m256i _tmp7 = _mm256_shuffle_epi8(v3, _mm256_set_epi8(15, 14, 13, 12, 11, 10, 7, 8, 9, 4, 3, 6, 5, 0, 128, 2, 128, 13, 14, 10, 9, 12, 11, 6, 7, 8, 4, 5, 1, 0, 3, 2));
-__m256i _tmp8 = _mm256_shuffle_epi8(_tmp6, _mm256_set_epi8(128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 15, 128, 1, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128));
-__m256i perm4 = _mm256_or_si256(_tmp7, _tmp8);
+__m256i perm4 = _mm256_permutexvar_epi8(_mm256_set_epi8(31, 30, 29, 28, 27, 26, 23, 24, 25, 20, 19, 22, 21, 16, 15, 18, 17, 13, 14, 10, 9, 12, 11, 6, 7, 8, 4, 5, 1, 0, 3, 2), v3);
 __m256i min4 = _mm256_min_epu8(v3, perm4);
 __m256i max4 = _mm256_max_epu8(v3, perm4);
-__m256i v4 = _mm256_blendv_epi8(max4, min4, _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 128, 128, 0, 0, 128, 128, 0, 128, 0, 0, 128, 128, 0, 0, 128, 0, 128, 0, 0, 128, 128));
+__m256i v4 = _mm256_mask_mov_epi8(max4, 0x99a653, min4);
 
-__m256i _tmp9 = _mm256_permute4x64_epi64(v4, 0x4e);
-__m256i _tmp10 = _mm256_shuffle_epi8(v4, _mm256_set_epi8(15, 14, 13, 12, 11, 10, 128, 7, 8, 5, 6, 3, 4, 1, 2, 128, 128, 128, 13, 11, 12, 9, 10, 7, 8, 4, 5, 6, 2, 3, 0, 1));
-__m256i _tmp11 = _mm256_shuffle_epi8(_tmp9, _mm256_set_epi8(128, 128, 128, 128, 128, 128, 14, 128, 128, 128, 128, 128, 128, 128, 128, 15, 0, 9, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128));
-__m256i perm5 = _mm256_or_si256(_tmp10, _tmp11);
+__m256i perm5 = _mm256_permutexvar_epi8(_mm256_set_epi8(31, 30, 29, 28, 27, 26, 14, 23, 24, 21, 22, 19, 20, 17, 18, 15, 16, 25, 13, 11, 12, 9, 10, 7, 8, 4, 5, 6, 2, 3, 0, 1), v4);
 __m256i min5 = _mm256_min_epu8(v4, perm5);
 __m256i max5 = _mm256_max_epu8(v4, perm5);
-__m256i v5 = _mm256_blendv_epi8(max5, min5, _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 128, 0, 0, 128, 0, 128, 0, 128, 0, 0, 128, 0, 128, 0, 128));
+__m256i v5 = _mm256_mask_mov_epi8(max5, 0xaaca95, min5);
 
-__m256i _tmp12 = _mm256_permute4x64_epi64(v5, 0x4e);
-__m256i _tmp13 = _mm256_shuffle_epi8(v5, _mm256_set_epi8(15, 14, 13, 12, 11, 10, 9, 128, 0, 1, 2, 4, 3, 5, 6, 7, 128, 14, 13, 12, 11, 0, 1, 2, 3, 6, 5, 4, 7, 8, 9, 10));
-__m256i _tmp14 = _mm256_shuffle_epi8(_tmp12, _mm256_set_epi8(128, 128, 128, 128, 128, 128, 128, 15, 128, 128, 128, 128, 128, 128, 128, 128, 8, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128));
-__m256i perm6 = _mm256_or_si256(_tmp13, _tmp14);
+__m256i perm6 = _mm256_permutexvar_epi8(_mm256_set_epi8(31, 30, 29, 28, 27, 26, 25, 15, 16, 17, 18, 20, 19, 21, 22, 23, 24, 14, 13, 12, 11, 0, 1, 2, 3, 6, 5, 4, 7, 8, 9, 10), v5);
 __m256i min6 = _mm256_min_epu8(v5, perm6);
 __m256i max6 = _mm256_max_epu8(v5, perm6);
-__m256i v6 = _mm256_blendv_epi8(max6, min6, _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 128, 128, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 128, 128, 128));
+__m256i v6 = _mm256_mask_mov_epi8(max6, 0x7800f, min6);
 
-__m256i _tmp15 = _mm256_permute4x64_epi64(v6, 0x4e);
-__m256i _tmp16 = _mm256_shuffle_epi8(v6, _mm256_set_epi8(15, 14, 13, 12, 11, 10, 5, 6, 7, 8, 9, 128, 0, 128, 128, 3, 128, 128, 128, 8, 7, 6, 5, 12, 11, 10, 9, 0, 1, 2, 3, 4));
-__m256i _tmp17 = _mm256_shuffle_epi8(_tmp15, _mm256_set_epi8(128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 15, 128, 14, 13, 128, 4, 2, 1, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128));
-__m256i perm7 = _mm256_or_si256(_tmp16, _tmp17);
+__m256i perm7 = _mm256_permutexvar_epi8(_mm256_set_epi8(31, 30, 29, 28, 27, 26, 21, 22, 23, 24, 25, 15, 16, 14, 13, 19, 20, 18, 17, 8, 7, 6, 5, 12, 11, 10, 9, 0, 1, 2, 3, 4), v6);
 __m256i min7 = _mm256_min_epu8(v6, perm7);
 __m256i max7 = _mm256_max_epu8(v6, perm7);
-__m256i v7 = _mm256_blendv_epi8(max7, min7, _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 128, 0, 0, 0, 0, 128, 128, 128, 128, 0, 0, 0, 0, 128, 128, 128, 128, 0, 0, 0, 128, 128));
+__m256i v7 = _mm256_mask_mov_epi8(max7, 0x61e1e3, min7);
 
-__m256i _tmp18 = _mm256_permute4x64_epi64(v7, 0x4e);
-__m256i _tmp19 = _mm256_shuffle_epi8(v7, _mm256_set_epi8(15, 14, 13, 12, 11, 10, 9, 8, 5, 6, 7, 1, 2, 3, 4, 128, 13, 128, 15, 10, 9, 12, 11, 6, 5, 8, 7, 2, 3, 4, 1, 0));
-__m256i _tmp20 = _mm256_shuffle_epi8(_tmp18, _mm256_set_epi8(128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 14, 128, 0, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128));
-__m256i perm8 = _mm256_or_si256(_tmp19, _tmp20);
+__m256i perm8 = _mm256_permutexvar_epi8(_mm256_set_epi8(31, 30, 29, 28, 27, 26, 25, 24, 21, 22, 23, 17, 18, 19, 20, 14, 13, 16, 15, 10, 9, 12, 11, 6, 5, 8, 7, 2, 3, 4, 1, 0), v7);
 __m256i min8 = _mm256_min_epu8(v7, perm8);
 __m256i max8 = _mm256_max_epu8(v7, perm8);
-__m256i v8 = _mm256_blendv_epi8(max8, min8, _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 128, 128, 0, 0, 128, 128, 0, 0, 128, 128, 0, 0, 128, 128, 0, 0, 128, 0, 0));
+__m256i v8 = _mm256_mask_mov_epi8(max8, 0x266664, min8);
 
-__m256i _tmp21 = _mm256_permute4x64_epi64(v8, 0x4e);
-__m256i _tmp22 = _mm256_shuffle_epi8(v8, _mm256_set_epi8(15, 14, 13, 12, 11, 10, 9, 7, 8, 5, 6, 3, 4, 1, 2, 128, 128, 13, 14, 11, 12, 9, 10, 7, 8, 5, 6, 3, 4, 1, 2, 0));
-__m256i _tmp23 = _mm256_shuffle_epi8(_tmp21, _mm256_set_epi8(128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 15, 0, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128));
-__m256i perm9 = _mm256_or_si256(_tmp22, _tmp23);
+__m256i perm9 = _mm256_permutexvar_epi8(_mm256_set_epi8(31, 30, 29, 28, 27, 26, 25, 23, 24, 21, 22, 19, 20, 17, 18, 15, 16, 13, 14, 11, 12, 9, 10, 7, 8, 5, 6, 3, 4, 1, 2, 0), v8);
 __m256i min9 = _mm256_min_epu8(v8, perm9);
 __m256i max9 = _mm256_max_epu8(v8, perm9);
-__m256i v9 = _mm256_blendv_epi8(max9, min9, _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0));
+__m256i v9 = _mm256_mask_mov_epi8(max9, 0xaaaaaa, min9);
 
-__m256i _tmp24 = _mm256_permute4x64_epi64(v9, 0x4e);
-__m256i _tmp25 = _mm256_shuffle_epi8(v9, _mm256_set_epi8(15, 14, 13, 12, 11, 10, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 15, 14, 13, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 2, 1, 0));
-__m256i _tmp26 = _mm256_shuffle_epi8(_tmp24, _mm256_set_epi8(128, 128, 128, 128, 128, 128, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 128, 128, 128, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 128, 128, 128));
-__m256i perm10 = _mm256_or_si256(_tmp25, _tmp26);
+__m256i perm10 = _mm256_permutexvar_epi8(_mm256_set_epi8(31, 30, 29, 28, 27, 26, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 14, 13, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 2, 1, 0), v9);
 __m256i min10 = _mm256_min_epu8(v9, perm10);
 __m256i max10 = _mm256_max_epu8(v9, perm10);
-__m256i v10 = _mm256_blendv_epi8(max10, min10, _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 0, 0, 0));
+__m256i v10 = _mm256_mask_mov_epi8(max10, 0x1ff8, min10);
 
 __m256i perm11 = _mm256_shuffle_epi8(v10, _mm256_set_epi8(31, 30, 29, 28, 27, 26, 17, 16, 19, 18, 21, 20, 23, 22, 25, 24, 5, 6, 7, 4, 3, 2, 1, 0, 13, 14, 15, 12, 11, 10, 9, 8));
 __m256i min11 = _mm256_min_epu8(v10, perm11);
@@ -146,17 +121,17 @@ __m256i v11 = _mm256_blend_epi32(max11, min11, 0x13);
 __m256i perm12 = _mm256_shuffle_epi8(v11, _mm256_set_epi8(31, 30, 29, 28, 27, 26, 24, 25, 23, 22, 17, 16, 19, 18, 21, 20, 9, 10, 11, 8, 13, 14, 15, 12, 3, 2, 1, 0, 7, 6, 5, 4));
 __m256i min12 = _mm256_min_epu8(v11, perm12);
 __m256i max12 = _mm256_max_epu8(v11, perm12);
-__m256i v12 = _mm256_blendv_epi8(max12, min12, _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 128, 128, 0, 0, 0, 0, 128, 128, 128, 128, 0, 0, 0, 0, 128, 128, 128, 128));
+__m256i v12 = _mm256_mask_mov_epi8(max12, 0x1030f0f, min12);
 
 __m256i perm13 = _mm256_shuffle_epi8(v12, _mm256_set_epi8(31, 30, 29, 28, 27, 26, 25, 24, 21, 20, 23, 22, 17, 16, 19, 18, 13, 12, 15, 14, 9, 8, 11, 10, 5, 4, 7, 6, 1, 0, 3, 2));
 __m256i min13 = _mm256_min_epu8(v12, perm13);
 __m256i max13 = _mm256_max_epu8(v12, perm13);
-__m256i v13 = _mm256_blendv_epi8(max13, min13, _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 128, 0, 0, 128, 128, 0, 0, 128, 128, 0, 0, 128, 128, 0, 0, 128, 128, 0, 0, 128, 128));
+__m256i v13 = _mm256_mask_mov_epi8(max13, 0x333333, min13);
 
 __m256i perm14 = _mm256_shuffle_epi8(v13, _mm256_set_epi8(31, 30, 29, 28, 27, 26, 25, 24, 22, 23, 20, 21, 18, 19, 16, 17, 14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1));
 __m256i min14 = _mm256_min_epu8(v13, perm14);
 __m256i max14 = _mm256_max_epu8(v13, perm14);
-__m256i v14 = _mm256_blendv_epi8(max14, min14, _mm256_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 128));
+__m256i v14 = _mm256_mask_mov_epi8(max14, 0x555555, min14);
 
 return v14;
 }
@@ -166,17 +141,12 @@ return v14;
 /* Wrapper For SIMD Sort */
 void inline __attribute__((always_inline)) bitonic_26_uint8_t(uint8_t * const arr) {
 
-__m256i _tmp0 = _mm256_maskload_epi32((int32_t * const)arr, _mm256_set_epi32(0x0, 0x0, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000));
-__m256i _tmp1 = _mm256_set1_epi8(uint8_t(0xff));
-const uint32_t _tmp2 = ((_aliasing_int16_t_ *)arr)[12];
-_tmp1 = _mm256_insert_epi32(_tmp1, _tmp2, 6);
-__m256i v = _mm256_blend_epi32(_tmp1, _tmp0, 0x3f);
+__m256i _tmp0 = _mm256_set1_epi8(uint8_t(0xff));
+__m256i v = _mm256_mask_loadu_epi8(_tmp0, 0x3ffffff, arr);
 
 v = bitonic_26_uint8_t_vec(v);
 
-_mm256_maskstore_epi32((int32_t * const)arr, _mm256_set_epi32(0x0, 0x0, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000), v);
-const uint32_t _tmp27 = _mm256_extract_epi32(v, 6);
-((_aliasing_int16_t_ *)arr)[12] = _tmp27 & 0xffff;
+_mm256_mask_storeu_epi8((void *)arr, 0x3ffffff, v);
 
 }
 
