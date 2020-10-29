@@ -64,9 +64,9 @@ Sorting Network Information:
 	Underlying Sort Type             : uint32_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 3
-	SIMD Instructions                : 3 / 12
+	SIMD Instructions                : 2 / 12
 	SIMD Type                        : __m128i
-	SIMD Instruction Set(s) Used     : AVX512vl, AVX512f, SSE2, SSE4.1, AVX2
+	SIMD Instruction Set(s) Used     : AVX2, SSE2, SSE4.1, AVX512f, AVX512vl
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Full Load & Store                : True
@@ -104,51 +104,61 @@ Performance Notes:
 
 
 
-void fill_works(__m128i v) {
-sarr<TYPE, N> t;
-memcpy(t.arr, &v, 16);
-int i = N;for (; i < 4; ++i) {
-assert(t.arr[i] == uint32_t(0xffffffff));
-}
+     void fill_works(__m128i v) {
+      sarr<TYPE, N> t;
+      memcpy(t.arr, &v, 16);
+          int i = N;for (; i < 4; ++i) {
+          assert(t.arr[i] == uint32_t(0xffffffff));
+ }
 }
 
 /* SIMD Sort */
-__m128i __attribute__((const)) bitonic_4_uint32_t_vec(__m128i v) {
+     __m128i __attribute__((const)) 
 
-__m128i perm0 = _mm_shuffle_epi32(v, uint8_t(0xb1));
-__m128i min0 = _mm_min_epu32(v, perm0);
-__m128i max0 = _mm_max_epu32(v, perm0);
-__m128i v0 = _mm_blend_epi32(max0, min0, 0x5);
-
-__m128i perm1 = _mm_shuffle_epi32(v0, uint8_t(0x1b));
-__m128i min1 = _mm_min_epu32(v0, perm1);
-__m128i max1 = _mm_max_epu32(v0, perm1);
-__m128i v1 = _mm_blend_epi32(max1, min1, 0x3);
-
-__m128i perm2 = _mm_shuffle_epi32(v1, uint8_t(0xb1));
-__m128i min2 = _mm_min_epu32(v1, perm2);
-__m128i max2 = _mm_max_epu32(v1, perm2);
-__m128i v2 = _mm_blend_epi32(max2, min2, 0x5);
-
-return v2;
-}
+bitonic_4_uint32_t_vec(__m128i v) {
+      
+      __m128i perm0 = _mm_shuffle_epi32(v, uint8_t(0xb1));
+      __m128i min0 = _mm_min_epu32(v, perm0);
+      __m128i max0 = _mm_max_epu32(v, perm0);
+      __m128i v0 = _mm_blend_epi32(max0, min0, 0x5);
+      
+      __m128i perm1 = _mm_shuffle_epi32(v0, uint8_t(0x1b));
+      __m128i min1 = _mm_min_epu32(v0, perm1);
+      __m128i max1 = _mm_max_epu32(v0, perm1);
+      __m128i v1 = _mm_blend_epi32(max1, min1, 0x3);
+      
+      __m128i perm2 = _mm_shuffle_epi32(v1, uint8_t(0xb1));
+      __m128i min2 = _mm_min_epu32(v1, perm2);
+      __m128i max2 = _mm_max_epu32(v1, perm2);
+      __m128i v2 = _mm_blend_epi32(max2, min2, 0x5);
+      
+      return v2;
+ }
 
 
 
 /* Wrapper For SIMD Sort */
-void inline __attribute__((always_inline)) bitonic_4_uint32_t(uint32_t * const arr) {
+     void inline __attribute__((always_inline)) 
 
-__m128i _tmp0 = _mm_set1_epi32(uint32_t(0xffffffff));
-__m128i v = _mm_mask_load_epi32(_tmp0, 0xf, (int32_t * const)arr);
-fill_works(v);
-v = bitonic_4_uint32_t_vec(v);
-
-fill_works(v);_mm_mask_store_epi32((void *)arr, 0xf, v);
-
-}
+bitonic_4_uint32_t(uint32_t * const 
+                                 arr) {
+      
+      __m128i _tmp0 = _mm_set1_epi32(uint32_t(0xffffffff));
+      asm volatile("vpblendd %[load_mask], (%[arr]), %[fill_v], %[fill_v]\n"
+                   : [ fill_v ] "+x" (_tmp0)
+                   : [ arr ] "r" (arr), [ load_mask ] "i" (0xf)
+                   :);
+      __m128i v = _tmp0;
+      fill_works(v);
+      v = bitonic_4_uint32_t_vec(v);
+      
+      fill_works(v);_mm_mask_store_epi32((void *)arr, 0xf, v);
+      
+ }
 
 
 #endif
+
 
 
 

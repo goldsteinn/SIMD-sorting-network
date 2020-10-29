@@ -64,9 +64,9 @@ Sorting Network Information:
 	Underlying Sort Type             : uint32_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 6
-	SIMD Instructions                : 3 / 30
+	SIMD Instructions                : 2 / 30
 	SIMD Type                        : __m256i
-	SIMD Instruction Set(s) Used     : AVX512vl, AVX512f, SSE2, AVX2, AVX
+	SIMD Instruction Set(s) Used     : AVX2, SSE2, AVX, AVX512f, AVX512vl
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Full Load & Store                : True
@@ -104,66 +104,86 @@ Performance Notes:
 
 
 
-void fill_works(__m256i v) {
-sarr<TYPE, N> t;
-memcpy(t.arr, &v, 32);
-int i = N;for (; i < 8; ++i) {
-assert(t.arr[i] == uint32_t(0xffffffff));
-}
+     void fill_works(__m256i v) {
+      sarr<TYPE, N> t;
+      memcpy(t.arr, &v, 32);
+          int i = N;for (; i < 8; ++i) {
+          assert(t.arr[i] == uint32_t(0xffffffff));
+ }
 }
 
 /* SIMD Sort */
-__m256i __attribute__((const)) bitonic_7_uint32_t_vec(__m256i v) {
+     __m256i __attribute__((const)) 
 
-__m256i perm0 = _mm256_permutevar8x32_epi32(v, _mm256_set_epi32(7, 5, 6, 3, 4, 1, 2, 0));
-__m256i min0 = _mm256_min_epu32(v, perm0);
-__m256i max0 = _mm256_max_epu32(v, perm0);
-__m256i v0 = _mm256_blend_epi32(max0, min0, 0x2a);
-
-__m256i perm1 = _mm256_permutevar8x32_epi32(v0, _mm256_set_epi32(7, 3, 4, 5, 6, 2, 0, 1));
-__m256i min1 = _mm256_min_epu32(v0, perm1);
-__m256i max1 = _mm256_max_epu32(v0, perm1);
-__m256i v1 = _mm256_blend_epi32(max1, min1, 0x19);
-
-__m256i perm2 = _mm256_permutevar8x32_epi32(v1, _mm256_set_epi32(7, 5, 6, 3, 4, 1, 2, 0));
-__m256i min2 = _mm256_min_epu32(v1, perm2);
-__m256i max2 = _mm256_max_epu32(v1, perm2);
-__m256i v2 = _mm256_blend_epi32(max2, min2, 0x2a);
-
-__m256i perm3 = _mm256_permutevar8x32_epi32(v2, _mm256_set_epi32(7, 0, 1, 2, 3, 4, 5, 6));
-__m256i min3 = _mm256_min_epu32(v2, perm3);
-__m256i max3 = _mm256_max_epu32(v2, perm3);
-__m256i v3 = _mm256_blend_epi32(max3, min3, 0x7);
-
-__m256i perm4 = _mm256_shuffle_epi8(v3, _mm256_set_epi8(31, 30, 29, 28, 19, 18, 17, 16, 23, 22, 21, 20, 27, 26, 25, 24, 7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8));
-__m256i min4 = _mm256_min_epu32(v3, perm4);
-__m256i max4 = _mm256_max_epu32(v3, perm4);
-__m256i v4 = _mm256_blend_epi32(max4, min4, 0x13);
-
-__m256i perm5 = _mm256_shuffle_epi8(v4, _mm256_set_epi8(31, 30, 29, 28, 27, 26, 25, 24, 19, 18, 17, 16, 23, 22, 21, 20, 11, 10, 9, 8, 15, 14, 13, 12, 3, 2, 1, 0, 7, 6, 5, 4));
-__m256i min5 = _mm256_min_epu32(v4, perm5);
-__m256i max5 = _mm256_max_epu32(v4, perm5);
-__m256i v5 = _mm256_blend_epi32(max5, min5, 0x15);
-
-return v5;
-}
+bitonic_7_uint32_t_vec(__m256i v) {
+      
+      __m256i perm0 = _mm256_permutevar8x32_epi32(v, _mm256_set_epi32(7, 5, 
+                                                  6, 3, 4, 1, 2, 0));
+      __m256i min0 = _mm256_min_epu32(v, perm0);
+      __m256i max0 = _mm256_max_epu32(v, perm0);
+      __m256i v0 = _mm256_blend_epi32(max0, min0, 0x2a);
+      
+      __m256i perm1 = _mm256_permutevar8x32_epi32(v0, _mm256_set_epi32(7, 3, 
+                                                  4, 5, 6, 2, 0, 1));
+      __m256i min1 = _mm256_min_epu32(v0, perm1);
+      __m256i max1 = _mm256_max_epu32(v0, perm1);
+      __m256i v1 = _mm256_blend_epi32(max1, min1, 0x19);
+      
+      __m256i perm2 = _mm256_permutevar8x32_epi32(v1, _mm256_set_epi32(7, 5, 
+                                                  6, 3, 4, 1, 2, 0));
+      __m256i min2 = _mm256_min_epu32(v1, perm2);
+      __m256i max2 = _mm256_max_epu32(v1, perm2);
+      __m256i v2 = _mm256_blend_epi32(max2, min2, 0x2a);
+      
+      __m256i perm3 = _mm256_permutevar8x32_epi32(v2, _mm256_set_epi32(7, 0, 
+                                                  1, 2, 3, 4, 5, 6));
+      __m256i min3 = _mm256_min_epu32(v2, perm3);
+      __m256i max3 = _mm256_max_epu32(v2, perm3);
+      __m256i v3 = _mm256_blend_epi32(max3, min3, 0x7);
+      
+      __m256i perm4 = _mm256_shuffle_epi8(v3, _mm256_set_epi8(31, 30, 29, 28, 
+                                          19, 18, 17, 16, 23, 22, 21, 20, 27, 
+                                          26, 25, 24, 7, 6, 5, 4, 3, 2, 1, 0, 
+                                          15, 14, 13, 12, 11, 10, 9, 8));
+      __m256i min4 = _mm256_min_epu32(v3, perm4);
+      __m256i max4 = _mm256_max_epu32(v3, perm4);
+      __m256i v4 = _mm256_blend_epi32(max4, min4, 0x13);
+      
+      __m256i perm5 = _mm256_shuffle_epi8(v4, _mm256_set_epi8(31, 30, 29, 28, 
+                                          27, 26, 25, 24, 19, 18, 17, 16, 23, 
+                                          22, 21, 20, 11, 10, 9, 8, 15, 14, 
+                                          13, 12, 3, 2, 1, 0, 7, 6, 5, 4));
+      __m256i min5 = _mm256_min_epu32(v4, perm5);
+      __m256i max5 = _mm256_max_epu32(v4, perm5);
+      __m256i v5 = _mm256_blend_epi32(max5, min5, 0x15);
+      
+      return v5;
+ }
 
 
 
 /* Wrapper For SIMD Sort */
-void inline __attribute__((always_inline)) bitonic_7_uint32_t(uint32_t * const arr) {
+     void inline __attribute__((always_inline)) 
 
-__m256i _tmp0 = _mm256_set1_epi32(uint32_t(0xffffffff));
-__m256i v = _mm256_mask_load_epi32(_tmp0, 0x7f, (int32_t * const)arr);
-fill_works(v);
-v = bitonic_7_uint32_t_vec(v);
-
-fill_works(v);_mm256_mask_store_epi32((void *)arr, 0x7f, v);
-
-}
+bitonic_7_uint32_t(uint32_t * const 
+                                 arr) {
+      
+      __m256i _tmp0 = _mm256_set1_epi32(uint32_t(0xffffffff));
+      asm volatile("vpblendd %[load_mask], (%[arr]), %[fill_v], %[fill_v]\n"
+                   : [ fill_v ] "+x" (_tmp0)
+                   : [ arr ] "r" (arr), [ load_mask ] "i" (0x7f)
+                   :);
+      __m256i v = _tmp0;
+      fill_works(v);
+      v = bitonic_7_uint32_t_vec(v);
+      
+      fill_works(v);_mm256_mask_store_epi32((void *)arr, 0x7f, v);
+      
+ }
 
 
 #endif
+
 
 
 

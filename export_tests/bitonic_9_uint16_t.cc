@@ -66,7 +66,7 @@ Sorting Network Information:
 	Network Depth                    : 8
 	SIMD Instructions                : 3 / 40
 	SIMD Type                        : __m256i
-	SIMD Instruction Set(s) Used     : AVX512vl, AVX512bw, AVX, AVX2
+	SIMD Instruction Set(s) Used     : AVX512vl, AVX512bw, SSE2, AVX, AVX2
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Full Load & Store                : True
@@ -104,76 +104,102 @@ Performance Notes:
 
 
 
-void fill_works(__m256i v) {
-sarr<TYPE, N> t;
-memcpy(t.arr, &v, 32);
-int i = N;for (; i < 16; ++i) {
-assert(t.arr[i] == uint16_t(0xffff));
-}
+     void fill_works(__m256i v) {
+      sarr<TYPE, N> t;
+      memcpy(t.arr, &v, 32);
+          int i = N;for (; i < 16; ++i) {
+          assert(t.arr[i] == uint16_t(0xffff));
+ }
 }
 
 /* SIMD Sort */
-__m256i __attribute__((const)) bitonic_9_uint16_t_vec(__m256i v) {
+     __m256i __attribute__((const)) 
 
-__m256i perm0 = _mm256_permutexvar_epi16(_mm256_set_epi16(15, 14, 13, 12, 11, 10, 9, 7, 8, 6, 4, 5, 2, 3, 0, 1), v);
-__m256i min0 = _mm256_min_epu16(v, perm0);
-__m256i max0 = _mm256_max_epu16(v, perm0);
-__m256i v0 = _mm256_mask_mov_epi16(max0, 0x95, min0);
-
-__m256i perm1 = _mm256_permutexvar_epi16(_mm256_set_epi16(15, 14, 13, 12, 11, 10, 9, 6, 7, 8, 5, 4, 0, 1, 2, 3), v0);
-__m256i min1 = _mm256_min_epu16(v0, perm1);
-__m256i max1 = _mm256_max_epu16(v0, perm1);
-__m256i v1 = _mm256_mask_mov_epi16(max1, 0x43, min1);
-
-__m256i perm2 = _mm256_permutexvar_epi16(_mm256_set_epi16(15, 14, 13, 12, 11, 10, 9, 5, 6, 7, 8, 4, 2, 3, 0, 1), v1);
-__m256i min2 = _mm256_min_epu16(v1, perm2);
-__m256i max2 = _mm256_max_epu16(v1, perm2);
-__m256i v2 = _mm256_mask_mov_epi16(max2, 0x65, min2);
-
-__m256i perm3 = _mm256_permutexvar_epi16(_mm256_set_epi16(15, 14, 13, 12, 11, 10, 9, 3, 4, 5, 6, 7, 8, 2, 1, 0), v2);
-__m256i min3 = _mm256_min_epu16(v2, perm3);
-__m256i max3 = _mm256_max_epu16(v2, perm3);
-__m256i v3 = _mm256_mask_mov_epi16(max3, 0x38, min3);
-
-__m256i perm4 = _mm256_shuffle_epi8(v3, _mm256_set_epi8(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 13, 12, 15, 14, 9, 8, 11, 10, 7, 6, 5, 4, 3, 2, 1, 0));
-__m256i min4 = _mm256_min_epu16(v3, perm4);
-__m256i max4 = _mm256_max_epu16(v3, perm4);
-__m256i v4 = _mm256_mask_mov_epi16(max4, 0x50, min4);
-
-__m256i perm5 = _mm256_shuffle_epi8(v4, _mm256_set_epi8(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 1, 0, 3, 2, 5, 4, 7, 6, 9, 8, 11, 10, 13, 12, 15, 14));
-__m256i min5 = _mm256_min_epu16(v4, perm5);
-__m256i max5 = _mm256_max_epu16(v4, perm5);
-__m256i v5 = _mm256_blend_epi32(max5, min5, 0x3);
-
-__m256i perm6 = _mm256_shuffle_epi8(v5, _mm256_set_epi8(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 11, 10, 9, 8, 15, 14, 13, 12, 3, 2, 1, 0, 7, 6, 5, 4));
-__m256i min6 = _mm256_min_epu16(v5, perm6);
-__m256i max6 = _mm256_max_epu16(v5, perm6);
-__m256i v6 = _mm256_blend_epi32(max6, min6, 0x5);
-
-__m256i perm7 = _mm256_shuffle_epi8(v6, _mm256_set_epi8(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 13, 12, 15, 14, 9, 8, 11, 10, 5, 4, 7, 6, 1, 0, 3, 2));
-__m256i min7 = _mm256_min_epu16(v6, perm7);
-__m256i max7 = _mm256_max_epu16(v6, perm7);
-__m256i v7 = _mm256_mask_mov_epi16(max7, 0x55, min7);
-
-return v7;
-}
+bitonic_9_uint16_t_vec(__m256i v) {
+      
+      __m256i perm0 = _mm256_permutexvar_epi16(_mm256_set_epi16(15, 14, 13, 
+                                               12, 11, 10, 9, 7, 8, 6, 4, 5, 
+                                               2, 3, 0, 1), v);
+      __m256i min0 = _mm256_min_epu16(v, perm0);
+      __m256i max0 = _mm256_max_epu16(v, perm0);
+      __m256i v0 = _mm256_mask_mov_epi16(max0, 0x95, min0);
+      
+      __m256i perm1 = _mm256_permutexvar_epi16(_mm256_set_epi16(15, 14, 13, 
+                                               12, 11, 10, 9, 6, 7, 8, 5, 4, 
+                                               0, 1, 2, 3), v0);
+      __m256i min1 = _mm256_min_epu16(v0, perm1);
+      __m256i max1 = _mm256_max_epu16(v0, perm1);
+      __m256i v1 = _mm256_mask_mov_epi16(max1, 0x43, min1);
+      
+      __m256i perm2 = _mm256_permutexvar_epi16(_mm256_set_epi16(15, 14, 13, 
+                                               12, 11, 10, 9, 5, 6, 7, 8, 4, 
+                                               2, 3, 0, 1), v1);
+      __m256i min2 = _mm256_min_epu16(v1, perm2);
+      __m256i max2 = _mm256_max_epu16(v1, perm2);
+      __m256i v2 = _mm256_mask_mov_epi16(max2, 0x65, min2);
+      
+      __m256i perm3 = _mm256_permutexvar_epi16(_mm256_set_epi16(15, 14, 13, 
+                                               12, 11, 10, 9, 3, 4, 5, 6, 7, 
+                                               8, 2, 1, 0), v2);
+      __m256i min3 = _mm256_min_epu16(v2, perm3);
+      __m256i max3 = _mm256_max_epu16(v2, perm3);
+      __m256i v3 = _mm256_mask_mov_epi16(max3, 0x38, min3);
+      
+      __m256i perm4 = _mm256_shuffle_epi8(v3, _mm256_set_epi8(31, 30, 29, 28, 
+                                          27, 26, 25, 24, 23, 22, 21, 20, 19, 
+                                          18, 17, 16, 13, 12, 15, 14, 9, 8, 
+                                          11, 10, 7, 6, 5, 4, 3, 2, 1, 0));
+      __m256i min4 = _mm256_min_epu16(v3, perm4);
+      __m256i max4 = _mm256_max_epu16(v3, perm4);
+      __m256i v4 = _mm256_mask_mov_epi16(max4, 0x50, min4);
+      
+      __m256i perm5 = _mm256_shuffle_epi8(v4, _mm256_set_epi8(31, 30, 29, 28, 
+                                          27, 26, 25, 24, 23, 22, 21, 20, 19, 
+                                          18, 17, 16, 1, 0, 3, 2, 5, 4, 7, 6, 
+                                          9, 8, 11, 10, 13, 12, 15, 14));
+      __m256i min5 = _mm256_min_epu16(v4, perm5);
+      __m256i max5 = _mm256_max_epu16(v4, perm5);
+      __m256i v5 = _mm256_blend_epi32(max5, min5, 0x3);
+      
+      __m256i perm6 = _mm256_shuffle_epi8(v5, _mm256_set_epi8(31, 30, 29, 28, 
+                                          27, 26, 25, 24, 23, 22, 21, 20, 19, 
+                                          18, 17, 16, 11, 10, 9, 8, 15, 14, 
+                                          13, 12, 3, 2, 1, 0, 7, 6, 5, 4));
+      __m256i min6 = _mm256_min_epu16(v5, perm6);
+      __m256i max6 = _mm256_max_epu16(v5, perm6);
+      __m256i v6 = _mm256_blend_epi32(max6, min6, 0x5);
+      
+      __m256i perm7 = _mm256_shuffle_epi8(v6, _mm256_set_epi8(31, 30, 29, 28, 
+                                          27, 26, 25, 24, 23, 22, 21, 20, 19, 
+                                          18, 17, 16, 13, 12, 15, 14, 9, 8, 
+                                          11, 10, 5, 4, 7, 6, 1, 0, 3, 2));
+      __m256i min7 = _mm256_min_epu16(v6, perm7);
+      __m256i max7 = _mm256_max_epu16(v6, perm7);
+      __m256i v7 = _mm256_mask_mov_epi16(max7, 0x55, min7);
+      
+      return v7;
+ }
 
 
 
 /* Wrapper For SIMD Sort */
-void inline __attribute__((always_inline)) bitonic_9_uint16_t(uint16_t * const arr) {
+     void inline __attribute__((always_inline)) 
 
-__m256i _tmp0 = _mm256_set1_epi16(uint16_t(0xffff));
-__m256i v = _mm256_mask_loadu_epi16(_tmp0, 0x1ff, arr);
-fill_works(v);
-v = bitonic_9_uint16_t_vec(v);
-
-fill_works(v);_mm256_mask_storeu_epi16((void *)arr, 0x1ff, v);
-
-}
+bitonic_9_uint16_t(uint16_t * const 
+                                 arr) {
+      
+      __m256i _tmp0 = _mm256_set1_epi16(uint16_t(0xffff));
+      __m256i v = _mm256_mask_loadu_epi16(_tmp0, 0x1ff, arr);
+      fill_works(v);
+      v = bitonic_9_uint16_t_vec(v);
+      
+      fill_works(v);_mm256_mask_storeu_epi16((void *)arr, 0x1ff, v);
+      
+ }
 
 
 #endif
+
 
 
 

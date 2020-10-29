@@ -106,73 +106,90 @@ Performance Notes:
 typedef __m64 _aliasing_m64_ __attribute__((aligned(8), may_alias));
 
 
-void fill_works(__m64 v) {
-sarr<TYPE, N> t;
-memcpy(t.arr, &v, 8);
-int i = N;for (; i < 8; ++i) {
-assert(t.arr[i] == uint8_t(0xff));
-}
+     void fill_works(__m64 v) {
+      sarr<TYPE, N> t;
+      memcpy(t.arr, &v, 8);
+          int i = N;for (; i < 8; ++i) {
+          assert(t.arr[i] == uint8_t(0xff));
+ }
 }
 
 /* SIMD Sort */
-__m64 __attribute__((const)) bitonic_6_uint8_t_vec(__m64 v) {
+     __m64 __attribute__((const)) 
 
-__m64 perm0 = _mm_shuffle_pi8(v, _mm_set_pi8(7, 6, 4, 5, 3, 1, 2, 0));
-__m64 min0 = _mm_min_pu8(v, perm0);
-__m64 max0 = _mm_max_pu8(v, perm0);
-__m64 _tmp1 = (__m64)(0xff0000ff00UL);
-__m64 v0 = _mm_or_si64(_mm_and_si64(_tmp1, min0), _mm_andnot_si64(_tmp1, max0));
-
-__m64 perm1 = _mm_shuffle_pi8(v0, _mm_set_pi8(7, 6, 3, 4, 5, 2, 0, 1));
-__m64 min1 = _mm_min_pu8(v0, perm1);
-__m64 max1 = _mm_max_pu8(v0, perm1);
-__m64 _tmp2 = (__m64)(0xff0000ffUL);
-__m64 v1 = _mm_or_si64(_mm_and_si64(_tmp2, min1), _mm_andnot_si64(_tmp2, max1));
-
-__m64 perm2 = _mm_shuffle_pi8(v1, _mm_set_pi8(7, 6, 5, 3, 4, 1, 2, 0));
-__m64 min2 = _mm_min_pu8(v1, perm2);
-__m64 max2 = _mm_max_pu8(v1, perm2);
-__m64 _tmp3 = (__m64)(0xff00ff00UL);
-__m64 v2 = _mm_or_si64(_mm_and_si64(_tmp3, min2), _mm_andnot_si64(_tmp3, max2));
-
-__m64 perm3 = _mm_shuffle_pi8(v2, _mm_set_pi8(7, 6, 1, 2, 3, 4, 5, 0));
-__m64 min3 = _mm_min_pu8(v2, perm3);
-__m64 max3 = _mm_max_pu8(v2, perm3);
-__m64 _tmp4 = (__m64)(0xffff00UL);
-__m64 v3 = _mm_or_si64(_mm_and_si64(_tmp4, min3), _mm_andnot_si64(_tmp4, max3));
-
-__m64 perm4 = _mm_shuffle_pi8(v3, _mm_set_pi8(7, 6, 4, 5, 1, 0, 3, 2));
-__m64 min4 = _mm_min_pu8(v3, perm4);
-__m64 max4 = _mm_max_pu8(v3, perm4);
-__m64 _tmp5 = (__m64)(0xff0000ffffUL);
-__m64 v4 = _mm_or_si64(_mm_and_si64(_tmp5, min4), _mm_andnot_si64(_tmp5, max4));
-
-__m64 perm5 = _mm_shuffle_pi8(v4, _mm_set_pi8(7, 6, 5, 4, 2, 3, 0, 1));
-__m64 min5 = _mm_min_pu8(v4, perm5);
-__m64 max5 = _mm_max_pu8(v4, perm5);
-__m64 _tmp6 = (__m64)(0xff00ffUL);
-__m64 v5 = _mm_or_si64(_mm_and_si64(_tmp6, min5), _mm_andnot_si64(_tmp6, max5));
-
-return v5;
-}
+bitonic_6_uint8_t_vec(__m64 v) {
+      
+      __m64 perm0 = _mm_shuffle_pi8(v, _mm_set_pi8(7, 6, 4, 5, 3, 1, 2, 0));
+      __m64 min0 = _mm_min_pu8(v, perm0);
+      __m64 max0 = _mm_max_pu8(v, perm0);
+      __m64 _tmp1 = (__m64)(0xff0000ff00UL);
+      __m64 v0 = _mm_or_si64(_mm_and_si64(_tmp1, min0), 
+                                          _mm_andnot_si64(_tmp1, max0));
+      
+      __m64 perm1 = _mm_shuffle_pi8(v0, _mm_set_pi8(7, 6, 3, 4, 5, 2, 0, 
+                                                    1));
+      __m64 min1 = _mm_min_pu8(v0, perm1);
+      __m64 max1 = _mm_max_pu8(v0, perm1);
+      __m64 _tmp2 = (__m64)(0xff0000ffUL);
+      __m64 v1 = _mm_or_si64(_mm_and_si64(_tmp2, min1), 
+                                          _mm_andnot_si64(_tmp2, max1));
+      
+      __m64 perm2 = _mm_shuffle_pi8(v1, _mm_set_pi8(7, 6, 5, 3, 4, 1, 2, 
+                                                    0));
+      __m64 min2 = _mm_min_pu8(v1, perm2);
+      __m64 max2 = _mm_max_pu8(v1, perm2);
+      __m64 _tmp3 = (__m64)(0xff00ff00UL);
+      __m64 v2 = _mm_or_si64(_mm_and_si64(_tmp3, min2), 
+                                          _mm_andnot_si64(_tmp3, max2));
+      
+      __m64 perm3 = _mm_shuffle_pi8(v2, _mm_set_pi8(7, 6, 1, 2, 3, 4, 5, 
+                                                    0));
+      __m64 min3 = _mm_min_pu8(v2, perm3);
+      __m64 max3 = _mm_max_pu8(v2, perm3);
+      __m64 _tmp4 = (__m64)(0xffff00UL);
+      __m64 v3 = _mm_or_si64(_mm_and_si64(_tmp4, min3), 
+                                          _mm_andnot_si64(_tmp4, max3));
+      
+      __m64 perm4 = _mm_shuffle_pi8(v3, _mm_set_pi8(7, 6, 4, 5, 1, 0, 3, 
+                                                    2));
+      __m64 min4 = _mm_min_pu8(v3, perm4);
+      __m64 max4 = _mm_max_pu8(v3, perm4);
+      __m64 _tmp5 = (__m64)(0xff0000ffffUL);
+      __m64 v4 = _mm_or_si64(_mm_and_si64(_tmp5, min4), 
+                                          _mm_andnot_si64(_tmp5, max4));
+      
+      __m64 perm5 = _mm_shuffle_pi8(v4, _mm_set_pi8(7, 6, 5, 4, 2, 3, 0, 
+                                                    1));
+      __m64 min5 = _mm_min_pu8(v4, perm5);
+      __m64 max5 = _mm_max_pu8(v4, perm5);
+      __m64 _tmp6 = (__m64)(0xff00ffUL);
+      __m64 v5 = _mm_or_si64(_mm_and_si64(_tmp6, min5), 
+                                          _mm_andnot_si64(_tmp6, max5));
+      
+      return v5;
+ }
 
 
 
 /* Wrapper For SIMD Sort */
-void inline __attribute__((always_inline)) bitonic_6_uint8_t(uint8_t * const arr) {
+     void inline __attribute__((always_inline)) 
 
-__m64 _tmp0 = _mm_set1_pi8(uint8_t(0xff));
-__builtin_memcpy(&_tmp0, arr, 6);
-__m64 v = _tmp0;
-fill_works(v);
-v = bitonic_6_uint8_t_vec(v);
-
-fill_works(v);__builtin_memcpy(arr, &v, 6);
-
-}
+bitonic_6_uint8_t(uint8_t * const arr) 
+                                 {
+      
+      __m64 _tmp0 = _mm_set1_pi8(uint8_t(0xff));
+      __builtin_memcpy(&_tmp0, arr, 6);
+      __m64 v = _tmp0;
+      fill_works(v);
+      v = bitonic_6_uint8_t_vec(v);
+      
+      fill_works(v);__builtin_memcpy(arr, &v, 6);
+      
+ }
 
 
 #endif
+
 
 
 

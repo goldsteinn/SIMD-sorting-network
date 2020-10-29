@@ -12,11 +12,22 @@ types = [
 sizes = [1, 2, 4, 8, 1, 2, 4, 8]
 max_b = [32, 64]
 extra_flags = [
-    "", "-i", "-O space", "-O space -i", "-O uop", "-O uop -i", "-e",
-    "--aligned", "-e --aligned", "-e -i", "--aligned -i", "-e --aligned -i",
-    "-tmp", "-i -tmp", "-O space -tmp", "-O space -i -tmp", "-O uop -tmp",
-    "-O uop -i -tmp", "-e -tmp", "--aligned -tmp", "-e --aligned -tmp",
-    "-e -i -tmp", "--aligned -i -tmp", "-e --aligned -i -tmp"
+    "--clang-format 1231231 ", "--clang-format 1231231 -i",
+    "--clang-format 1231231 -O space", "--clang-format 1231231 -O space -i",
+    "--clang-format 1231231 -O uop", "--clang-format 1231231 -O uop -i",
+    "--clang-format 1231231 -e", "--clang-format 1231231 --aligned",
+    "--clang-format 1231231 -e --aligned", "--clang-format 1231231 -e -i",
+    "--clang-format 1231231 --aligned -i",
+    "--clang-format 1231231 -e --aligned -i", "--clang-format 1231231 -tmp",
+    "--clang-format 1231231 -i -tmp", "--clang-format 1231231 -O space -tmp",
+    "--clang-format 1231231 -O space -i -tmp",
+    "--clang-format 1231231 -O uop -tmp",
+    "--clang-format 1231231 -O uop -i -tmp", "--clang-format 1231231 -e -tmp",
+    "--clang-format 1231231 --aligned -tmp",
+    "--clang-format 1231231 -e --aligned -tmp",
+    "--clang-format 1231231 -e -i -tmp",
+    "--clang-format 1231231 --aligned -i -tmp",
+    "--clang-format 1231231 -e --aligned -i -tmp"
 ]
 
 
@@ -29,15 +40,14 @@ signal.signal(signal.SIGINT, sig_exit)
 
 for max_bytes in max_b:
     for i in range(0, len(types)):
-        if i < skip_to:
-            continue
+
         min_N = max(4, int(4 / sizes[i]))
         max_N = int(max_bytes / sizes[i]) + 1
         for n in range(min_N, max_N):
+            if n < skip_to:
+                continue
 
             for f in extra_flags:
-                if "-tmp" not in f:
-                    continue
                 os.system("rm -f export_tests/.tmp")
                 cmd = ""
                 if max_bytes == 32:

@@ -19,7 +19,7 @@ AlwaysBreakAfterDefinitionReturnType: All
 AlwaysBreakAfterReturnType: AllDefinitions
 AlwaysBreakBeforeMultilineStrings: true
 AlwaysBreakTemplateDeclarations: true
-BinPackArguments: false
+BinPackArguments: true
 BinPackParameters: false
 ExperimentalAutoDetectBinPacking: false
 BraceWrapping:   

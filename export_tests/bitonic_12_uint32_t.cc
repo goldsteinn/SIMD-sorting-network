@@ -104,86 +104,127 @@ Performance Notes:
 
 
 
-void fill_works(__m512i v) {
-sarr<TYPE, N> t;
-memcpy(t.arr, &v, 64);
-int i = N;for (; i < 16; ++i) {
-assert(t.arr[i] == uint32_t(0xffffffff));
-}
+     void fill_works(__m512i v) {
+      sarr<TYPE, N> t;
+      memcpy(t.arr, &v, 64);
+          int i = N;for (; i < 16; ++i) {
+          assert(t.arr[i] == uint32_t(0xffffffff));
+ }
 }
 
 /* SIMD Sort */
-__m512i __attribute__((const)) bitonic_12_uint32_t_vec(__m512i v) {
+     __m512i __attribute__((const)) 
 
-__m512i perm0 = _mm512_permutexvar_epi32(_mm512_set_epi32(15, 14, 13, 12, 10, 11, 9, 7, 8, 6, 4, 5, 3, 1, 2, 0), v);
-__m512i min0 = _mm512_min_epu32(v, perm0);
-__m512i max0 = _mm512_max_epu32(v, perm0);
-__m512i v0 = _mm512_mask_mov_epi32(max0, 0x492, min0);
-
-__m512i perm1 = _mm512_permutexvar_epi32(_mm512_set_epi32(15, 14, 13, 12, 9, 10, 11, 8, 6, 7, 5, 3, 4, 0, 1, 2), v0);
-__m512i min1 = _mm512_min_epu32(v0, perm1);
-__m512i max1 = _mm512_max_epu32(v0, perm1);
-__m512i v1 = _mm512_mask_mov_epi32(max1, 0x249, min1);
-
-__m512i perm2 = _mm512_permutexvar_epi32(_mm512_set_epi32(15, 14, 13, 12, 11, 9, 10, 7, 8, 6, 4, 5, 3, 2, 0, 1), v1);
-__m512i min2 = _mm512_min_epu32(v1, perm2);
-__m512i max2 = _mm512_max_epu32(v1, perm2);
-__m512i v2 = _mm512_mask_mov_epi32(max2, 0x291, min2);
-
-__m512i perm3 = _mm512_permutexvar_epi32(_mm512_set_epi32(15, 14, 13, 12, 7, 8, 9, 10, 11, 6, 5, 0, 1, 2, 3, 4), v2);
-__m512i min3 = _mm512_min_epu32(v2, perm3);
-__m512i max3 = _mm512_max_epu32(v2, perm3);
-__m512i v3 = _mm512_mask_mov_epi32(max3, 0x183, min3);
-
-__m512i perm4 = _mm512_permutexvar_epi32(_mm512_set_epi32(15, 14, 13, 12, 10, 11, 7, 6, 9, 8, 3, 2, 5, 4, 0, 1), v3);
-__m512i min4 = _mm512_min_epu32(v3, perm4);
-__m512i max4 = _mm512_max_epu32(v3, perm4);
-__m512i v4 = _mm512_mask_mov_epi32(max4, 0x4cd, min4);
-
-__m512i perm5 = _mm512_shuffle_epi8(v4, _mm512_set_epi8(63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 35, 34, 33, 32, 39, 38, 37, 36, 27, 26, 25, 24, 31, 30, 29, 28, 19, 18, 17, 16, 23, 22, 21, 20, 11, 10, 9, 8, 15, 14, 13, 12, 7, 6, 5, 4, 3, 2, 1, 0));
-__m512i min5 = _mm512_min_epu32(v4, perm5);
-__m512i max5 = _mm512_max_epu32(v4, perm5);
-__m512i v5 = _mm512_mask_mov_epi32(max5, 0x154, min5);
-
-__m512i perm6 = _mm512_permutexvar_epi32(_mm512_set_epi32(15, 14, 13, 12, 2, 3, 4, 5, 7, 6, 8, 9, 10, 11, 1, 0), v5);
-__m512i min6 = _mm512_min_epu32(v5, perm6);
-__m512i max6 = _mm512_max_epu32(v5, perm6);
-__m512i v6 = _mm512_mask_mov_epi32(max6, 0x3c, min6);
-
-__m512i perm7 = _mm512_permutexvar_epi32(_mm512_set_epi32(15, 14, 13, 12, 9, 8, 11, 10, 2, 3, 1, 0, 6, 7, 5, 4), v6);
-__m512i min7 = _mm512_min_epu32(v6, perm7);
-__m512i max7 = _mm512_max_epu32(v6, perm7);
-__m512i v7 = _mm512_mask_mov_epi32(max7, 0x30f, min7);
-
-__m512i perm8 = _mm512_shuffle_epi8(v7, _mm512_set_epi8(63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 43, 42, 41, 40, 47, 46, 45, 44, 35, 34, 33, 32, 39, 38, 37, 36, 19, 18, 17, 16, 23, 22, 21, 20, 27, 26, 25, 24, 31, 30, 29, 28, 7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8));
-__m512i min8 = _mm512_min_epu32(v7, perm8);
-__m512i max8 = _mm512_max_epu32(v7, perm8);
-__m512i v8 = _mm512_mask_mov_epi32(max8, 0x533, min8);
-
-__m512i perm9 = _mm512_shuffle_epi8(v8, _mm512_set_epi8(63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 27, 26, 25, 24, 31, 30, 29, 28, 19, 18, 17, 16, 23, 22, 21, 20, 11, 10, 9, 8, 15, 14, 13, 12, 3, 2, 1, 0, 7, 6, 5, 4));
-__m512i min9 = _mm512_min_epu32(v8, perm9);
-__m512i max9 = _mm512_max_epu32(v8, perm9);
-__m512i v9 = _mm512_mask_mov_epi32(max9, 0x55, min9);
-
-return v9;
-}
+bitonic_12_uint32_t_vec(__m512i v) {
+      
+      __m512i perm0 = _mm512_permutexvar_epi32(_mm512_set_epi32(15, 14, 13, 
+                                               12, 10, 11, 9, 7, 8, 6, 4, 5, 
+                                               3, 1, 2, 0), v);
+      __m512i min0 = _mm512_min_epu32(v, perm0);
+      __m512i max0 = _mm512_max_epu32(v, perm0);
+      __m512i v0 = _mm512_mask_mov_epi32(max0, 0x492, min0);
+      
+      __m512i perm1 = _mm512_permutexvar_epi32(_mm512_set_epi32(15, 14, 13, 
+                                               12, 9, 10, 11, 8, 6, 7, 5, 3, 
+                                               4, 0, 1, 2), v0);
+      __m512i min1 = _mm512_min_epu32(v0, perm1);
+      __m512i max1 = _mm512_max_epu32(v0, perm1);
+      __m512i v1 = _mm512_mask_mov_epi32(max1, 0x249, min1);
+      
+      __m512i perm2 = _mm512_permutexvar_epi32(_mm512_set_epi32(15, 14, 13, 
+                                               12, 11, 9, 10, 7, 8, 6, 4, 5, 
+                                               3, 2, 0, 1), v1);
+      __m512i min2 = _mm512_min_epu32(v1, perm2);
+      __m512i max2 = _mm512_max_epu32(v1, perm2);
+      __m512i v2 = _mm512_mask_mov_epi32(max2, 0x291, min2);
+      
+      __m512i perm3 = _mm512_permutexvar_epi32(_mm512_set_epi32(15, 14, 13, 
+                                               12, 7, 8, 9, 10, 11, 6, 5, 0, 
+                                               1, 2, 3, 4), v2);
+      __m512i min3 = _mm512_min_epu32(v2, perm3);
+      __m512i max3 = _mm512_max_epu32(v2, perm3);
+      __m512i v3 = _mm512_mask_mov_epi32(max3, 0x183, min3);
+      
+      __m512i perm4 = _mm512_permutexvar_epi32(_mm512_set_epi32(15, 14, 13, 
+                                               12, 10, 11, 7, 6, 9, 8, 3, 2, 
+                                               5, 4, 0, 1), v3);
+      __m512i min4 = _mm512_min_epu32(v3, perm4);
+      __m512i max4 = _mm512_max_epu32(v3, perm4);
+      __m512i v4 = _mm512_mask_mov_epi32(max4, 0x4cd, min4);
+      
+      __m512i perm5 = _mm512_shuffle_epi8(v4, _mm512_set_epi8(63, 62, 61, 60, 
+                                          59, 58, 57, 56, 55, 54, 53, 52, 51, 
+                                          50, 49, 48, 47, 46, 45, 44, 43, 42, 
+                                          41, 40, 35, 34, 33, 32, 39, 38, 37, 
+                                          36, 27, 26, 25, 24, 31, 30, 29, 28, 
+                                          19, 18, 17, 16, 23, 22, 21, 20, 11, 
+                                          10, 9, 8, 15, 14, 13, 12, 7, 6, 5, 
+                                          4, 3, 2, 1, 0));
+      __m512i min5 = _mm512_min_epu32(v4, perm5);
+      __m512i max5 = _mm512_max_epu32(v4, perm5);
+      __m512i v5 = _mm512_mask_mov_epi32(max5, 0x154, min5);
+      
+      __m512i perm6 = _mm512_permutexvar_epi32(_mm512_set_epi32(15, 14, 13, 
+                                               12, 2, 3, 4, 5, 7, 6, 8, 9, 
+                                               10, 11, 1, 0), v5);
+      __m512i min6 = _mm512_min_epu32(v5, perm6);
+      __m512i max6 = _mm512_max_epu32(v5, perm6);
+      __m512i v6 = _mm512_mask_mov_epi32(max6, 0x3c, min6);
+      
+      __m512i perm7 = _mm512_permutexvar_epi32(_mm512_set_epi32(15, 14, 13, 
+                                               12, 9, 8, 11, 10, 2, 3, 1, 0, 
+                                               6, 7, 5, 4), v6);
+      __m512i min7 = _mm512_min_epu32(v6, perm7);
+      __m512i max7 = _mm512_max_epu32(v6, perm7);
+      __m512i v7 = _mm512_mask_mov_epi32(max7, 0x30f, min7);
+      
+      __m512i perm8 = _mm512_shuffle_epi8(v7, _mm512_set_epi8(63, 62, 61, 60, 
+                                          59, 58, 57, 56, 55, 54, 53, 52, 51, 
+                                          50, 49, 48, 43, 42, 41, 40, 47, 46, 
+                                          45, 44, 35, 34, 33, 32, 39, 38, 37, 
+                                          36, 19, 18, 17, 16, 23, 22, 21, 20, 
+                                          27, 26, 25, 24, 31, 30, 29, 28, 7, 
+                                          6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 
+                                          12, 11, 10, 9, 8));
+      __m512i min8 = _mm512_min_epu32(v7, perm8);
+      __m512i max8 = _mm512_max_epu32(v7, perm8);
+      __m512i v8 = _mm512_mask_mov_epi32(max8, 0x533, min8);
+      
+      __m512i perm9 = _mm512_shuffle_epi8(v8, _mm512_set_epi8(63, 62, 61, 60, 
+                                          59, 58, 57, 56, 55, 54, 53, 52, 51, 
+                                          50, 49, 48, 47, 46, 45, 44, 43, 42, 
+                                          41, 40, 39, 38, 37, 36, 35, 34, 33, 
+                                          32, 27, 26, 25, 24, 31, 30, 29, 28, 
+                                          19, 18, 17, 16, 23, 22, 21, 20, 11, 
+                                          10, 9, 8, 15, 14, 13, 12, 3, 2, 1, 
+                                          0, 7, 6, 5, 4));
+      __m512i min9 = _mm512_min_epu32(v8, perm9);
+      __m512i max9 = _mm512_max_epu32(v8, perm9);
+      __m512i v9 = _mm512_mask_mov_epi32(max9, 0x55, min9);
+      
+      return v9;
+ }
 
 
 
 /* Wrapper For SIMD Sort */
-void inline __attribute__((always_inline)) bitonic_12_uint32_t(uint32_t * const arr) {
+     void inline __attribute__((always_inline)) 
 
-__m512i _tmp0 = _mm512_set1_epi32(uint32_t(0xffffffff));
-__m512i v = _mm512_mask_load_epi32(_tmp0, 0xfff, arr);
-fill_works(v);
-v = bitonic_12_uint32_t_vec(v);
-
-fill_works(v);_mm512_mask_store_epi32((void *)arr, 0xfff, v);
-
-}
+bitonic_12_uint32_t(uint32_t * const 
+                                 arr) {
+      
+      __m512i _tmp0 = _mm512_set1_epi32(uint32_t(0xffffffff));
+      __m512i v = _mm512_mask_load_epi32(_tmp0, 0xfff, arr);
+      fill_works(v);
+      v = bitonic_12_uint32_t_vec(v);
+      
+      fill_works(v);_mm512_mask_store_epi32((void *)arr, 0xfff, v);
+      
+ }
 
 
 #endif
+
 
 
 

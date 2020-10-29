@@ -106,67 +106,90 @@ Performance Notes:
 typedef __m64 _aliasing_m64_ __attribute__((aligned(8), may_alias));
 
 
-void fill_works(__m64 v) {
-sarr<TYPE, N> t;
-memcpy(t.arr, &v, 8);
-int i = N;for (; i < 4; ++i) {
-assert(t.arr[i] == uint16_t(0xffff));
-}
+     void fill_works(__m64 v) {
+      sarr<TYPE, N> t;
+      memcpy(t.arr, &v, 8);
+          int i = N;for (; i < 4; ++i) {
+          assert(t.arr[i] == uint16_t(0xffff));
+ }
 }
 
 /* SIMD Sort */
-__m64 __attribute__((const)) bitonic_4_uint16_t_vec(__m64 v) {
+     __m64 __attribute__((const)) 
 
-__m64 perm0 = _mm_shuffle_pi16(v, 0xb1);
-__m64 _tmp1 = _mm_set1_pi16(1 << 15);
-__m64 _tmp2 = _mm_cmpgt_pi16(_mm_xor_si64(v, _tmp1), _mm_xor_si64(perm0, _tmp1));
-__m64 min0 = _mm_or_si64(_mm_and_si64(_tmp2, perm0), _mm_andnot_si64(_tmp2, v));
-__m64 _tmp3 = _mm_set1_pi16(1 << 15);
-__m64 _tmp4 = _mm_cmpgt_pi16(_mm_xor_si64(v, _tmp3), _mm_xor_si64(perm0, _tmp3));
-__m64 max0 = _mm_or_si64(_mm_and_si64(_tmp4, v), _mm_andnot_si64(_tmp4, perm0));
-__m64 _tmp5 = (__m64)(0xffff0000ffffUL);
-__m64 v0 = _mm_or_si64(_mm_and_si64(_tmp5, min0), _mm_andnot_si64(_tmp5, max0));
-
-__m64 perm1 = _mm_shuffle_pi16(v0, 0x1b);
-__m64 _tmp6 = _mm_set1_pi16(1 << 15);
-__m64 _tmp7 = _mm_cmpgt_pi16(_mm_xor_si64(v0, _tmp6), _mm_xor_si64(perm1, _tmp6));
-__m64 min1 = _mm_or_si64(_mm_and_si64(_tmp7, perm1), _mm_andnot_si64(_tmp7, v0));
-__m64 _tmp8 = _mm_set1_pi16(1 << 15);
-__m64 _tmp9 = _mm_cmpgt_pi16(_mm_xor_si64(v0, _tmp8), _mm_xor_si64(perm1, _tmp8));
-__m64 max1 = _mm_or_si64(_mm_and_si64(_tmp9, v0), _mm_andnot_si64(_tmp9, perm1));
-__m64 _tmp10 = (__m64)(0xffffffffUL);
-__m64 v1 = _mm_or_si64(_mm_and_si64(_tmp10, min1), _mm_andnot_si64(_tmp10, max1));
-
-__m64 perm2 = _mm_shuffle_pi16(v1, 0xb1);
-__m64 _tmp11 = _mm_set1_pi16(1 << 15);
-__m64 _tmp12 = _mm_cmpgt_pi16(_mm_xor_si64(v1, _tmp11), _mm_xor_si64(perm2, _tmp11));
-__m64 min2 = _mm_or_si64(_mm_and_si64(_tmp12, perm2), _mm_andnot_si64(_tmp12, v1));
-__m64 _tmp13 = _mm_set1_pi16(1 << 15);
-__m64 _tmp14 = _mm_cmpgt_pi16(_mm_xor_si64(v1, _tmp13), _mm_xor_si64(perm2, _tmp13));
-__m64 max2 = _mm_or_si64(_mm_and_si64(_tmp14, v1), _mm_andnot_si64(_tmp14, perm2));
-__m64 _tmp15 = (__m64)(0xffff0000ffffUL);
-__m64 v2 = _mm_or_si64(_mm_and_si64(_tmp15, min2), _mm_andnot_si64(_tmp15, max2));
-
-return v2;
-}
+bitonic_4_uint16_t_vec(__m64 v) {
+      
+      __m64 perm0 = _mm_shuffle_pi16(v, 0xb1);
+      __m64 _tmp1 = _mm_set1_pi16(1 << 15);
+      __m64 _tmp2 = _mm_cmpgt_pi16(_mm_xor_si64(v, _tmp1), 
+                                                _mm_xor_si64(perm0, _tmp1));
+      __m64 min0 = _mm_or_si64(_mm_and_si64(_tmp2, perm0), 
+                                            _mm_andnot_si64(_tmp2, v));
+      __m64 _tmp3 = _mm_set1_pi16(1 << 15);
+      __m64 _tmp4 = _mm_cmpgt_pi16(_mm_xor_si64(v, _tmp3), 
+                                                _mm_xor_si64(perm0, _tmp3));
+      __m64 max0 = _mm_or_si64(_mm_and_si64(_tmp4, v), _mm_andnot_si64(_tmp4, 
+                                            perm0));
+      __m64 _tmp5 = (__m64)(0xffff0000ffffUL);
+      __m64 v0 = _mm_or_si64(_mm_and_si64(_tmp5, min0), 
+                                          _mm_andnot_si64(_tmp5, max0));
+      
+      __m64 perm1 = _mm_shuffle_pi16(v0, 0x1b);
+      __m64 _tmp6 = _mm_set1_pi16(1 << 15);
+      __m64 _tmp7 = _mm_cmpgt_pi16(_mm_xor_si64(v0, _tmp6), 
+                                                _mm_xor_si64(perm1, _tmp6));
+      __m64 min1 = _mm_or_si64(_mm_and_si64(_tmp7, perm1), 
+                                            _mm_andnot_si64(_tmp7, v0));
+      __m64 _tmp8 = _mm_set1_pi16(1 << 15);
+      __m64 _tmp9 = _mm_cmpgt_pi16(_mm_xor_si64(v0, _tmp8), 
+                                                _mm_xor_si64(perm1, _tmp8));
+      __m64 max1 = _mm_or_si64(_mm_and_si64(_tmp9, v0), 
+                                            _mm_andnot_si64(_tmp9, perm1));
+      __m64 _tmp10 = (__m64)(0xffffffffUL);
+      __m64 v1 = _mm_or_si64(_mm_and_si64(_tmp10, min1), 
+                                          _mm_andnot_si64(_tmp10, max1));
+      
+      __m64 perm2 = _mm_shuffle_pi16(v1, 0xb1);
+      __m64 _tmp11 = _mm_set1_pi16(1 << 15);
+      __m64 _tmp12 = _mm_cmpgt_pi16(_mm_xor_si64(v1, _tmp11), 
+                                                 _mm_xor_si64(perm2, 
+                                                 _tmp11));
+      __m64 min2 = _mm_or_si64(_mm_and_si64(_tmp12, perm2), 
+                                            _mm_andnot_si64(_tmp12, v1));
+      __m64 _tmp13 = _mm_set1_pi16(1 << 15);
+      __m64 _tmp14 = _mm_cmpgt_pi16(_mm_xor_si64(v1, _tmp13), 
+                                                 _mm_xor_si64(perm2, 
+                                                 _tmp13));
+      __m64 max2 = _mm_or_si64(_mm_and_si64(_tmp14, v1), 
+                                            _mm_andnot_si64(_tmp14, perm2));
+      __m64 _tmp15 = (__m64)(0xffff0000ffffUL);
+      __m64 v2 = _mm_or_si64(_mm_and_si64(_tmp15, min2), 
+                                          _mm_andnot_si64(_tmp15, max2));
+      
+      return v2;
+ }
 
 
 
 /* Wrapper For SIMD Sort */
-void inline __attribute__((always_inline)) bitonic_4_uint16_t(uint16_t * const arr) {
+     void inline __attribute__((always_inline)) 
 
-__m64 _tmp0 = _mm_set1_pi16(uint16_t(0xffff));
-__builtin_memcpy(&_tmp0, arr, 8);
-__m64 v = _tmp0;
-fill_works(v);
-v = bitonic_4_uint16_t_vec(v);
-
-fill_works(v);__builtin_memcpy(arr, &v, 8);
-
-}
+bitonic_4_uint16_t(uint16_t * const 
+                                 arr) {
+      
+      __m64 _tmp0 = _mm_set1_pi16(uint16_t(0xffff));
+      __builtin_memcpy(&_tmp0, arr, 8);
+      __m64 v = _tmp0;
+      fill_works(v);
+      v = bitonic_4_uint16_t_vec(v);
+      
+      fill_works(v);__builtin_memcpy(arr, &v, 8);
+      
+ }
 
 
 #endif
+
 
 
 

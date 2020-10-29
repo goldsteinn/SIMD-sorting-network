@@ -104,66 +104,78 @@ Performance Notes:
 
 
 
-void fill_works(__m128i v) {
-sarr<TYPE, N> t;
-memcpy(t.arr, &v, 16);
-int i = N;for (; i < 8; ++i) {
-assert(t.arr[i] == uint16_t(0xffff));
-}
+     void fill_works(__m128i v) {
+      sarr<TYPE, N> t;
+      memcpy(t.arr, &v, 16);
+          int i = N;for (; i < 8; ++i) {
+          assert(t.arr[i] == uint16_t(0xffff));
+ }
 }
 
 /* SIMD Sort */
-__m128i __attribute__((const)) bitonic_7_uint16_t_vec(__m128i v) {
+     __m128i __attribute__((const)) 
 
-__m128i perm0 = _mm_shuffle_epi8(v, _mm_set_epi8(15, 14, 11, 10, 13, 12, 7, 6, 9, 8, 3, 2, 5, 4, 1, 0));
-__m128i min0 = _mm_min_epu16(v, perm0);
-__m128i max0 = _mm_max_epu16(v, perm0);
-__m128i v0 = _mm_blend_epi16(max0, min0, 0x2a);
-
-__m128i perm1 = _mm_shuffle_epi8(v0, _mm_set_epi8(15, 14, 7, 6, 9, 8, 11, 10, 13, 12, 5, 4, 1, 0, 3, 2));
-__m128i min1 = _mm_min_epu16(v0, perm1);
-__m128i max1 = _mm_max_epu16(v0, perm1);
-__m128i v1 = _mm_blend_epi16(max1, min1, 0x19);
-
-__m128i perm2 = _mm_shuffle_epi8(v1, _mm_set_epi8(15, 14, 11, 10, 13, 12, 7, 6, 9, 8, 3, 2, 5, 4, 1, 0));
-__m128i min2 = _mm_min_epu16(v1, perm2);
-__m128i max2 = _mm_max_epu16(v1, perm2);
-__m128i v2 = _mm_blend_epi16(max2, min2, 0x2a);
-
-__m128i perm3 = _mm_shuffle_epi8(v2, _mm_set_epi8(15, 14, 1, 0, 3, 2, 5, 4, 7, 6, 9, 8, 11, 10, 13, 12));
-__m128i min3 = _mm_min_epu16(v2, perm3);
-__m128i max3 = _mm_max_epu16(v2, perm3);
-__m128i v3 = _mm_blend_epi16(max3, min3, 0x7);
-
-__m128i perm4 = _mm_shufflehi_epi16(_mm_shufflelo_epi16(v3, 0x4e), 0xc6);
-__m128i min4 = _mm_min_epu16(v3, perm4);
-__m128i max4 = _mm_max_epu16(v3, perm4);
-__m128i v4 = _mm_blend_epi16(max4, min4, 0x13);
-
-__m128i perm5 = _mm_shufflehi_epi16(_mm_shufflelo_epi16(v4, 0xb1), 0xe1);
-__m128i min5 = _mm_min_epu16(v4, perm5);
-__m128i max5 = _mm_max_epu16(v4, perm5);
-__m128i v5 = _mm_blend_epi16(max5, min5, 0x15);
-
-return v5;
-}
+bitonic_7_uint16_t_vec(__m128i v) {
+      
+      __m128i perm0 = _mm_shuffle_epi8(v, _mm_set_epi8(15, 14, 11, 10, 13, 
+                                       12, 7, 6, 9, 8, 3, 2, 5, 4, 1, 0));
+      __m128i min0 = _mm_min_epu16(v, perm0);
+      __m128i max0 = _mm_max_epu16(v, perm0);
+      __m128i v0 = _mm_blend_epi16(max0, min0, 0x2a);
+      
+      __m128i perm1 = _mm_shuffle_epi8(v0, _mm_set_epi8(15, 14, 7, 6, 9, 8, 
+                                       11, 10, 13, 12, 5, 4, 1, 0, 3, 2));
+      __m128i min1 = _mm_min_epu16(v0, perm1);
+      __m128i max1 = _mm_max_epu16(v0, perm1);
+      __m128i v1 = _mm_blend_epi16(max1, min1, 0x19);
+      
+      __m128i perm2 = _mm_shuffle_epi8(v1, _mm_set_epi8(15, 14, 11, 10, 13, 
+                                       12, 7, 6, 9, 8, 3, 2, 5, 4, 1, 0));
+      __m128i min2 = _mm_min_epu16(v1, perm2);
+      __m128i max2 = _mm_max_epu16(v1, perm2);
+      __m128i v2 = _mm_blend_epi16(max2, min2, 0x2a);
+      
+      __m128i perm3 = _mm_shuffle_epi8(v2, _mm_set_epi8(15, 14, 1, 0, 3, 2, 
+                                       5, 4, 7, 6, 9, 8, 11, 10, 13, 12));
+      __m128i min3 = _mm_min_epu16(v2, perm3);
+      __m128i max3 = _mm_max_epu16(v2, perm3);
+      __m128i v3 = _mm_blend_epi16(max3, min3, 0x7);
+      
+      __m128i perm4 = _mm_shufflehi_epi16(_mm_shufflelo_epi16(v3, 0x4e), 
+                                          0xc6);
+      __m128i min4 = _mm_min_epu16(v3, perm4);
+      __m128i max4 = _mm_max_epu16(v3, perm4);
+      __m128i v4 = _mm_blend_epi16(max4, min4, 0x13);
+      
+      __m128i perm5 = _mm_shufflehi_epi16(_mm_shufflelo_epi16(v4, 0xb1), 
+                                          0xe1);
+      __m128i min5 = _mm_min_epu16(v4, perm5);
+      __m128i max5 = _mm_max_epu16(v4, perm5);
+      __m128i v5 = _mm_blend_epi16(max5, min5, 0x15);
+      
+      return v5;
+ }
 
 
 
 /* Wrapper For SIMD Sort */
-void inline __attribute__((always_inline)) bitonic_7_uint16_t(uint16_t * const arr) {
+     void inline __attribute__((always_inline)) 
 
-__m128i _tmp0 = _mm_set1_epi16(uint16_t(0xffff));
-__m128i v = _mm_mask_loadu_epi16(_tmp0, 0x7f, arr);
-fill_works(v);
-v = bitonic_7_uint16_t_vec(v);
-
-fill_works(v);_mm_mask_storeu_epi16((void *)arr, 0x7f, v);
-
-}
+bitonic_7_uint16_t(uint16_t * const 
+                                 arr) {
+      
+      __m128i _tmp0 = _mm_set1_epi16(uint16_t(0xffff));
+      __m128i v = _mm_mask_loadu_epi16(_tmp0, 0x7f, arr);
+      fill_works(v);
+      v = bitonic_7_uint16_t_vec(v);
+      
+      fill_works(v);_mm_mask_storeu_epi16((void *)arr, 0x7f, v);
+      
+ }
 
 
 #endif
+
 
 
 
