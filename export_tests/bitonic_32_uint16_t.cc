@@ -64,12 +64,15 @@ Sorting Network Information:
 	Underlying Sort Type             : uint16_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 15
-	SIMD Instructions                : 3 / 70
+	SIMD Instructions                : 2 / 69
+	Optimization Preference          : space
 	SIMD Type                        : __m512i
-	SIMD Instruction Set(s) Used     : AVX512f, AVX512bw, AVX, AVX512vl
+	SIMD Instruction Set(s) Used     : AVX512f, AVX512bw
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
+	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
+	Scaled Sorting Network           : False
 
 Performance Notes:
 1) If you are sorting an array where there IS valid memory up to 
@@ -103,14 +106,6 @@ Performance Notes:
 #include <stdint.h>
 
 
-
-     void fill_works(__m512i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 64);
-          int i = N;for (; i < 32; ++i) {
-          assert(t.arr[i] == uint16_t(0xffff));
- }
-}
 
 /* SIMD Sort */
      __m512i __attribute__((const)) 
@@ -192,11 +187,7 @@ bitonic_32_uint16_t_vec(__m512i v) {
       __m512i max10 = _mm512_max_epu16(v9, perm10);
       __m512i v10 = _mm512_mask_mov_epi16(max10, 0xffff, min10);
       
-      __m512i perm11 = _mm512_permutexvar_epi16(_mm512_set_epi16(23, 22, 21, 
-                                                20, 19, 18, 17, 16, 31, 30, 
-                                                29, 28, 27, 26, 25, 24, 7, 6, 
-                                                5, 4, 3, 2, 1, 0, 15, 14, 13, 
-                                                12, 11, 10, 9, 8), v10);
+      __m512i perm11 = _mm512_permutex_epi64(v10, 0x4e);
       __m512i min11 = _mm512_min_epu16(v10, perm11);
       __m512i max11 = _mm512_max_epu16(v10, perm11);
       __m512i v11 = _mm512_mask_mov_epi16(max11, 0xff00ff, min11);
@@ -228,12 +219,11 @@ bitonic_32_uint16_t_vec(__m512i v) {
 bitonic_32_uint16_t(uint16_t * const 
                                  arr) {
       
-      __m512i _tmp0 = _mm512_set1_epi16(uint16_t(0xffff));
-      __m512i v = _mm512_mask_loadu_epi16(_tmp0, 0xffffffff, arr);
-      fill_works(v);
+      __m512i v = _mm512_load_si512((__m512i *)arr);
+      
       v = bitonic_32_uint16_t_vec(v);
       
-      fill_works(v);_mm512_mask_storeu_epi16((void *)arr, 0xffffffff, v);
+      _mm512_store_si512((__m512i *)arr, v);
       
  }
 

@@ -64,12 +64,15 @@ Sorting Network Information:
 	Underlying Sort Type             : uint8_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 21
-	SIMD Instructions                : 3 / 100
+	SIMD Instructions                : 2 / 99
+	Optimization Preference          : space
 	SIMD Type                        : __m512i
-	SIMD Instruction Set(s) Used     : AVX512f, AVX512bw, AVX, AVX512vbmi, AVX512vl
+	SIMD Instruction Set(s) Used     : AVX512f, AVX512bw, AVX512vbmi
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
+	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
+	Scaled Sorting Network           : False
 
 Performance Notes:
 1) If you are sorting an array where there IS valid memory up to 
@@ -103,14 +106,6 @@ Performance Notes:
 #include <stdint.h>
 
 
-
-     void fill_works(__m512i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 64);
-          int i = N;for (; i < 64; ++i) {
-          assert(t.arr[i] == uint8_t(0xff));
- }
-}
 
 /* SIMD Sort */
      __m512i __attribute__((const)) 
@@ -275,16 +270,7 @@ bitonic_64_uint8_t_vec(__m512i v) {
       __m512i max15 = _mm512_max_epu8(v14, perm15);
       __m512i v15 = _mm512_mask_mov_epi8(max15, 0xffffffff, min15);
       
-      __m512i perm16 = _mm512_permutexvar_epi8(_mm512_set_epi8(47, 46, 45, 
-                                               44, 43, 42, 41, 40, 39, 38, 
-                                               37, 36, 35, 34, 33, 32, 63, 
-                                               62, 61, 60, 59, 58, 57, 56, 
-                                               55, 54, 53, 52, 51, 50, 49, 
-                                               48, 15, 14, 13, 12, 11, 10, 9, 
-                                               8, 7, 6, 5, 4, 3, 2, 1, 0, 31, 
-                                               30, 29, 28, 27, 26, 25, 24, 
-                                               23, 22, 21, 20, 19, 18, 17, 
-                                               16), v15);
+      __m512i perm16 = _mm512_permutex_epi64(v15, 0x4e);
       __m512i min16 = _mm512_min_epu8(v15, perm16);
       __m512i max16 = _mm512_max_epu8(v15, perm16);
       __m512i v16 = _mm512_mask_mov_epi8(max16, 0xffff0000ffff, min16);
@@ -329,13 +315,11 @@ bitonic_64_uint8_t_vec(__m512i v) {
 bitonic_64_uint8_t(uint8_t * const arr) 
                                  {
       
-      __m512i _tmp0 = _mm512_set1_epi8(uint8_t(0xff));
-      __m512i v = _mm512_mask_loadu_epi8(_tmp0, 0xffffffffffffffff, arr);
-      fill_works(v);
+      __m512i v = _mm512_load_si512((__m512i *)arr);
+      
       v = bitonic_64_uint8_t_vec(v);
       
-      fill_works(v);_mm512_mask_storeu_epi8((void *)arr, 0xffffffffffffffff, 
-                                             v);
+      _mm512_store_si512((__m512i *)arr, v);
       
  }
 

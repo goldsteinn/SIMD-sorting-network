@@ -11,7 +11,6 @@ import subprocess
 import os
 
 
-
 def sig_exit(signum, empty):
     print("Exiting on Signal({})".format(str(signum)))
     sys.exit(-1)
@@ -1080,15 +1079,16 @@ def shuffle_mask_impl(lane_size, ele_per_lane, slot_bits, offset, perm):
     mask = int(0)
     for i in range(0, N_lanes):
         lane_mask = int(0)
-        lower_bound = N - ((i + 1) * ele_per_lane + offset)
-        upper_bound = N - (i * ele_per_lane + offset)
+        lower_bound = N - (i * lane_size + ele_per_lane + offset)
+        upper_bound = N - (i * lane_size + offset)
         for j in range(0, ele_per_lane):
-            p = perm[i * ele_per_lane + j + offset]
+            p = perm[i * lane_size + j + offset]
             err_assert(
                 p >= lower_bound and p < upper_bound,
                 "trying to build epi32 shuffle mask across lanes. This should have been checked for earlier"
             )
             idx = p - lower_bound
+            err_assert(idx < 4, "invalid idx")
             slot = slot_bits * ((ele_per_lane - 1) - j)
 
             err_assert((lane_mask & (int(idx) << slot)) == 0,
@@ -1221,6 +1221,7 @@ class SIMD_Shuffle_As_Epi64(SIMD_Instruction):
         return mask
 
     def generate_instruction(self):
+        err_assert(self.shuffle_mask() != 0xe4, "Useless shuffle")
         if self.simd_type.sizeof() == 32:
             return "_mm256_permute4x64_epi64([V1], [SHUFFLE_MASK])".replace(
                 "[SHUFFLE_MASK]", str(hex(self.shuffle_mask())))
@@ -1265,6 +1266,8 @@ class SIMD_Shuffle_As_Epi32(SIMD_Instruction):
         return shuffle_mask_impl(4, 4, 2, 0, shrink_perm(T_size, 4, self.perm))
 
     def generate_instruction(self):
+        err_assert(self.shuffle_mask() != 0xe4, "Useless shuffle")
+
         mask_t = "uint8_t"
         if self.simd_type.sizeof() == 64:
             mask_t = "_MM_PERM_ENUM"
@@ -1279,7 +1282,8 @@ class SIMD_Shuffle_As_Epi16(SIMD_Instruction):
                          Sign.NOT_SIGNED, T_size, simd_type, constraints,
                          weight)
         self.perm = copy.deepcopy(perm)
-
+        self.adjusted_weight = False
+        
     def match(self, match_info):
         return self.has_support() and self.match_sort_type(
             match_info.sort_type) and self.match_simd_type(
@@ -1318,17 +1322,35 @@ class SIMD_Shuffle_As_Epi16(SIMD_Instruction):
         shuffle_mask_hi = shuffle_mask_impl(8, 4, 2, 0, new_perm)
         if shuffle_mask_lo == int(-1) or shuffle_mask_hi == int(-1):
             return int(-1)
+
         return shuffle_mask_lo | (shuffle_mask_hi << 32)
 
     def generate_instruction(self):
         mask = self.shuffle_mask()
         shuffle_mask_lo = mask & 0xffffffff
         shuffle_mask_hi = (mask >> 32) & 0xffffffff
-        return "{}_shufflehi_epi16({}_shufflelo_epi16([V1], [SHUFFLE_MASK_LO]), [SHUFFLE_MASK_HI])".format(
-            self.simd_type.prefix(), self.simd_type.prefix()).replace(
-                "[SHUFFLE_MASK_LO]",
-                str(hex(shuffle_mask_lo))).replace("[SHUFFLE_MASK_HI]",
-                                                   str(hex(shuffle_mask_hi)))
+        if shuffle_mask_lo != 0xe4 and shuffle_mask_hi != 0xe4:
+            if self.adjusted_weight is False:
+                self.adjusted_weight = True
+                self.weight += 1
+            return "{}_shufflehi_epi16({}_shufflelo_epi16([V1], [SHUFFLE_MASK_LO]), [SHUFFLE_MASK_HI])".format(
+                self.simd_type.prefix(), self.simd_type.prefix()).replace(
+                    "[SHUFFLE_MASK_LO]", str(hex(shuffle_mask_lo))).replace(
+                        "[SHUFFLE_MASK_HI]", str(hex(shuffle_mask_hi)))
+        elif shuffle_mask_lo == 0xe4:
+
+            return "{}_shufflehi_epi16([V1], [SHUFFLE_MASK_HI])".format(
+                self.simd_type.prefix(),
+                self.simd_type.prefix()).replace("[SHUFFLE_MASK_HI]",
+                                                 str(hex(shuffle_mask_hi)))
+
+        elif shuffle_mask_hi == 0xe4:
+            return "{}_shufflelo_epi16([V1], [SHUFFLE_MASK_LO])".format(
+                self.simd_type.prefix(),
+                self.simd_type.prefix()).replace("[SHUFFLE_MASK_LO]",
+                                                 str(hex(shuffle_mask_lo)))
+        else:
+            err_assert(False, "missed optimization")
 
 
 class SIMD_Shuffle_As_Epi8(SIMD_Instruction):
@@ -1422,7 +1444,7 @@ class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
             SIMD_Shuffle_As_Epi32(1, modified_perm_list, SIMD_m256(), ["AVX2"],
                                   0),
             SIMD_Shuffle_As_Epi16(1, modified_perm_list, SIMD_m256(), ["AVX2"],
-                                  2),
+                                  1),
             SIMD_Shuffle_As_Epi8(1, modified_perm_list, SIMD_m256(), ["AVX2"],
                                  3)
         ]
@@ -1602,13 +1624,13 @@ class SIMD_Permute():
             # __m128i epi8 ordering
             SIMD_Shuffle_As_Epi32(1, perm, SIMD_m128(), ["SSE2"], 0),
             SIMD_Shuffle_As_Epi16(1, perm, SIMD_m128(), ["SSE2"],
-                                  choose_if(Optimization.SPACE, 1, 2)),
+                                  choose_if(Optimization.SPACE, 0, 1)),
             SIMD_Shuffle_As_Epi8(1, perm, SIMD_m128(), ["SSSE3"],
                                  choose_if(Optimization.UOP, 2, 1)),
             # __m128i epi16 ordering
             SIMD_Shuffle_As_Epi32(2, perm, SIMD_m128(), ["SSE2"], 0),
             SIMD_Shuffle_As_Epi16(2, perm, SIMD_m128(), ["SSE2"],
-                                  choose_if(Optimization.SPACE, 1, 2)),
+                                  choose_if(Optimization.SPACE, 0, 1)),
             SIMD_Shuffle_As_Epi8(2, perm, SIMD_m128(), ["SSSE3"],
                                  choose_if(Optimization.UOP, 1, 2)),
             # __m128i epi32 ordering
@@ -1618,9 +1640,9 @@ class SIMD_Permute():
             ###################################################################
             # __m256i epi8 ordering
             SIMD_Shuffle_As_Epi32(1, perm, SIMD_m256(), ["AVX2"], 0),
-            SIMD_Shuffle_As_Epi64(1, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Shuffle_As_Epi16(1, perm, SIMD_m256(), ["AVX2"],
-                                  choose_if(Optimization.SPACE, 2, 3)),
+                                  choose_if(Optimization.SPACE, 1, 2)),
+            SIMD_Shuffle_As_Epi64(1, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Shuffle_As_Epi8(1, perm, SIMD_m256(), ["AVX2"],
                                  choose_if(Optimization.UOP, 2, 3)),
             SIMD_Permutex_Generate(
@@ -1632,9 +1654,9 @@ class SIMD_Permute():
             SIMD_Permutex_Fallback(1, perm, SIMD_m256(), ["AVX2", "AVX"], 100),
             # __m256i epi16 ordering
             SIMD_Shuffle_As_Epi32(2, perm, SIMD_m256(), ["AVX2"], 0),
-            SIMD_Shuffle_As_Epi64(1, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Shuffle_As_Epi16(2, perm, SIMD_m256(), ["AVX2"],
-                                  choose_if(Optimization.SPACE, 2, 3)),
+                                  choose_if(Optimization.SPACE, 1, 2)),
+            SIMD_Shuffle_As_Epi64(2, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Shuffle_As_Epi8(2, perm, SIMD_m256(), ["AVX2"],
                                  choose_if(Optimization.UOP, 2, 3)),
             SIMD_Permutex_Generate(
@@ -1646,7 +1668,7 @@ class SIMD_Permute():
             SIMD_Permutex_Fallback(2, perm, SIMD_m256(), ["AVX2", "AVX"], 100),
             # __m256i epi32 ordering
             SIMD_Shuffle_As_Epi32(4, perm, SIMD_m256(), ["AVX2"], 0),
-            SIMD_Shuffle_As_Epi64(1, perm, SIMD_m256(), ["AVX2"], 1),
+            SIMD_Shuffle_As_Epi64(4, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Shuffle_As_Epi8(4, perm, SIMD_m256(), ["AVX2"], 2),
 
             # these are setup so that if optimizing for space we will
@@ -1668,9 +1690,9 @@ class SIMD_Permute():
             ###################################################################
             # __m512i epi8 ordering
             SIMD_Shuffle_As_Epi32(1, perm, SIMD_m512(), ["AVX512f"], 0),
-            SIMD_Shuffle_As_Epi64(4, perm, SIMD_m512(), ["AVX512f"], 1),
             SIMD_Shuffle_As_Epi16(1, perm, SIMD_m512(), ["AVX512bw"],
-                                  choose_if(Optimization.SPACE, 2, 3)),
+                                  choose_if(Optimization.SPACE, 1, 2)),
+            SIMD_Shuffle_As_Epi64(1, perm, SIMD_m512(), ["AVX512f"], 1),
             SIMD_Shuffle_As_Epi8(1, perm, SIMD_m512(), ["AVX512bw"],
                                  choose_if(Optimization.UOP, 2, 3)),
             SIMD_Permutex_Generate(
@@ -1678,9 +1700,9 @@ class SIMD_Permute():
                 1, perm, SIMD_m512(), ["AVX512vbmi", "AVX512f"], 4),
             # __m512i epi16 ordering
             SIMD_Shuffle_As_Epi32(2, perm, SIMD_m512(), ["AVX512f"], 0),
-            SIMD_Shuffle_As_Epi64(4, perm, SIMD_m512(), ["AVX512f"], 1),
             SIMD_Shuffle_As_Epi16(2, perm, SIMD_m512(), ["AVX512bw"],
-                                  choose_if(Optimization.SPACE, 2, 3)),
+                                  choose_if(Optimization.SPACE, 1, 2)),
+            SIMD_Shuffle_As_Epi64(2, perm, SIMD_m512(), ["AVX512f"], 1),
             SIMD_Shuffle_As_Epi8(2, perm, SIMD_m512(), ["AVX512bw"],
                                  choose_if(Optimization.UOP, 2, 3)),
             SIMD_Permutex_Generate(
@@ -1882,6 +1904,10 @@ class SIMD_Mask_Load_ASM_Epi8(SIMD_Instruction):
         self.sort_type = sort_type
         self.fill = fill
 
+    def match(self, match_info):
+        return self.has_support() and self.match_simd_type(
+            match_info.simd_type) and (EXTRA_MEMORY is True)
+
     def generate_instruction(self):
         err_assert(
             int((self.raw_N * self.sort_type.sizeof()) % 4) != 0,
@@ -1940,8 +1966,9 @@ class SIMD_Mask_Load_ASM_Epi32(SIMD_Instruction):
 
     def can_do_epi32(self):
         sort_bytes = self.raw_N * self.sort_type.sizeof()
-        return (sort_bytes % 4) == 0 or (self.fill is False
-                                         and INT_ALIGNED is True)
+        return ((sort_bytes % 4) == 0 or
+                (self.fill is False
+                 and INT_ALIGNED is True)) and EXTRA_MEMORY is True
 
     def generate_instruction(self):
         err_assert(
@@ -2780,8 +2807,6 @@ def order_str_tmps(raw_str, base):
     return ntmps, raw_str
 
 
-
-
 class Output_Formatter():
     def __init__(self, raw_output):
         self.raw_output = raw_output
@@ -2853,7 +2878,7 @@ class Output_Formatter():
             if "}" in lines:
                 started = False
                 tabs -= 1
-                
+
             if started is False:
                 fmt_output += lines
                 continue
@@ -2892,13 +2917,12 @@ class Output_Formatter():
             if ":);\n" in lines:
                 extra_spacing = 0
 
-
         return fmt_output
 
 
 class Output_Generator():
-    def __init__(self, header_info, CAS_info, algorithm_name, depth, N, scaled_N,
-                 sort_type):
+    def __init__(self, header_info, CAS_info, algorithm_name, depth, N,
+                 scaled_N, sort_type):
         self.header_info = header_info
         self.CAS_info = CAS_info
         self.algorithm_name = algorithm_name
@@ -2933,9 +2957,9 @@ class Output_Generator():
 
         self.impl_info = [
             "Sorting Network Information:",
-            "\tSort Size                        : {}".format(self.N),
-            "\tUnderlying Sort Type             : {}".format(
-                self.sort_type.to_string()),
+            "\tSort Size                        : {}".format(
+                self.N), "\tUnderlying Sort Type             : {}".format(
+                    self.sort_type.to_string()),
             "\tNetwork Generation Algorithm     : {}".format(algorithm_name),
             "\tNetwork Depth                    : {}".format(depth),
             "\tSIMD Instructions                : {} / {}".format(
@@ -2954,7 +2978,6 @@ class Output_Generator():
             "\tFull Load & Store                : {}".format(
                 str(full_load_and_store)),
             "\tScaled Sorting Network           : {}".format(str(scaled_N))
-            
         ]
 
         self.perf_notes = [
@@ -3006,9 +3029,7 @@ class Output_Generator():
         return head
 
     def get_content(self):
-        return small_test(self.sort_type,
-                          self.simd_type) + "\n" + self.CAS_info.get().replace(
-                              "[FUNCNAME]", self.sort_to_str)
+        return self.CAS_info.get().replace("[FUNCNAME]", self.sort_to_str)
 
     def get_tail(self):
         tail = "\n\n"
@@ -3115,12 +3136,10 @@ class CAS_Output_Generator():
 
     def get_wrapper_content(self):
         content = self.load
-        content += call_test("v")
         content += "\n"
         content += "[V] = [FUNCNAME]_vec([V]);".replace("[V]", self.v_name)
         content += "\n"
         content += "\n"
-        content += call_test("v")
         content += self.store
         return content
 
@@ -3251,12 +3270,12 @@ class Compare_Exchange_Generator():
             header.aliasing_m64 = True
 
         self.SIMD_load = instruction_filter(
-            SIMD_Load(N, sort_type, scaled_N).instructions,
-            self.sort_type, self.simd_type, ALIGNED_ACCESS, do_full)
+            SIMD_Load(N, sort_type, scaled_N).instructions, self.sort_type,
+            self.simd_type, ALIGNED_ACCESS, do_full)
 
         self.SIMD_store = instruction_filter(
-            SIMD_Store(N, sort_type, scaled_N).instructions,
-            self.sort_type, self.simd_type, ALIGNED_ACCESS, do_full)
+            SIMD_Store(N, sort_type, scaled_N).instructions, self.sort_type,
+            self.simd_type, ALIGNED_ACCESS, do_full)
 
     def Generate_Instructions(self):
         best_load = best_instruction(self.SIMD_load)
@@ -3464,6 +3483,26 @@ class Batcher():
         self.N = N
         self.pairs = []
 
+    def create_pairs(self):
+        m = int(next_p2(self.N) / 2)
+        while (m > 0):
+            q = int(next_p2(self.N) / 2)
+            r = 0
+            d = m
+            while (d > 0):
+                for i in range(0, self.N - d):
+                    if (i & m) == r:
+                        self.pairs.append(i)
+                        self.pairs.append(i + d)
+
+                d = q - m
+                q = int(q / 2)
+                r = m
+
+            m = int(m / 2)
+
+        return self.pairs
+
 
 class Oddeven():
     def __init__(self, N):
@@ -3549,14 +3588,16 @@ class Builder():
         self.network = Network(N, sort_type, algorithm_name)
 
         self.cas_generator = Compare_Exchange_Generator(
-            self.network.get_network(), self.network.N, self.network.scaled_N, self.network.sort_type)
+            self.network.get_network(), self.network.N, self.network.scaled_N,
+            self.network.sort_type)
 
         self.cas_info = self.cas_generator.Generate_Instructions()
 
     def Build(self):
         full_output = Output_Generator(header, self.cas_info,
                                        self.algorithm_name, self.network.depth,
-                                       self.N, self.network.scaled_N, self.sort_type)
+                                       self.N, self.network.scaled_N,
+                                       self.sort_type)
         if DO_FORMAT is True:
             output_fmt = Output_Formatter(full_output.get())
             return output_fmt.get_fmt_output()

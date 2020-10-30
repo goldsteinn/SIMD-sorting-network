@@ -65,11 +65,14 @@ Sorting Network Information:
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 3
 	SIMD Instructions                : 2 / 12
+	Optimization Preference          : space
 	SIMD Type                        : __m128i
-	SIMD Instruction Set(s) Used     : AVX2, SSE2, SSE4.1, AVX512f, AVX512vl
+	SIMD Instruction Set(s) Used     : SSE2, SSE4.1, AVX2
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
+	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
+	Scaled Sorting Network           : False
 
 Performance Notes:
 1) If you are sorting an array where there IS valid memory up to 
@@ -104,14 +107,6 @@ Performance Notes:
 
 
 
-     void fill_works(__m128i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 16);
-          int i = N;for (; i < 4; ++i) {
-          assert(t.arr[i] == uint32_t(0xffffffff));
- }
-}
-
 /* SIMD Sort */
      __m128i __attribute__((const)) 
 
@@ -143,16 +138,11 @@ bitonic_4_uint32_t_vec(__m128i v) {
 bitonic_4_uint32_t(uint32_t * const 
                                  arr) {
       
-      __m128i _tmp0 = _mm_set1_epi32(uint32_t(0xffffffff));
-      asm volatile("vpblendd %[load_mask], (%[arr]), %[fill_v], %[fill_v]\n"
-                   : [ fill_v ] "+x" (_tmp0)
-                   : [ arr ] "r" (arr), [ load_mask ] "i" (0xf)
-                   :);
-      __m128i v = _tmp0;
-      fill_works(v);
+      __m128i v = _mm_load_si128((__m128i *)arr);
+      
       v = bitonic_4_uint32_t_vec(v);
       
-      fill_works(v);_mm_mask_store_epi32((void *)arr, 0xf, v);
+      _mm_store_si128((__m128i *)arr, v);
       
  }
 

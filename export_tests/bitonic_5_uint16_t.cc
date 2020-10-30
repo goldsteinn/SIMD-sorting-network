@@ -64,12 +64,15 @@ Sorting Network Information:
 	Underlying Sort Type             : uint16_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 5
-	SIMD Instructions                : 3 / 25
+	SIMD Instructions                : 2 / 23
+	Optimization Preference          : space
 	SIMD Type                        : __m128i
-	SIMD Instruction Set(s) Used     : AVX512vl, AVX512bw, SSE2, SSSE3, SSE4.1, AVX2
+	SIMD Instruction Set(s) Used     : SSE2, SSSE3, SSE4.1, AVX2
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
+	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
+	Scaled Sorting Network           : False
 
 Performance Notes:
 1) If you are sorting an array where there IS valid memory up to 
@@ -104,14 +107,6 @@ Performance Notes:
 
 
 
-     void fill_works(__m128i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 16);
-          int i = N;for (; i < 8; ++i) {
-          assert(t.arr[i] == uint16_t(0xffff));
- }
-}
-
 /* SIMD Sort */
      __m128i __attribute__((const)) 
 
@@ -135,14 +130,12 @@ bitonic_5_uint16_t_vec(__m128i v) {
       __m128i max2 = _mm_max_epu16(v1, perm2);
       __m128i v2 = _mm_blend_epi16(max2, min2, 0x6);
       
-      __m128i perm3 = _mm_shufflehi_epi16(_mm_shufflelo_epi16(v2, 0x1b), 
-                                          0xe4);
+      __m128i perm3 = _mm_shufflelo_epi16(v2, 0x1b);
       __m128i min3 = _mm_min_epu16(v2, perm3);
       __m128i max3 = _mm_max_epu16(v2, perm3);
       __m128i v3 = _mm_blend_epi32(max3, min3, 0x1);
       
-      __m128i perm4 = _mm_shufflehi_epi16(_mm_shufflelo_epi16(v3, 0xb1), 
-                                          0xe4);
+      __m128i perm4 = _mm_shufflelo_epi16(v3, 0xb1);
       __m128i min4 = _mm_min_epu16(v3, perm4);
       __m128i max4 = _mm_max_epu16(v3, perm4);
       __m128i v4 = _mm_blend_epi16(max4, min4, 0x5);
@@ -158,12 +151,11 @@ bitonic_5_uint16_t_vec(__m128i v) {
 bitonic_5_uint16_t(uint16_t * const 
                                  arr) {
       
-      __m128i _tmp0 = _mm_set1_epi16(uint16_t(0xffff));
-      __m128i v = _mm_mask_loadu_epi16(_tmp0, 0x1f, arr);
-      fill_works(v);
+      __m128i v = _mm_load_si128((__m128i *)arr);
+      
       v = bitonic_5_uint16_t_vec(v);
       
-      fill_works(v);_mm_mask_storeu_epi16((void *)arr, 0x1f, v);
+      _mm_store_si128((__m128i *)arr, v);
       
  }
 

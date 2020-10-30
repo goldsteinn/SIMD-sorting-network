@@ -64,12 +64,15 @@ Sorting Network Information:
 	Underlying Sort Type             : uint8_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 21
-	SIMD Instructions                : 3 / 105
+	SIMD Instructions                : 2 / 105
+	Optimization Preference          : space
 	SIMD Type                        : __m512i
-	SIMD Instruction Set(s) Used     : AVX512f, AVX512bw, AVX, AVX512vbmi, AVX512vl
+	SIMD Instruction Set(s) Used     : AVX512f, AVX512bw, AVX512vbmi
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
+	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
+	Scaled Sorting Network           : False
 
 Performance Notes:
 1) If you are sorting an array where there IS valid memory up to 
@@ -103,14 +106,6 @@ Performance Notes:
 #include <stdint.h>
 
 
-
-     void fill_works(__m512i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 64);
-          int i = N;for (; i < 64; ++i) {
-          assert(t.arr[i] == uint8_t(0xff));
- }
-}
 
 /* SIMD Sort */
      __m512i __attribute__((const)) 
@@ -404,13 +399,11 @@ bitonic_52_uint8_t_vec(__m512i v) {
 bitonic_52_uint8_t(uint8_t * const arr) 
                                  {
       
-      __m512i _tmp0 = _mm512_set1_epi8(uint8_t(0xff));
-      __m512i v = _mm512_mask_loadu_epi8(_tmp0, 0xfffffffffffff, arr);
-      fill_works(v);
+      __m512i v = _mm512_load_si512((__m512i *)arr);
+      
       v = bitonic_52_uint8_t_vec(v);
       
-      fill_works(v);_mm512_mask_storeu_epi8((void *)arr, 0xfffffffffffff, 
-                                             v);
+      _mm512_store_si512((__m512i *)arr, v);
       
  }
 

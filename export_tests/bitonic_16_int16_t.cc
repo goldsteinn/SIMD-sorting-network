@@ -64,12 +64,15 @@ Sorting Network Information:
 	Underlying Sort Type             : int16_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 10
-	SIMD Instructions                : 3 / 48
+	SIMD Instructions                : 2 / 48
+	Optimization Preference          : space
 	SIMD Type                        : __m256i
-	SIMD Instruction Set(s) Used     : AVX2, SSE2, AVX
+	SIMD Instruction Set(s) Used     : AVX, AVX2
 	SIMD Instruction Set(s) Excluded : AVX512*
 	Aligned Load & Store             : True
+	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
+	Scaled Sorting Network           : False
 
 Performance Notes:
 1) If you are sorting an array where there IS valid memory up to 
@@ -103,14 +106,6 @@ Performance Notes:
 #include <stdint.h>
 
 
-
-     void fill_works(__m256i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 32);
-          int i = N;for (; i < 16; ++i) {
-          assert(t.arr[i] == int16_t(0x7fff));
- }
-}
 
 /* SIMD Sort */
      __m256i __attribute__((const)) 
@@ -154,8 +149,8 @@ bitonic_16_int16_t_vec(__m256i v) {
       __m256i max5 = _mm256_max_epi16(v4, perm5);
       __m256i v5 = _mm256_blend_epi16(max5, min5, 0x55);
       
-      __m256i _tmp1 = _mm256_permute4x64_epi64(v5, 0x1b);
-      __m256i perm6 = _mm256_shufflehi_epi16(_mm256_shufflelo_epi16(_tmp1, 
+      __m256i _tmp0 = _mm256_permute4x64_epi64(v5, 0x1b);
+      __m256i perm6 = _mm256_shufflehi_epi16(_mm256_shufflelo_epi16(_tmp0, 
                                              0x1b), 0x1b);
       __m256i min6 = _mm256_min_epi16(v5, perm6);
       __m256i max6 = _mm256_max_epi16(v5, perm6);
@@ -188,21 +183,11 @@ bitonic_16_int16_t_vec(__m256i v) {
 bitonic_16_int16_t(int16_t * const arr) 
                                  {
       
-      __m256i _tmp0 = _mm256_set1_epi16(int16_t(0x7fff));
-      asm volatile("vpblendd %[load_mask], (%[arr]), %[fill_v], %[fill_v]\n"
-                   : [ fill_v ] "+x" (_tmp0)
-                   : [ arr ] "r" (arr), [ load_mask ] "i" (0xff)
-                   :);
-      __m256i v = _tmp0;
-      fill_works(v);
+      __m256i v = _mm256_load_si256((__m256i *)arr);
+      
       v = bitonic_16_int16_t_vec(v);
       
-      fill_works(v);_mm256_maskstore_epi32((int32_t * const)arr, 
-                                            _mm256_set_epi32(0x80000000, 
-                                            0x80000000, 0x80000000, 
-                                            0x80000000, 0x80000000, 
-                                            0x80000000, 0x80000000, 
-                                            0x80000000), v);
+      _mm256_store_si256((__m256i *)arr, v);
       
  }
 

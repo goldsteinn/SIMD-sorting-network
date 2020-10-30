@@ -11,6 +11,7 @@ types = [
 ]
 sizes = [1, 2, 4, 8, 1, 2, 4, 8]
 max_b = [32, 64]
+algorithms = ["batcher", "bitonic"]
 extra_flags = [
     "--clang-format 1231231 ", "--clang-format 1231231 -i",
     "--clang-format 1231231 -O space", "--clang-format 1231231 -O space -i",
@@ -18,16 +19,7 @@ extra_flags = [
     "--clang-format 1231231 -e", "--clang-format 1231231 --aligned",
     "--clang-format 1231231 -e --aligned", "--clang-format 1231231 -e -i",
     "--clang-format 1231231 --aligned -i",
-    "--clang-format 1231231 -e --aligned -i", "--clang-format 1231231 -tmp",
-    "--clang-format 1231231 -i -tmp", "--clang-format 1231231 -O space -tmp",
-    "--clang-format 1231231 -O space -i -tmp",
-    "--clang-format 1231231 -O uop -tmp",
-    "--clang-format 1231231 -O uop -i -tmp", "--clang-format 1231231 -e -tmp",
-    "--clang-format 1231231 --aligned -tmp",
-    "--clang-format 1231231 -e --aligned -tmp",
-    "--clang-format 1231231 -e -i -tmp",
-    "--clang-format 1231231 --aligned -i -tmp",
-    "--clang-format 1231231 -e --aligned -i -tmp"
+    "--clang-format 1231231 -e --aligned -i"
 ]
 
 
@@ -46,51 +38,51 @@ for max_bytes in max_b:
         for n in range(min_N, max_N):
             if n < skip_to:
                 continue
+            for a in algorithms:
+                for f in extra_flags:
+                    os.system("rm -f export_tests/.tmp")
+                    cmd = ""
+                    if max_bytes == 32:
+                        cmd = "./export2.py -N {} -T {} {} -c AVX512 --algorithm {} > export_tests/.tmp".format(
+                            n, types[i], f, a)
+                    else:
+                        cmd = "./export2.py -N {} -T {} {} --algorithm {} > export_tests/.tmp".format(
+                            n, types[i], f, a)
 
-            for f in extra_flags:
-                os.system("rm -f export_tests/.tmp")
-                cmd = ""
-                if max_bytes == 32:
-                    cmd = "./export2.py -N {} -T {} -c AVX512 {} --algorithm bitonic > export_tests/.tmp".format(
-                        n, types[i], f)
-                else:
-                    cmd = "./export2.py -N {} -T {} {} --algorithm bitonic > export_tests/.tmp".format(
-                        n, types[i], f)
+                    print("Running: {}".format(cmd))
+                    os.system(cmd)
 
-                print("Running: {}".format(cmd))
-                os.system(cmd)
+                    sort_impl = ""
+                    for lines in open("export_tests/.tmp"):
+                        sort_impl += lines
 
-                sort_impl = ""
-                for lines in open("export_tests/.tmp"):
-                    sort_impl += lines
+                    export_driver_impl = ""
+                    for lines in open("export_driver.cc"):
+                        export_driver_impl += lines
 
-                export_driver_impl = ""
-                for lines in open("export_driver.cc"):
-                    export_driver_impl += lines
+                    export_driver_impl = export_driver_impl.replace(
+                        "[SORT_IMPL]", sort_impl)
+                    export_driver_impl = export_driver_impl.replace(
+                        "[TYPE]", types[i])
+                    export_driver_impl = export_driver_impl.replace("[N]", str(n))
 
-                export_driver_impl = export_driver_impl.replace(
-                    "[SORT_IMPL]", sort_impl)
-                export_driver_impl = export_driver_impl.replace(
-                    "[TYPE]", types[i])
-                export_driver_impl = export_driver_impl.replace("[N]", str(n))
+                    sname = "{}_{}_{}".format(a, str(n), types[i])
+                    export_driver_impl = export_driver_impl.replace(
+                        "[SORT_NAME]", sname)
 
-                sname = "{}_{}_{}".format("bitonic", str(n), types[i])
-                export_driver_impl = export_driver_impl.replace(
-                    "[SORT_NAME]", sname)
+                    fname = "export_tests/" + sname + ".cc"
+                    f = open(fname, "w+")
+                    f.write(export_driver_impl)
+                    f.close()
 
-                fname = "export_tests/" + sname + ".cc"
-                f = open(fname, "w+")
-                f.write(export_driver_impl)
-                f.close()
+                    if os.system(
+                            "g++ -O3 -std=c++17 -march=native -mtune=native {} -o export_exe"
+                            .format(fname)) != 0:
+                        print("Error Building " + sname)
+                        sys.exit(-1)
+                    if os.system("./export_exe") != 0:
+                        print("Error Running " + sname)
+                        sys.exit(-1)
+                    print("Success: " + sname)
 
-                if os.system(
-                        "g++ -O3 -std=c++17 -march=native -mtune=native {} -o export_exe"
-                        .format(fname)) != 0:
-                    print("Error Building " + sname)
-                    sys.exit(-1)
-                if os.system("./export_exe") != 0:
-                    print("Error Running " + sname)
-                    sys.exit(-1)
-                print("Success: " + sname)
-
-                os.system("rm -f export_exe")
+                    os.system("rm -f export_exe")

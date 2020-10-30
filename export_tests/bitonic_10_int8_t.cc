@@ -64,12 +64,15 @@ Sorting Network Information:
 	Underlying Sort Type             : int8_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 9
-	SIMD Instructions                : 3 / 45
+	SIMD Instructions                : 2 / 44
+	Optimization Preference          : space
 	SIMD Type                        : __m128i
-	SIMD Instruction Set(s) Used     : AVX512vl, AVX512bw, SSE2, SSSE3, SSE4.1
+	SIMD Instruction Set(s) Used     : SSE2, SSSE3, SSE4.1, AVX512vl, AVX512bw
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
+	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
+	Scaled Sorting Network           : False
 
 Performance Notes:
 1) If you are sorting an array where there IS valid memory up to 
@@ -103,14 +106,6 @@ Performance Notes:
 #include <stdint.h>
 
 
-
-     void fill_works(__m128i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 16);
-          int i = N;for (; i < 16; ++i) {
-          assert(t.arr[i] == int8_t(0x7f));
- }
-}
 
 /* SIMD Sort */
      __m128i __attribute__((const)) 
@@ -159,8 +154,7 @@ bitonic_10_int8_t_vec(__m128i v) {
       __m128i max6 = _mm_max_epi8(v5, perm6);
       __m128i v6 = _mm_mask_mov_epi8(max6, 0x109, min6);
       
-      __m128i perm7 = _mm_shufflehi_epi16(_mm_shufflelo_epi16(v6, 0xb1), 
-                                          0xe4);
+      __m128i perm7 = _mm_shufflelo_epi16(v6, 0xb1);
       __m128i min7 = _mm_min_epi8(v6, perm7);
       __m128i max7 = _mm_max_epi8(v6, perm7);
       __m128i v7 = _mm_blend_epi16(max7, min7, 0x5);
@@ -182,12 +176,11 @@ bitonic_10_int8_t_vec(__m128i v) {
 bitonic_10_int8_t(int8_t * const arr) 
                                  {
       
-      __m128i _tmp0 = _mm_set1_epi8(int8_t(0x7f));
-      __m128i v = _mm_mask_loadu_epi8(_tmp0, 0x3ff, arr);
-      fill_works(v);
+      __m128i v = _mm_load_si128((__m128i *)arr);
+      
       v = bitonic_10_int8_t_vec(v);
       
-      fill_works(v);_mm_mask_storeu_epi8((void *)arr, 0x3ff, v);
+      _mm_store_si128((__m128i *)arr, v);
       
  }
 

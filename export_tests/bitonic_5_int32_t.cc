@@ -64,12 +64,15 @@ Sorting Network Information:
 	Underlying Sort Type             : int32_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 5
-	SIMD Instructions                : 3 / 25
+	SIMD Instructions                : 2 / 25
+	Optimization Preference          : space
 	SIMD Type                        : __m256i
-	SIMD Instruction Set(s) Used     : AVX2, SSE2, AVX
+	SIMD Instruction Set(s) Used     : AVX, AVX2
 	SIMD Instruction Set(s) Excluded : AVX512*
 	Aligned Load & Store             : True
+	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
+	Scaled Sorting Network           : False
 
 Performance Notes:
 1) If you are sorting an array where there IS valid memory up to 
@@ -103,14 +106,6 @@ Performance Notes:
 #include <stdint.h>
 
 
-
-     void fill_works(__m256i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 32);
-          int i = N;for (; i < 8; ++i) {
-          assert(t.arr[i] == int32_t(0x7fffffff));
- }
-}
 
 /* SIMD Sort */
      __m256i __attribute__((const)) 
@@ -162,20 +157,11 @@ bitonic_5_int32_t_vec(__m256i v) {
 bitonic_5_int32_t(int32_t * const arr) 
                                  {
       
-      __m256i _tmp0 = _mm256_set1_epi32(int32_t(0x7fffffff));
-      asm volatile("vpblendd %[load_mask], (%[arr]), %[fill_v], %[fill_v]\n"
-                   : [ fill_v ] "+x" (_tmp0)
-                   : [ arr ] "r" (arr), [ load_mask ] "i" (0x1f)
-                   :);
-      __m256i v = _tmp0;
-      fill_works(v);
+      __m256i v = _mm256_load_si256((__m256i *)arr);
+      
       v = bitonic_5_int32_t_vec(v);
       
-      fill_works(v);_mm256_maskstore_epi32((int32_t * const)arr, 
-                                            _mm256_set_epi32(0x0, 0x0, 0x0, 
-                                            0x80000000, 0x80000000, 
-                                            0x80000000, 0x80000000, 
-                                            0x80000000), v);
+      _mm256_store_si256((__m256i *)arr, v);
       
  }
 
