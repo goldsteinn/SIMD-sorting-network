@@ -64,11 +64,11 @@ Sorting Network Information:
 	Underlying Sort Type             : int16_t
 	Network Generation Algorithm     : batcher
 	Network Depth                    : 3
-	SIMD Instructions                : 0 / 18
+	SIMD Instructions                : 1 / 18
 	Optimization Preference          : space
 	SIMD Type                        : __m64
 	SIMD Instruction Set(s) Used     : MMX, SSSE3, SSE
-	SIMD Instruction Set(s) Excluded : None
+	SIMD Instruction Set(s) Excluded : AVX512*
 	Aligned Load & Store             : True
 	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
@@ -109,31 +109,44 @@ Performance Notes:
 typedef __m64 _aliasing_m64_ __attribute__((aligned(8), may_alias));
 
 
-/* SIMD Sort */
-     __m64 __attribute__((const)) 
+ void fill_works(__m64 v) {
+      sarr<TYPE, N> t;
+      memcpy(t.arr, &v, 8);
+      int i = N;for (; i < 4; ++i) {
+          assert(t.arr[i] == int16_t(0x7fff));
+ }
+}
 
+/* SIMD Sort */
+ __m64 __attribute__((const)) 
 batcher_4_int16_t_vec(__m64 v) {
       
+      /* Pairs: ([1,3], [0,2]) */
+      /* Perm:  ( 1,  0,  3,  2) */
       __m64 perm0 = _mm_shuffle_pi16(v, 0x4e);
       __m64 min0 = _mm_min_pi16(v, perm0);
       __m64 max0 = _mm_max_pi16(v, perm0);
-      __m64 _tmp0 = (__m64)(0xffffffffUL);
-      __m64 v0 = _mm_or_si64(_mm_and_si64(_tmp0, min0), 
-                                          _mm_andnot_si64(_tmp0, max0));
+      __m64 _tmp1 = (__m64)(0xffffffffUL);
+      __m64 v0 = _mm_or_si64(_mm_and_si64(_tmp1, min0), 
+                                          _mm_andnot_si64(_tmp1, max0));
       
+      /* Pairs: ([2,3], [0,1]) */
+      /* Perm:  ( 2,  3,  0,  1) */
       __m64 perm1 = _mm_shuffle_pi16(v0, 0xb1);
       __m64 min1 = _mm_min_pi16(v0, perm1);
       __m64 max1 = _mm_max_pi16(v0, perm1);
-      __m64 _tmp1 = (__m64)(0xffff0000ffffUL);
-      __m64 v1 = _mm_or_si64(_mm_and_si64(_tmp1, min1), 
-                                          _mm_andnot_si64(_tmp1, max1));
+      __m64 _tmp2 = (__m64)(0xffff0000ffffUL);
+      __m64 v1 = _mm_or_si64(_mm_and_si64(_tmp2, min1), 
+                                          _mm_andnot_si64(_tmp2, max1));
       
+      /* Pairs: ([3,3], [1,2], [0,0]) */
+      /* Perm:  ( 3,  1,  2,  0) */
       __m64 perm2 = _mm_shuffle_pi16(v1, 0xd8);
       __m64 min2 = _mm_min_pi16(v1, perm2);
       __m64 max2 = _mm_max_pi16(v1, perm2);
-      __m64 _tmp2 = (__m64)(0xffff0000UL);
-      __m64 v2 = _mm_or_si64(_mm_and_si64(_tmp2, min2), 
-                                          _mm_andnot_si64(_tmp2, max2));
+      __m64 _tmp3 = (__m64)(0xffff0000UL);
+      __m64 v2 = _mm_or_si64(_mm_and_si64(_tmp3, min2), 
+                                          _mm_andnot_si64(_tmp3, max2));
       
       return v2;
  }
@@ -141,16 +154,17 @@ batcher_4_int16_t_vec(__m64 v) {
 
 
 /* Wrapper For SIMD Sort */
-     void inline __attribute__((always_inline)) 
-
+ void inline __attribute__((always_inline)) 
 batcher_4_int16_t(int16_t * const arr) 
-                                 {
+                             {
       
-      __m64 v = (*((_aliasing_m64_ *)arr));
-      
+      __m64 _tmp0 = _mm_set1_pi16(int16_t(0x7fff));
+      __builtin_memcpy(&_tmp0, arr, 8);
+      __m64 v = _tmp0;
+      fill_works(v);
       v = batcher_4_int16_t_vec(v);
       
-      (*((_aliasing_m64_ *)arr)) = v;
+      fill_works(v);__builtin_memcpy(arr, &v, 8);
       
  }
 

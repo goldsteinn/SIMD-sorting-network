@@ -11,6 +11,7 @@ import subprocess
 import os
 
 
+
 def sig_exit(signum, empty):
     print("Exiting on Signal({})".format(str(signum)))
     sys.exit(-1)
@@ -104,11 +105,15 @@ class Optimization(Enum):
     UOP = 1
 
 
+# forward declaraction
 INSTRUCTION_OPT = Optimization.SPACE
 SIMD_RESTRICTIONS = ""
 ALIGNED_ACCESS = False
 INT_ALIGNED = False
 EXTRA_MEMORY = False
+DO_FORMAT = False
+CLANG_FORMAT_EXE = ""
+USER_TYPE = None
 
 
 def choose_if(Opt, weight1, weight2):
@@ -1283,7 +1288,7 @@ class SIMD_Shuffle_As_Epi16(SIMD_Instruction):
                          weight)
         self.perm = copy.deepcopy(perm)
         self.adjusted_weight = False
-        
+
     def match(self, match_info):
         return self.has_support() and self.match_sort_type(
             match_info.sort_type) and self.match_simd_type(
@@ -2112,6 +2117,7 @@ class SIMD_Mask_Load_Fallback_As_Epi32(SIMD_Instruction):
         if INT_ALIGNED is False:
             if (sort_bytes % 4) != 0:
                 self.extra_insert = True
+                self.weight = 100
             return build_mask_bool_vec_epi32(0, self.raw_N, self.sort_type,
                                              self.simd_type)
         else:
@@ -2213,6 +2219,7 @@ class SIMD_Mask_Load_Fallback_As_Epi32_Fill(SIMD_Instruction):
         if INT_ALIGNED is False:
             if (sort_bytes % 4) != 0:
                 self.extra_insert = True
+                self.weight = 100
             return build_mask_bool_vec_epi32(0, self.raw_N, self.sort_type,
                                              self.simd_type)
         else:
@@ -2313,10 +2320,10 @@ class SIMD_Load():
             # This is universal fallback and always lowest priority
             SIMD_Mask_Load_Fallback_As_Epi32(sort_type, scaled_sort_N, raw_N,
                                              SIMD_m128(), ["AVX2", "SSE2"],
-                                             100),
+                                             15),
             SIMD_Mask_Load_Fallback_As_Epi32_Fill(sort_type, scaled_sort_N,
                                                   raw_N, SIMD_m128(),
-                                                  ["AVX2", "SSE2"], 100),
+                                                  ["AVX2", "SSE2"], 25),
 
             # epi8 __m128i ordering
             SIMD_Mask_Load_ASM_Epi32(sort_type, 1, scaled_sort_N, raw_N,
@@ -2403,10 +2410,10 @@ class SIMD_Load():
 
             # This is universal fallback and always lowest priority
             SIMD_Mask_Load_Fallback_As_Epi32(sort_type, scaled_sort_N, raw_N,
-                                             SIMD_m256(), ["AVX2"], 100),
+                                             SIMD_m256(), ["AVX2"], 15),
             SIMD_Mask_Load_Fallback_As_Epi32_Fill(sort_type, scaled_sort_N,
                                                   raw_N, SIMD_m256(),
-                                                  ["AVX2", "SSE2"], 100),
+                                                  ["AVX2", "SSE2"], 25),
 
             # epi8 __m256i ordering
             SIMD_Mask_Load_ASM_Epi32(sort_type, 1, scaled_sort_N, raw_N,
@@ -2590,6 +2597,7 @@ class SIMD_Mask_Store_Fallback_As_Epi32(SIMD_Instruction):
 
         sort_bytes = self.raw_N * self.sort_type.sizeof()
         if INT_ALIGNED is False or self.fill is True:
+            self.weight = 75
             return build_mask_bool_vec_epi32(0, self.raw_N, self.sort_type,
                                              self.simd_type)
         else:
@@ -2672,7 +2680,7 @@ class SIMD_Store():
             # Universal fallback
             SIMD_Mask_Store_Fallback_As_Epi32(scaled_sort_N, sort_type, raw_N,
                                               SIMD_m128(), ["AVX2", "SSE4.1"],
-                                              100),
+                                              25),
             SIMD_Mask_Store(
                 "_mm_mask_storeu_epi8((void *)[ARR], [STORE_MASK], [V])", 1,
                 False, raw_N, SIMD_m128(), ["AVX512bw", "AVX512vl"], 2),
@@ -2701,7 +2709,7 @@ class SIMD_Store():
             # Universal fallback
             SIMD_Mask_Store_Fallback_As_Epi32(scaled_sort_N, sort_type, raw_N,
                                               SIMD_m256(), ["AVX2", "AVX"],
-                                              100),
+                                              25),
             SIMD_Mask_Store(
                 "_mm256_mask_storeu_epi8((void *)[ARR], [STORE_MASK], [V])", 1,
                 False, raw_N, SIMD_m256(), ["AVX512bw", "AVX512vl"], 2),
@@ -2874,7 +2882,6 @@ class Output_Formatter():
 
             if "{" in lines:
                 started = True
-                tabs += 1
             if "}" in lines:
                 started = False
                 tabs -= 1
@@ -2906,18 +2913,19 @@ class Output_Formatter():
 
                 fmt_line += w + " "
                 if "__attribute__" in w:
-                    fmt_line += "\n"
                     cur_len = 0
 
                 cur_len += len(w) + 1
             fmt_output += fmt_line
-
+            if "{" in lines:
+                tabs += 1
             if "asm" in lines:
                 extra_spacing += len("asm volatile")
             if ":);\n" in lines:
                 extra_spacing = 0
 
         return fmt_output
+
 
 
 class Output_Generator():
@@ -2927,6 +2935,7 @@ class Output_Generator():
         self.CAS_info = CAS_info
         self.algorithm_name = algorithm_name
         self.N = N
+        self.depth = depth
         self.sort_type = sort_type
 
         self.simd_type = get_simd_type(N * sort_type.sizeof())
@@ -3007,6 +3016,10 @@ class Output_Generator():
                 self.perf_notes[i] += "   " + s[j].strip()
                 self.perf_notes[i] += "\n"
 
+    def get_info(self):
+        blend_weight, perm_weight, load_weight = self.CAS_info.get_weights()
+        return self.algorithm_name, self.depth, self.logic_ops, blend_weight, perm_weight, load_weight
+
     def get(self):
         return self.get_header() + self.get_content() + self.get_tail()
 
@@ -3029,7 +3042,8 @@ class Output_Generator():
         return head
 
     def get_content(self):
-        return self.CAS_info.get().replace("[FUNCNAME]", self.sort_to_str)
+        return self.CAS_info.get().replace(
+                              "[FUNCNAME]", self.sort_to_str)
 
     def get_tail(self):
         tail = "\n\n"
@@ -3058,6 +3072,10 @@ class CAS_Output_Generator():
 
         self.already_prepared_content = False
 
+        self.cas_blend_weight = 0
+        self.cas_perm_weight = 0
+        self.cas_load_weight = 0
+
     def append_cas(self, cas):
         self.CAS.append(cas)
         self.add_constraints(cas.constraints)
@@ -3085,6 +3103,14 @@ class CAS_Output_Generator():
 
     def get_instruction_sets(self):
         return list(dict.fromkeys(self.constraints))
+
+    def get_weights(self):
+        return self.cas_blend_weight, self.cas_perm_weight, self.cas_load_weight
+
+    def set_weights(self, blend_weight, perm_weight, load_weight):
+        self.cas_blend_weight = blend_weight
+        self.cas_perm_weight = perm_weight
+        self.cas_load_weight = load_weight
 
     def prepare_content(self):
         if self.already_prepared_content is True:
@@ -3170,7 +3196,9 @@ class CAS_Output_Generator():
 
 
 class Compare_Exchange():
-    def __init__(self, raw_perm, raw_min, raw_max, raw_blend, constraints):
+    def __init__(self, raw_plist, raw_perm, raw_min, raw_max, raw_blend,
+                 constraints):
+        self.raw_plist = raw_plist
         self.raw_perm = raw_perm
         self.raw_min = raw_min
         self.raw_max = raw_max
@@ -3182,7 +3210,37 @@ class Compare_Exchange():
         self.tmps_end = 0
 
     def get_operation(self):
-        return self.raw_perm + self.raw_min + self.raw_max + self.raw_blend
+        return self.make_comment(
+        ) + self.raw_perm + self.raw_min + self.raw_max + self.raw_blend
+
+    def make_comment(self):
+        pair_list_str = ""
+        perm_list_str = ""
+        skips = []
+        for i in range(0, len(self.raw_plist)):
+
+            i_idx = (len(self.raw_plist) - 1) - i
+            max_idx = max(self.raw_plist[i], i_idx)
+            min_idx = min(self.raw_plist[i], i_idx)
+            key = (int(max_idx) << 10) | min_idx
+
+            perm_str = str(self.raw_plist[i])
+            pair_str = "[{},{}]".format(perm_str, str(i_idx))
+
+            if len(perm_str) == 1:
+                perm_str = " " + perm_str
+
+            if i != 0:
+                if key not in skips:
+                    pair_list_str += ", "
+                perm_list_str += ", "
+            if key not in skips:
+                pair_list_str += pair_str
+            perm_list_str += perm_str
+            skips.append(key)
+
+        return "/* Pairs: ({}) */\n/* Perm:  ({}) */\n".format(
+            pair_list_str, perm_list_str)
 
     def make_operation(self, last_v, v_names, tmp_base, tmp_name,
                        simd_type_str):
@@ -3243,7 +3301,11 @@ class Compare_Exchange():
 
 
 class Compare_Exchange_Generator():
-    def __init__(self, pairs, N, scaled_N, sort_type):
+    def __init__(self, pairs, N, did_scale_N, sort_type):
+
+        self.total_blend_weight = 0
+        self.total_perm_weight = 0
+
         self.pairs = copy.deepcopy(pairs)
         self.sort_N = sort_n(N, sort_type.sizeof())
         self.sort_type = sort_type
@@ -3269,13 +3331,14 @@ class Compare_Exchange_Generator():
         if do_full is True and self.simd_type.sizeof() == 8:
             header.aliasing_m64 = True
 
+        
         self.SIMD_load = instruction_filter(
-            SIMD_Load(N, sort_type, scaled_N).instructions, self.sort_type,
-            self.simd_type, ALIGNED_ACCESS, do_full)
+            SIMD_Load(N, sort_type, did_scale_N).instructions,
+            self.sort_type, self.simd_type, ALIGNED_ACCESS, do_full)
 
         self.SIMD_store = instruction_filter(
-            SIMD_Store(N, sort_type, scaled_N).instructions, self.sort_type,
-            self.simd_type, ALIGNED_ACCESS, do_full)
+            SIMD_Store(N, sort_type, did_scale_N).instructions,
+            self.sort_type, self.simd_type, ALIGNED_ACCESS, do_full)
 
     def Generate_Instructions(self):
         best_load = best_instruction(self.SIMD_load)
@@ -3288,6 +3351,11 @@ class Compare_Exchange_Generator():
         best_store = best_instruction(self.SIMD_store)
         self.cas_output_generator.add_constraints(best_store.constraints)
         self.cas_output_generator.add_store(best_store.generate_instruction())
+
+        self.cas_output_generator.set_weights(self.total_blend_weight,
+                                              self.total_perm_weight,
+                                              best_load.weight)
+
         return self.cas_output_generator
 
     def Make_Compare_Exchange(self, cas_idx):
@@ -3306,12 +3374,16 @@ class Compare_Exchange_Generator():
         best_max = best_instruction(self.SIMD_max)
         best_blend = best_instruction(SIMD_blend)
 
+        self.total_blend_weight += best_blend.weight
+        self.total_perm_weight += best_permutate.weight
+
         compare_exchange = Compare_Exchange(
-            best_permutate.generate_instruction(),
+            cas_perm, best_permutate.generate_instruction(),
             best_min.generate_instruction(), best_max.generate_instruction(),
             best_blend.generate_instruction(),
             best_permutate.constraints + best_min.constraints +
             best_max.constraints + best_blend.constraints)
+
         return compare_exchange
 
 
@@ -3466,14 +3538,16 @@ class Bitonic():
             self.bitonic_sort(lo + m, n - m, direction)
             self.bitonic_merge(lo, n, direction)
 
+    def valid(self):
+        return True
+
     def create_pairs(self):
         self.bitonic_sort(0, self.N, True)
 
         transformer = Transform(self.N, Sort_Type(1, True), self.pairs)
         transformer.unidirectional()
+
         self.pairs = copy.deepcopy(transformer.pairs)
-        err_assert(
-            len(self.pairs) == len(transformer.pairs), "Bad usage of deepcopy")
         return self.pairs
 
 
@@ -3482,6 +3556,9 @@ class Batcher():
         self.name = "batcher"
         self.N = N
         self.pairs = []
+
+    def valid(self):
+        return True
 
     def create_pairs(self):
         m = int(next_p2(self.N) / 2)
@@ -3510,6 +3587,35 @@ class Oddeven():
         self.N = N
         self.pairs = []
 
+    def add_pair(self, i, j):
+        if i < self.N and j < self.N:
+            self.pairs.append(i)
+            self.pairs.append(j)
+
+    def merge(self, lo, n, r):
+        m = 2 * r
+        if m < n:
+            self.merge(lo, n, m)
+            self.merge(lo + r, n, m)
+            for i in range(lo + r, (lo + n) - r, m):
+                self.add_pair(i, i + r)
+        else:
+            self.add_pair(lo, lo + r)
+
+    def sort(self, lo, n):
+        if n > 1:
+            m = int(n / 2)
+            self.sort(lo, m)
+            self.sort(lo + m, m)
+            self.merge(lo, n, 1)
+
+    def valid(self):
+        return True
+
+    def create_pairs(self):
+        self.sort(0, next_p2(self.N))
+        return self.pairs
+
 
 class Bosenelson():
     def __init__(self, N):
@@ -3517,25 +3623,135 @@ class Bosenelson():
         self.N = N
         self.pairs = []
 
+    def bn_merge(self, i, length_i, j, length_j):
+        if length_i == 1 and length_j == 1:
+            self.pairs.append(i)
+            self.pairs.append(j)
+        elif length_i == 1 and length_j == 2:
+            self.pairs.append(i)
+            self.pairs.append(j + 1)
+
+            self.pairs.append(i)
+            self.pairs.append(j)
+        elif length_i == 2 and length_j == 1:
+            self.pairs.append(i)
+            self.pairs.append(j)
+
+            self.pairs.append(i + 1)
+            self.pairs.append(j)
+        else:
+            i_mid = int(length_i / 2)
+            j_mid = int(0)
+            if length_i % 2 == 1:
+                j_mid = int(length_j / 2)
+            else:
+                j_mid = int((length_j + 1) / 2)
+
+            self.bn_merge(i, i_mid, j, j_mid)
+            self.bn_merge(i + i_mid, length_i - i_mid, j + j_mid,
+                          length_j - j_mid)
+            self.bn_merge(i + i_mid, length_i - i_mid, j, j_mid)
+
+    def bn_split(self, i, length):
+        if length >= 2:
+            mid = int(length / 2)
+            self.bn_split(i, mid)
+            self.bn_split(i + mid, length - mid)
+            self.bn_merge(i, mid, i + mid, length - mid)
+
+    def valid(self):
+        return True
+
+    def create_pairs(self):
+        self.bn_split(0, self.N)
+        return self.pairs
+
 
 class Minimum():
     def __init__(self, N):
         self.name = "minimum"
         self.N = N
+        self.pairs = copy.deepcopy(min_pairs()[min(N, 32)])
+
+    def valid(self):
+        return self.N <= 32
+
+    def create_pairs(self):
+        err_assert(self.N < len(min_pairs()),
+                   "No minimum network for N = {}".format(self.N))
+        return self.pairs
+
+
+class Weights():
+    def __init__(self, perm_weight, blend_weight, load_weight,
+                 instruction_weight, algorithm):
+        self.perm_weight = perm_weight
+        self.blend_weight = blend_weight
+        self.load_weight = load_weight
+        self.instruction_weight = instruction_weight
+        self.algorithm = algorithm
+
+    def val(self):
+        return 4 * self.perm_weight + 3 * self.blend_weight + 2 * self.load_weight + self.instruction_weight
+
+
+class Best():
+    def __init__(self, N):
+        self.name = "best"
+        self.N = N
         self.pairs = []
+
+        self.options = []
+
+    def create_options(self):
+        max_N = next_p2(self.N) + 1
+        # Don't think odd network size is ever optimal
+        # attempts = [self.N]
+        # min_N = (self.N - self.N % 2) + 2
+        for n in range(self.N, max_N):
+            possible_bests = [
+                Bitonic(n),
+                Batcher(n),
+                Oddeven(n),
+                Minimum(n),
+            ]
+            for p in possible_bests:
+                if p.valid() is True:
+                    err_assert(p.N == n, "something is seriously wrong")
+                    b = Builder(self.N, USER_TYPE, p.name, n)
+
+                    name, depth, instructions, blend_weight, perm_weight, load_weight = b.Stats(
+                    )
+                    self.options.append(
+                        Weights(perm_weight, blend_weight, load_weight,
+                                instructions, p))
+
+    def create_orders(self):
+        all_weights = copy.deepcopy(self.options)
+        all_weights = sorted(all_weights, key=lambda w: w.val())
+                
+        self.pairs = copy.deepcopy(all_weights[0].algorithm.create_pairs())
+        self.name = all_weights[0].algorithm.name
+        self.N = all_weights[0].algorithm.N
+
+    def create_pairs(self):
+        self.create_options()
+        self.create_orders()
+        return self.pairs
 
 
 class Algorithms():
     def __init__(self, N):
         self.algorithms = [
-            "bitonic", "batcher", "oddeven", "bosenelson", "minimum"
+            "bitonic", "batcher", "oddeven", "bosenelson", "minimum", "best"
         ]
         self.implementations = [
             Bitonic(N),
             Batcher(N),
             Oddeven(N),
             Bosenelson(N),
-            Minimum(N)
+            Minimum(N),
+            Best(N)
         ]
         err_assert(
             len(self.implementations) == len(self.algorithms),
@@ -3560,14 +3776,16 @@ class Network():
             Algorithms(N).valid_algorithm(algorithm_name),
             algorithm_name + " is unknown")
 
-        self.scaled_N = False
         self.N = N
         self.sort_type = sort_type
         self.algorithm = Algorithms(N).get_algorithm(algorithm_name)
         self.depth = int(-1)
+        self.network_N = N
 
     def create_pairs(self):
-        return self.algorithm.create_pairs()
+        ret = self.algorithm.create_pairs()
+        self.network_N = self.algorithm.N
+        return ret
 
     def get_network(self):
         transformer = Transform(self.N, self.sort_type, self.create_pairs())
@@ -3578,25 +3796,41 @@ class Network():
 
 
 class Builder():
-    def __init__(self, N, sort_type, algorithm_name):
+    def __init__(self, N, sort_type, algorithm_name, network_N = None):
         algorithm_name = algorithm_name.lower()
         header.reset()
         self.N = N
         self.sort_type = sort_type
         self.algorithm_name = algorithm_name
 
-        self.network = Network(N, sort_type, algorithm_name)
+        if network_N is None:
+            network_N = N
 
+        self.network = Network(network_N, sort_type, algorithm_name)
+        self.network_pairs = self.network.get_network()
+        network_N = self.network.network_N
+        self.network_N = network_N
+        self.network_name = self.network.algorithm.name
+        
+        self.did_scale_N = network_N != self.N
+
+        header.reset()
         self.cas_generator = Compare_Exchange_Generator(
-            self.network.get_network(), self.network.N, self.network.scaled_N,
+            self.network_pairs, N, self.did_scale_N,
             self.network.sort_type)
 
         self.cas_info = self.cas_generator.Generate_Instructions()
 
-    def Build(self):
+    def Stats(self):
         full_output = Output_Generator(header, self.cas_info,
                                        self.algorithm_name, self.network.depth,
-                                       self.N, self.network.scaled_N,
+                                       self.N, self.did_scale_N, self.sort_type)
+        return full_output.get_info()
+
+    def Build(self):
+        full_output = Output_Generator(header, self.cas_info,
+                                       self.network_name, self.network.depth,
+                                       self.network_N, self.did_scale_N,
                                        self.sort_type)
         if DO_FORMAT is True:
             output_fmt = Output_Formatter(full_output.get())
@@ -3607,76 +3841,486 @@ class Builder():
 
 ######################################################################
 # Main()
-args = parser.parse_args()
+def main():
+    global INSTRUCTION_OPT
+    global SIMD_RESTRICTIONS
+    global ALIGNED_ACCESS
+    global INT_ALIGNED
+    global EXTRA_MEMORY
+    global DO_FORMAT
+    global CLANG_FORMAT_EXE
+    global USER_TYPE
 
-user_opt = args.optimization
-err_assert(user_opt == "space" or user_opt == "uop",
-           "Invalid \"optimization\" flag")
-user_aligned = args.aligned
-user_extra_mem = args.extra_memory
-user_Constraint = args.constraint
-user_Int_Aligned = args.int_aligned
-user_Clang_Format_EXE = args.clang_format
-user_Format = args.no_format
+    args = parser.parse_args()
 
-if user_opt == "space":
-    INSTRUCTION_OPT = Optimization.SPACE
-elif user_opt == "uop":
-    INSTRUCTION_OPT = Optimization.UOP
-else:
-    err_assert(False, "have no idea wtf happened")
+    user_opt = args.optimization
+    err_assert(user_opt == "space" or user_opt == "uop",
+               "Invalid \"optimization\" flag")
+    user_aligned = args.aligned
+    user_extra_mem = args.extra_memory
+    user_Constraint = args.constraint
+    user_Int_Aligned = args.int_aligned
+    user_Clang_Format_EXE = args.clang_format
+    user_Format = args.no_format
 
-CLANG_FORMAT_EXE = user_Clang_Format_EXE
-DO_FORMAT = user_Format
-
-SIMD_RESTRICTIONS = user_Constraint
-ALIGNED_ACCESS = user_aligned
-EXTRA_MEMORY = user_extra_mem
-INT_ALIGNED = user_Int_Aligned
-if EXTRA_MEMORY is True:
-    INT_ALIGNED = True
-
-user_N = args.N
-try:
-    err_assert(user_N != "", "No \"N\" flag")
-    user_N = int(user_N)
-except ValueError:
-    err_assert(False, "\"N\" flag not valid int type")
-
-user_T = args.type
-user_Size = args.size
-user_Signed = args.signed
-user_Unsigned = args.unsigned
-
-set_T = False
-if user_T != "":
-    if Sort_Type(1, Sign.SIGNED).is_valid(user_T) is True:
-        if user_Size != "" or user_Signed is not False or user_Unsigned is not False:
-            print(
-                "Overriding \"signed\", \"unsigned\", and \"size\" flags with \"type\" flag"
-            )
-        set_T = True
-        user_T = Sort_Type(1, Sign.SIGNED).string_to_T(user_T)
-
-if set_T is False:
-    err_assert(user_Size != "",
-               "\"size\" flag is required if \"type\" is not specified")
-    try:
-        user_Size = int(user_Size)
-    except ValueError:
-        err_assert(False, "\"size\" flag is not valid integer type")
-
-    if user_Signed is True:
-        user_T = Sort_Type(user_Size, Sign.SIGNED)
-    elif user_Unsigned is True:
-        user_T = Sort_Type(user_Size, Sign.UNSIGNED)
+    if user_opt == "space":
+        INSTRUCTION_OPT = Optimization.SPACE
+    elif user_opt == "uop":
+        INSTRUCTION_OPT = Optimization.UOP
     else:
-        err_assert(False, "neither \"signed\" nor \"unsigned\" flag specified")
+        err_assert(False, "have no idea wtf happened")
 
-user_Algorithm = args.algorithm
-err_assert(
-    Algorithms(0).valid_algorithm(user_Algorithm) is True,
-    "\"algorithm\" flag doesn't match")
+    CLANG_FORMAT_EXE = user_Clang_Format_EXE
+    DO_FORMAT = user_Format
 
-network_builder = Builder(user_N, user_T, user_Algorithm)
-print(network_builder.Build())
+    SIMD_RESTRICTIONS = user_Constraint
+    ALIGNED_ACCESS = user_aligned
+
+    # It is impossible to fault with an aligned address
+    if ALIGNED_ACCESS is True:
+        EXTRA_MEMORY = True
+    else:
+        EXTRA_MEMORY = user_extra_mem
+
+    INT_ALIGNED = user_Int_Aligned
+    if EXTRA_MEMORY is True:
+        INT_ALIGNED = True
+
+    user_N = args.N
+    try:
+        err_assert(user_N != "", "No \"N\" flag")
+        user_N = int(user_N)
+    except ValueError:
+        err_assert(False, "\"N\" flag not valid int type")
+
+    user_T = args.type
+    user_Size = args.size
+    user_Signed = args.signed
+    user_Unsigned = args.unsigned
+
+    set_T = False
+    if user_T != "":
+        if Sort_Type(1, Sign.SIGNED).is_valid(user_T) is True:
+            if user_Size != "" or user_Signed is not False or user_Unsigned is not False:
+                print(
+                    "Overriding \"signed\", \"unsigned\", and \"size\" flags with \"type\" flag"
+                )
+            set_T = True
+            user_T = Sort_Type(1, Sign.SIGNED).string_to_T(user_T)
+
+    if set_T is False:
+        err_assert(user_Size != "",
+                   "\"size\" flag is required if \"type\" is not specified")
+        try:
+            user_Size = int(user_Size)
+        except ValueError:
+            err_assert(False, "\"size\" flag is not valid integer type")
+
+        if user_Signed is True:
+            user_T = Sort_Type(user_Size, Sign.SIGNED)
+        elif user_Unsigned is True:
+            user_T = Sort_Type(user_Size, Sign.UNSIGNED)
+        else:
+            err_assert(False,
+                       "neither \"signed\" nor \"unsigned\" flag specified")
+    USER_TYPE = user_T
+
+    user_Algorithm = args.algorithm
+    err_assert(
+        Algorithms(0).valid_algorithm(user_Algorithm) is True,
+        "\"algorithm\" flag doesn't match")
+
+    network_builder = Builder(user_N, user_T, user_Algorithm)
+    print(network_builder.Build())
+
+
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+# Autogenerated Code
+# Minimum Depth Known Sorting Networks For N = [4, 32]
+# Taken from:
+# http://users.telenet.be/bertdobbelaere/SorterHunter/sorting_networks.html
+def min_pairs():
+    minimum_pairs = [
+        [],  # N = 0
+        [],  # N = 1
+        [],  # N = 2
+        [],  # N = 3
+        # Sorting Network For N = 4, with Depth = 3
+        [0, 2, 1, 3, 0, 1, 2, 3, 1, 2],
+        # Sorting Network For N = 5, with Depth = 5
+        [0, 3, 1, 4, 0, 2, 1, 3, 0, 1, 2, 4, 1, 2, 3, 4, 2, 3],
+        # Sorting Network For N = 6, with Depth = 5
+        [
+            0, 5, 1, 3, 2, 4, 1, 2, 3, 4, 0, 3, 2, 5, 0, 1, 2, 3, 4, 5, 1, 2,
+            3, 4
+        ],
+        # Sorting Network For N = 7, with Depth = 6
+        [
+            0, 6, 2, 3, 4, 5, 0, 2, 1, 4, 3, 6, 0, 1, 2, 5, 3, 4, 1, 2, 4, 6,
+            2, 3, 4, 5, 1, 2, 3, 4, 5, 6
+        ],
+        # Sorting Network For N = 8, with Depth = 6
+        [
+            0, 2, 1, 3, 4, 6, 5, 7, 0, 4, 1, 5, 2, 6, 3, 7, 0, 1, 2, 3, 4, 5,
+            6, 7, 2, 4, 3, 5, 1, 4, 3, 6, 1, 2, 3, 4, 5, 6
+        ],
+        # Sorting Network For N = 9, with Depth = 7
+        [
+            0, 3, 1, 7, 2, 5, 4, 8, 0, 7, 2, 4, 3, 8, 5, 6, 0, 2, 1, 3, 4, 5,
+            7, 8, 1, 4, 3, 6, 5, 7, 0, 1, 2, 4, 3, 5, 6, 8, 2, 3, 4, 5, 6, 7,
+            1, 2, 3, 4, 5, 6
+        ],
+        # Sorting Network For N = 10, with Depth = 7
+        [
+            0, 1, 2, 5, 3, 6, 4, 7, 8, 9, 0, 6, 1, 8, 2, 4, 3, 9, 5, 7, 0, 2,
+            1, 3, 4, 5, 6, 8, 7, 9, 0, 1, 2, 7, 3, 5, 4, 6, 8, 9, 1, 2, 3, 4,
+            5, 6, 7, 8, 1, 3, 2, 4, 5, 7, 6, 8, 2, 3, 4, 5, 6, 7
+        ],
+        # Sorting Network For N = 11, with Depth = 8
+        [
+            0, 9, 1, 6, 2, 4, 3, 7, 5, 8, 0, 1, 3, 5, 4, 10, 6, 9, 7, 8, 1, 3,
+            2, 5, 4, 7, 8, 10, 0, 4, 1, 2, 3, 7, 5, 9, 6, 8, 0, 1, 2, 6, 4, 5,
+            7, 8, 9, 10, 2, 4, 3, 6, 5, 7, 8, 9, 1, 2, 3, 4, 5, 6, 7, 8, 2, 3,
+            4, 5, 6, 7
+        ],
+        # Sorting Network For N = 12, with Depth = 8
+        [
+            0, 8, 1, 7, 2, 6, 3, 11, 4, 10, 5, 9, 0, 2, 1, 4, 3, 5, 6, 8, 7,
+            10, 9, 11, 0, 1, 2, 9, 4, 7, 5, 6, 10, 11, 1, 3, 2, 7, 4, 9, 8, 10,
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 1, 2, 3, 5, 6, 8, 9, 10, 2,
+            4, 3, 6, 5, 8, 7, 9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+        ],
+        # Sorting Network For N = 13, with Depth = 9
+        [
+            0, 11, 1, 7, 2, 4, 3, 5, 8, 9, 10, 12, 0, 2, 3, 6, 4, 12, 5, 7, 8,
+            10, 0, 8, 1, 3, 2, 5, 4, 9, 6, 11, 7, 12, 0, 1, 2, 10, 3, 8, 4, 6,
+            9, 11, 1, 3, 2, 4, 5, 10, 6, 8, 7, 9, 11, 12, 1, 2, 3, 4, 5, 8, 6,
+            9, 7, 10, 2, 3, 4, 7, 5, 6, 8, 11, 9, 10, 4, 5, 6, 7, 8, 9, 10, 11,
+            3, 4, 5, 6, 7, 8, 9, 10
+        ],
+        # Sorting Network For N = 14, with Depth = 9
+        [
+            0, 3, 1, 9, 2, 6, 4, 12, 5, 10, 7, 11, 8, 13, 0, 2, 3, 12, 4, 5, 6,
+            10, 7, 8, 11, 13, 0, 1, 2, 11, 3, 6, 4, 7, 5, 9, 10, 12, 0, 4, 1,
+            7, 2, 5, 3, 8, 6, 13, 9, 11, 1, 2, 3, 4, 5, 7, 6, 9, 8, 10, 12, 13,
+            1, 3, 2, 4, 5, 9, 6, 10, 7, 8, 11, 12, 2, 3, 4, 5, 6, 7, 8, 11, 9,
+            10, 12, 13, 4, 6, 5, 7, 8, 9, 10, 11, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+            12
+        ],
+        # Sorting Network For N = 15, with Depth = 9
+        [
+            0, 6, 1, 10, 2, 14, 3, 9, 4, 12, 5, 13, 7, 11, 0, 7, 2, 5, 3, 4, 6,
+            11, 8, 10, 9, 12, 13, 14, 1, 13, 2, 3, 4, 6, 5, 9, 7, 8, 10, 14,
+            11, 12, 0, 3, 1, 4, 5, 7, 6, 13, 8, 9, 10, 11, 12, 14, 0, 2, 1, 5,
+            3, 8, 4, 6, 7, 10, 9, 11, 12, 13, 0, 1, 2, 5, 3, 10, 4, 8, 6, 7, 9,
+            12, 11, 13, 1, 2, 3, 4, 5, 6, 7, 9, 8, 10, 11, 12, 3, 5, 4, 6, 7,
+            8, 9, 10, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+        ],
+        # Sorting Network For N = 16, with Depth = 9
+        [
+            0, 5, 1, 4, 2, 12, 3, 13, 6, 7, 8, 9, 10, 15, 11, 14, 0, 2, 1, 10,
+            3, 6, 4, 7, 5, 14, 8, 11, 9, 12, 13, 15, 0, 8, 1, 3, 2, 11, 4, 13,
+            5, 9, 6, 10, 7, 15, 12, 14, 0, 1, 2, 4, 3, 8, 5, 6, 7, 12, 9, 10,
+            11, 13, 14, 15, 1, 3, 2, 5, 4, 8, 6, 9, 7, 11, 10, 13, 12, 14, 1,
+            2, 3, 5, 4, 11, 6, 8, 7, 9, 10, 12, 13, 14, 2, 3, 4, 5, 6, 7, 8, 9,
+            10, 11, 12, 13, 4, 6, 5, 7, 8, 10, 9, 11, 3, 4, 5, 6, 7, 8, 9, 10,
+            11, 12
+        ],
+        # Sorting Network For N = 17, with Depth = 10
+        [
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 1, 3, 2, 4,
+            5, 7, 6, 8, 9, 11, 10, 12, 13, 15, 14, 16, 1, 5, 2, 6, 3, 7, 4, 8,
+            9, 13, 10, 14, 11, 15, 12, 16, 0, 3, 1, 13, 2, 10, 4, 7, 5, 11, 6,
+            12, 8, 9, 14, 15, 0, 13, 1, 8, 2, 5, 3, 6, 4, 14, 7, 15, 9, 16, 10,
+            11, 0, 1, 2, 8, 3, 4, 5, 10, 6, 13, 7, 11, 12, 14, 1, 5, 3, 8, 4,
+            10, 6, 7, 9, 12, 11, 13, 1, 2, 4, 6, 5, 8, 7, 10, 9, 11, 12, 14,
+            13, 15, 2, 3, 4, 5, 6, 8, 7, 9, 10, 11, 12, 13, 14, 15, 3, 4, 5, 6,
+            7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+        ],
+        # Sorting Network For N = 18, with Depth = 11
+        [
+            0, 6, 1, 10, 2, 15, 3, 5, 4, 9, 7, 16, 8, 13, 11, 17, 12, 14, 0,
+            12, 1, 4, 3, 11, 5, 17, 6, 14, 7, 8, 9, 10, 13, 16, 1, 13, 2, 7, 4,
+            16, 6, 9, 8, 11, 10, 15, 0, 1, 2, 3, 4, 12, 5, 13, 7, 9, 8, 10, 14,
+            15, 16, 17, 0, 2, 1, 11, 3, 4, 5, 7, 6, 16, 10, 12, 13, 14, 15, 17,
+            1, 8, 4, 10, 5, 6, 7, 13, 9, 16, 11, 12, 1, 3, 2, 5, 4, 7, 6, 8, 9,
+            11, 10, 13, 12, 15, 14, 16, 1, 2, 3, 5, 4, 6, 7, 9, 8, 10, 11, 13,
+            12, 14, 15, 16, 2, 3, 5, 8, 6, 7, 9, 12, 10, 11, 14, 15, 3, 4, 5,
+            6, 7, 8, 9, 10, 11, 12, 13, 14, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
+        ],
+        # Sorting Network For N = 19, with Depth = 11
+        [
+            0, 12, 1, 13, 2, 14, 3, 15, 4, 16, 5, 17, 6, 18, 8, 10, 9, 11, 0,
+            2, 1, 3, 4, 6, 5, 7, 8, 9, 10, 11, 12, 14, 13, 15, 16, 18, 0, 1, 2,
+            3, 4, 5, 6, 7, 12, 13, 14, 15, 16, 17, 0, 4, 1, 12, 2, 16, 3, 17,
+            5, 8, 6, 9, 7, 18, 10, 13, 11, 14, 1, 6, 3, 10, 4, 5, 7, 11, 8, 12,
+            9, 16, 13, 18, 14, 15, 0, 4, 2, 8, 3, 9, 6, 7, 10, 16, 11, 17, 12,
+            13, 15, 18, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 2, 3,
+            4, 5, 6, 8, 7, 9, 10, 12, 11, 13, 14, 15, 16, 17, 2, 4, 3, 6, 5, 7,
+            8, 10, 9, 11, 12, 14, 13, 16, 15, 17, 1, 2, 3, 5, 6, 7, 8, 9, 10,
+            11, 12, 13, 14, 16, 17, 18, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+            14, 15, 16
+        ],
+        # Sorting Network For N = 20, with Depth = 11
+        [
+            0, 12, 1, 13, 2, 14, 3, 15, 4, 16, 5, 17, 6, 18, 7, 19, 8, 10, 9,
+            11, 0, 2, 1, 3, 4, 6, 5, 7, 8, 9, 10, 11, 12, 14, 13, 15, 16, 18,
+            17, 19, 0, 1, 2, 3, 4, 5, 6, 7, 12, 13, 14, 15, 16, 17, 18, 19, 0,
+            4, 1, 12, 2, 16, 3, 17, 5, 8, 6, 9, 7, 18, 10, 13, 11, 14, 15, 19,
+            1, 6, 3, 10, 4, 5, 7, 11, 8, 12, 9, 16, 13, 18, 14, 15, 0, 4, 2, 8,
+            3, 9, 6, 7, 10, 16, 11, 17, 12, 13, 15, 19, 1, 4, 3, 6, 5, 8, 7,
+            10, 9, 12, 11, 14, 13, 16, 15, 18, 2, 3, 4, 5, 6, 8, 7, 9, 10, 12,
+            11, 13, 14, 15, 16, 17, 2, 4, 3, 6, 5, 7, 8, 10, 9, 11, 12, 14, 13,
+            16, 15, 17, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18,
+            3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+        ],
+        # Sorting Network For N = 21, with Depth = 12
+        [
+            0, 7, 1, 10, 3, 5, 4, 8, 6, 13, 9, 19, 11, 14, 12, 17, 15, 16, 18,
+            20, 0, 11, 1, 15, 2, 12, 3, 4, 5, 8, 6, 9, 7, 14, 10, 16, 13, 19,
+            17, 20, 0, 6, 1, 3, 2, 18, 4, 15, 5, 10, 8, 16, 11, 17, 12, 13, 14,
+            20, 2, 6, 5, 12, 7, 18, 8, 14, 9, 11, 10, 17, 13, 19, 16, 20, 1, 2,
+            4, 7, 5, 9, 6, 17, 10, 13, 11, 12, 14, 19, 15, 18, 0, 2, 3, 6, 4,
+            5, 7, 10, 8, 11, 9, 15, 12, 16, 13, 18, 14, 17, 19, 20, 0, 1, 2, 3,
+            5, 9, 6, 12, 7, 8, 11, 14, 13, 15, 16, 19, 17, 18, 1, 2, 3, 9, 6,
+            13, 10, 11, 12, 15, 16, 17, 18, 19, 1, 4, 2, 5, 3, 7, 6, 10, 8, 9,
+            11, 12, 13, 14, 17, 18, 2, 4, 5, 6, 7, 8, 9, 11, 10, 13, 12, 15,
+            14, 16, 3, 4, 5, 7, 6, 8, 9, 10, 11, 13, 12, 14, 15, 16, 4, 5, 6,
+            7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17
+        ],
+        # Sorting Network For N = 22, with Depth = 12
+        [
+            0, 14, 1, 8, 2, 4, 3, 5, 6, 11, 7, 21, 9, 12, 10, 15, 13, 20, 16,
+            18, 17, 19, 0, 7, 1, 13, 2, 17, 3, 16, 4, 19, 5, 18, 6, 10, 8, 20,
+            11, 15, 14, 21, 0, 1, 3, 6, 4, 9, 5, 10, 7, 13, 8, 14, 11, 16, 12,
+            17, 15, 18, 20, 21, 0, 3, 1, 8, 2, 4, 7, 11, 9, 12, 10, 14, 13, 20,
+            17, 19, 18, 21, 1, 6, 2, 7, 3, 17, 4, 18, 5, 11, 8, 9, 10, 16, 12,
+            13, 14, 19, 15, 20, 0, 2, 3, 7, 4, 6, 5, 8, 9, 11, 10, 12, 13, 16,
+            14, 18, 15, 17, 19, 21, 1, 4, 3, 5, 6, 13, 7, 9, 8, 15, 12, 14, 16,
+            18, 17, 20, 1, 2, 4, 10, 6, 12, 7, 8, 9, 15, 11, 17, 13, 14, 19,
+            20, 1, 3, 2, 5, 6, 10, 8, 9, 11, 15, 12, 13, 16, 19, 18, 20, 2, 3,
+            4, 8, 5, 7, 6, 9, 10, 11, 12, 15, 13, 17, 14, 16, 18, 19, 4, 5, 6,
+            7, 8, 10, 9, 12, 11, 13, 14, 15, 16, 17, 3, 4, 5, 6, 7, 8, 9, 10,
+            11, 12, 13, 14, 15, 16, 17, 18
+        ],
+        # Sorting Network For N = 23, with Depth = 12
+        [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+            19, 20, 21, 0, 2, 1, 3, 4, 6, 5, 7, 8, 10, 9, 11, 12, 14, 13, 15,
+            16, 18, 17, 19, 20, 22, 0, 4, 1, 5, 2, 8, 3, 9, 6, 10, 7, 11, 12,
+            16, 13, 17, 14, 20, 15, 21, 18, 22, 0, 2, 1, 3, 4, 6, 5, 7, 8, 10,
+            9, 11, 12, 14, 13, 15, 16, 18, 17, 19, 20, 22, 0, 12, 1, 13, 2, 4,
+            3, 5, 6, 8, 7, 9, 10, 22, 14, 16, 15, 17, 18, 20, 19, 21, 1, 12, 2,
+            14, 3, 15, 4, 16, 5, 17, 6, 18, 7, 19, 8, 20, 9, 21, 11, 22, 1, 2,
+            3, 14, 4, 6, 5, 7, 8, 13, 9, 20, 10, 15, 16, 18, 17, 19, 21, 22, 3,
+            6, 5, 16, 7, 18, 8, 12, 9, 13, 10, 14, 11, 15, 17, 20, 2, 3, 4, 8,
+            5, 12, 6, 10, 7, 14, 9, 16, 11, 18, 13, 17, 15, 19, 20, 21, 2, 4,
+            5, 8, 7, 9, 10, 12, 11, 13, 14, 16, 15, 18, 19, 21, 3, 5, 6, 8, 7,
+            10, 9, 12, 11, 14, 13, 16, 15, 17, 18, 20, 3, 4, 5, 6, 7, 8, 9, 10,
+            11, 12, 13, 14, 15, 16, 17, 18, 19, 20
+        ],
+        # Sorting Network For N = 24, with Depth = 12
+        [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+            19, 20, 21, 22, 23, 0, 2, 1, 3, 4, 6, 5, 7, 8, 10, 9, 11, 12, 14,
+            13, 15, 16, 18, 17, 19, 20, 22, 21, 23, 0, 4, 1, 5, 2, 8, 3, 9, 6,
+            10, 7, 11, 12, 16, 13, 17, 14, 20, 15, 21, 18, 22, 19, 23, 0, 2, 1,
+            3, 4, 6, 5, 7, 8, 10, 9, 11, 12, 14, 13, 15, 16, 18, 17, 19, 20,
+            22, 21, 23, 0, 12, 1, 13, 2, 4, 3, 5, 6, 8, 7, 9, 10, 22, 11, 23,
+            14, 16, 15, 17, 18, 20, 19, 21, 1, 12, 2, 14, 3, 15, 4, 16, 5, 17,
+            6, 18, 7, 19, 8, 20, 9, 21, 11, 22, 1, 2, 3, 14, 4, 6, 5, 7, 8, 13,
+            9, 20, 10, 15, 16, 18, 17, 19, 21, 22, 3, 6, 5, 16, 7, 18, 8, 12,
+            9, 13, 10, 14, 11, 15, 17, 20, 2, 3, 4, 8, 5, 12, 6, 10, 7, 14, 9,
+            16, 11, 18, 13, 17, 15, 19, 20, 21, 2, 4, 5, 8, 7, 9, 10, 12, 11,
+            13, 14, 16, 15, 18, 19, 21, 3, 5, 6, 8, 7, 10, 9, 12, 11, 14, 13,
+            16, 15, 17, 18, 20, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+            16, 17, 18, 19, 20
+        ],
+        # Sorting Network For N = 25, with Depth = 13
+        [
+            0, 13, 1, 6, 2, 8, 3, 20, 4, 7, 5, 22, 9, 16, 10, 15, 11, 14, 17,
+            23, 18, 21, 19, 24, 0, 3, 1, 19, 4, 18, 5, 12, 6, 24, 7, 21, 8, 16,
+            9, 17, 10, 11, 13, 20, 14, 15, 0, 10, 1, 5, 2, 17, 3, 12, 6, 11, 7,
+            16, 8, 23, 9, 18, 13, 22, 14, 19, 20, 24, 0, 1, 2, 9, 3, 14, 4, 8,
+            5, 10, 6, 13, 7, 18, 11, 22, 12, 19, 15, 20, 16, 23, 17, 21, 1, 5,
+            2, 4, 3, 6, 7, 9, 8, 17, 10, 15, 11, 14, 12, 13, 16, 18, 19, 22,
+            20, 24, 21, 23, 0, 2, 1, 3, 4, 7, 5, 6, 8, 10, 9, 16, 11, 12, 13,
+            14, 15, 17, 18, 21, 19, 20, 22, 24, 1, 2, 3, 4, 6, 18, 7, 19, 8,
+            11, 9, 12, 10, 15, 13, 16, 14, 17, 21, 22, 23, 24, 1, 9, 2, 11, 4,
+            6, 5, 7, 10, 12, 13, 15, 14, 23, 18, 20, 19, 21, 1, 3, 2, 8, 6, 14,
+            7, 13, 9, 10, 11, 19, 12, 18, 15, 16, 17, 23, 20, 22, 2, 5, 4, 9,
+            6, 10, 7, 8, 11, 13, 12, 14, 15, 19, 16, 21, 17, 18, 20, 23, 3, 5,
+            4, 7, 6, 11, 8, 9, 10, 12, 13, 15, 14, 19, 16, 17, 18, 21, 22, 23,
+            2, 3, 5, 7, 6, 8, 9, 11, 10, 13, 12, 15, 14, 16, 17, 19, 18, 20, 4,
+            5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21
+        ],
+        # Sorting Network For N = 26, with Depth = 13
+        [
+            0, 13, 1, 6, 2, 8, 3, 20, 4, 7, 5, 22, 9, 16, 10, 15, 11, 14, 12,
+            25, 17, 23, 18, 21, 19, 24, 0, 3, 1, 19, 4, 18, 5, 12, 6, 24, 7,
+            21, 8, 16, 9, 17, 10, 11, 13, 20, 14, 15, 22, 25, 0, 10, 1, 5, 2,
+            17, 3, 12, 6, 11, 7, 16, 8, 23, 9, 18, 13, 22, 14, 19, 15, 25, 20,
+            24, 0, 1, 2, 9, 3, 14, 4, 8, 5, 10, 6, 13, 7, 18, 11, 22, 12, 19,
+            15, 20, 16, 23, 17, 21, 24, 25, 1, 5, 2, 4, 3, 6, 7, 9, 8, 17, 10,
+            15, 11, 14, 12, 13, 16, 18, 19, 22, 20, 24, 21, 23, 0, 2, 1, 3, 4,
+            7, 5, 6, 8, 10, 9, 16, 11, 12, 13, 14, 15, 17, 18, 21, 19, 20, 22,
+            24, 23, 25, 1, 2, 3, 4, 6, 18, 7, 19, 8, 11, 9, 12, 10, 15, 13, 16,
+            14, 17, 21, 22, 23, 24, 1, 9, 2, 11, 4, 6, 5, 7, 10, 12, 13, 15,
+            14, 23, 16, 24, 18, 20, 19, 21, 1, 3, 2, 8, 6, 14, 7, 13, 9, 10,
+            11, 19, 12, 18, 15, 16, 17, 23, 22, 24, 2, 5, 4, 9, 6, 10, 7, 8,
+            11, 13, 12, 14, 15, 19, 16, 21, 17, 18, 20, 23, 3, 5, 4, 7, 6, 11,
+            8, 9, 10, 12, 13, 15, 14, 19, 16, 17, 18, 21, 20, 22, 2, 3, 5, 7,
+            6, 8, 9, 11, 10, 13, 12, 15, 14, 16, 17, 19, 18, 20, 22, 23, 4, 5,
+            6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21
+        ],
+        # Sorting Network For N = 27, with Depth = 14
+        [
+            0, 9, 1, 6, 2, 4, 3, 7, 5, 8, 11, 16, 12, 15, 13, 23, 14, 24, 17,
+            18, 19, 20, 21, 26, 22, 25, 0, 1, 3, 5, 4, 10, 6, 9, 7, 8, 11, 13,
+            12, 21, 14, 17, 15, 18, 16, 25, 19, 22, 20, 23, 24, 26, 1, 3, 2, 5,
+            4, 7, 8, 10, 11, 19, 12, 14, 13, 22, 15, 24, 16, 20, 17, 21, 18,
+            26, 23, 25, 0, 4, 1, 2, 3, 7, 5, 9, 6, 8, 11, 12, 13, 15, 14, 19,
+            16, 17, 18, 23, 20, 21, 22, 24, 25, 26, 0, 1, 2, 6, 4, 5, 7, 8, 9,
+            10, 12, 14, 13, 16, 15, 19, 17, 20, 18, 22, 21, 24, 23, 25, 0, 11,
+            2, 4, 3, 6, 5, 7, 8, 9, 12, 13, 14, 16, 15, 22, 17, 19, 18, 20, 21,
+            23, 24, 25, 1, 2, 3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 17, 18, 19, 20,
+            21, 22, 23, 24, 1, 12, 2, 3, 4, 5, 6, 7, 15, 17, 16, 18, 19, 21,
+            20, 22, 2, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 3, 14, 4,
+            15, 5, 16, 6, 17, 7, 18, 8, 19, 9, 20, 10, 21, 8, 11, 9, 12, 10,
+            13, 14, 22, 15, 23, 16, 24, 17, 25, 18, 26, 4, 8, 5, 9, 6, 10, 7,
+            14, 11, 15, 12, 16, 13, 17, 18, 22, 19, 23, 20, 24, 21, 25, 2, 4,
+            3, 5, 6, 8, 7, 9, 10, 11, 12, 14, 13, 15, 16, 18, 17, 19, 20, 22,
+            21, 23, 24, 26, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26
+        ],
+        # Sorting Network For N = 28, with Depth = 14
+        [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+            19, 20, 21, 22, 23, 24, 25, 26, 27, 0, 26, 1, 27, 2, 24, 3, 25, 4,
+            22, 5, 23, 6, 20, 7, 21, 8, 18, 9, 19, 10, 16, 11, 17, 12, 14, 13,
+            15, 0, 6, 1, 20, 2, 4, 3, 5, 7, 26, 10, 12, 11, 14, 13, 16, 15, 17,
+            21, 27, 22, 24, 23, 25, 1, 18, 2, 10, 4, 22, 5, 23, 6, 8, 9, 26,
+            12, 13, 14, 15, 17, 25, 19, 21, 0, 6, 3, 22, 4, 12, 5, 24, 7, 9,
+            11, 13, 14, 16, 15, 23, 18, 20, 21, 27, 0, 2, 1, 4, 3, 11, 5, 13,
+            6, 10, 7, 8, 14, 22, 16, 24, 17, 21, 19, 20, 23, 26, 25, 27, 1, 6,
+            3, 7, 4, 11, 5, 10, 8, 15, 9, 14, 12, 19, 13, 18, 16, 23, 17, 22,
+            20, 24, 21, 26, 2, 9, 4, 8, 5, 13, 7, 17, 10, 20, 11, 15, 12, 16,
+            14, 22, 18, 25, 19, 23, 2, 3, 4, 5, 7, 12, 8, 11, 10, 13, 14, 17,
+            15, 20, 16, 19, 22, 23, 24, 25, 1, 2, 5, 6, 8, 10, 9, 12, 11, 14,
+            13, 16, 15, 18, 17, 19, 21, 22, 25, 26, 3, 5, 6, 9, 7, 8, 10, 12,
+            11, 13, 14, 16, 15, 17, 18, 21, 19, 20, 22, 24, 2, 3, 4, 7, 5, 6,
+            8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 21, 22, 24,
+            25, 4, 5, 6, 7, 8, 10, 9, 11, 12, 14, 13, 15, 16, 18, 17, 19, 20,
+            21, 22, 23, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+            18, 19, 20, 21, 22, 23, 24
+        ],
+        # Sorting Network For N = 29, with Depth = 14
+        [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+            19, 20, 21, 22, 23, 24, 25, 26, 27, 0, 2, 1, 3, 4, 6, 5, 7, 8, 10,
+            9, 11, 12, 14, 13, 15, 16, 18, 17, 19, 20, 22, 21, 23, 24, 26, 25,
+            27, 0, 4, 1, 5, 2, 6, 3, 7, 8, 12, 9, 13, 10, 14, 11, 15, 16, 20,
+            17, 21, 18, 22, 19, 23, 24, 28, 0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5,
+            13, 6, 14, 7, 15, 16, 24, 17, 25, 18, 26, 19, 27, 20, 28, 0, 16, 1,
+            8, 2, 4, 3, 12, 5, 10, 6, 9, 7, 14, 11, 13, 17, 24, 18, 20, 19, 28,
+            21, 26, 22, 25, 23, 27, 1, 2, 3, 5, 4, 8, 6, 22, 7, 11, 9, 25, 10,
+            12, 13, 14, 17, 18, 19, 21, 20, 24, 26, 28, 1, 17, 2, 18, 3, 19, 4,
+            20, 5, 10, 7, 23, 8, 24, 11, 27, 12, 28, 13, 25, 21, 26, 3, 17, 4,
+            16, 5, 21, 6, 18, 7, 9, 8, 20, 10, 26, 11, 23, 14, 28, 15, 27, 22,
+            24, 1, 4, 3, 8, 5, 16, 7, 17, 9, 21, 10, 22, 11, 19, 12, 20, 14,
+            24, 15, 26, 23, 28, 2, 5, 7, 8, 9, 18, 11, 17, 12, 16, 13, 22, 14,
+            20, 15, 19, 23, 24, 2, 4, 6, 12, 9, 16, 10, 11, 13, 17, 14, 18, 15,
+            22, 19, 25, 20, 21, 5, 6, 8, 12, 9, 10, 11, 13, 14, 16, 15, 17, 18,
+            20, 19, 23, 21, 22, 25, 26, 3, 5, 6, 7, 8, 9, 10, 12, 11, 14, 13,
+            16, 15, 18, 17, 20, 19, 21, 22, 23, 24, 25, 26, 28, 3, 4, 5, 6, 7,
+            8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 26, 27, 28
+        ],
+        # Sorting Network For N = 30, with Depth = 14
+        [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+            19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 0, 2, 1, 3, 4, 6, 5, 7,
+            8, 10, 9, 11, 12, 14, 13, 15, 16, 18, 17, 19, 20, 22, 21, 23, 24,
+            26, 25, 27, 0, 4, 1, 5, 2, 6, 3, 7, 8, 12, 9, 13, 10, 14, 11, 15,
+            16, 20, 17, 21, 18, 22, 19, 23, 24, 28, 25, 29, 0, 8, 1, 9, 2, 10,
+            3, 11, 4, 12, 5, 13, 6, 14, 7, 15, 16, 24, 17, 25, 18, 26, 19, 27,
+            20, 28, 21, 29, 0, 16, 1, 8, 2, 4, 3, 12, 5, 10, 6, 9, 7, 14, 11,
+            13, 17, 24, 18, 20, 19, 28, 21, 26, 22, 25, 27, 29, 1, 2, 3, 5, 4,
+            8, 6, 22, 7, 11, 9, 25, 10, 12, 13, 14, 17, 18, 19, 21, 20, 24, 23,
+            27, 26, 28, 1, 17, 2, 18, 3, 19, 4, 20, 5, 10, 7, 23, 8, 24, 11,
+            27, 12, 28, 13, 29, 21, 26, 3, 17, 4, 16, 5, 21, 6, 18, 7, 9, 8,
+            20, 10, 26, 11, 23, 13, 25, 14, 28, 15, 27, 22, 24, 1, 4, 3, 8, 5,
+            16, 7, 17, 9, 21, 10, 22, 11, 19, 12, 20, 14, 24, 15, 26, 23, 28,
+            2, 5, 7, 8, 9, 18, 11, 17, 12, 16, 13, 22, 14, 20, 15, 19, 23, 24,
+            26, 29, 2, 4, 6, 12, 9, 16, 10, 11, 13, 17, 14, 18, 15, 22, 19, 25,
+            20, 21, 27, 29, 5, 6, 8, 12, 9, 10, 11, 13, 14, 16, 15, 17, 18, 20,
+            19, 23, 21, 22, 25, 26, 3, 5, 6, 7, 8, 9, 10, 12, 11, 14, 13, 16,
+            15, 18, 17, 20, 19, 21, 22, 23, 24, 25, 26, 28, 3, 4, 5, 6, 7, 8,
+            9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+            26, 27, 28
+        ],
+        # Sorting Network For N = 31, with Depth = 14
+        [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+            19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 0, 2, 1, 3, 4, 6, 5, 7,
+            8, 10, 9, 11, 12, 14, 13, 15, 16, 18, 17, 19, 20, 22, 21, 23, 24,
+            26, 25, 27, 28, 30, 0, 4, 1, 5, 2, 6, 3, 7, 8, 12, 9, 13, 10, 14,
+            11, 15, 16, 20, 17, 21, 18, 22, 19, 23, 24, 28, 25, 29, 26, 30, 0,
+            8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15, 16, 24, 17, 25,
+            18, 26, 19, 27, 20, 28, 21, 29, 22, 30, 0, 16, 1, 8, 2, 4, 3, 12,
+            5, 10, 6, 9, 7, 14, 11, 13, 17, 24, 18, 20, 19, 28, 21, 26, 22, 25,
+            23, 30, 27, 29, 1, 2, 3, 5, 4, 8, 6, 22, 7, 11, 9, 25, 10, 12, 13,
+            14, 17, 18, 19, 21, 20, 24, 23, 27, 26, 28, 29, 30, 1, 17, 2, 18,
+            3, 19, 4, 20, 5, 10, 7, 23, 8, 24, 11, 27, 12, 28, 13, 29, 14, 30,
+            21, 26, 3, 17, 4, 16, 5, 21, 6, 18, 7, 9, 8, 20, 10, 26, 11, 23,
+            13, 25, 14, 28, 15, 27, 22, 24, 1, 4, 3, 8, 5, 16, 7, 17, 9, 21,
+            10, 22, 11, 19, 12, 20, 14, 24, 15, 26, 23, 28, 27, 30, 2, 5, 7, 8,
+            9, 18, 11, 17, 12, 16, 13, 22, 14, 20, 15, 19, 23, 24, 26, 29, 2,
+            4, 6, 12, 9, 16, 10, 11, 13, 17, 14, 18, 15, 22, 19, 25, 20, 21,
+            27, 29, 5, 6, 8, 12, 9, 10, 11, 13, 14, 16, 15, 17, 18, 20, 19, 23,
+            21, 22, 25, 26, 3, 5, 6, 7, 8, 9, 10, 12, 11, 14, 13, 16, 15, 18,
+            17, 20, 19, 21, 22, 23, 24, 25, 26, 28, 3, 4, 5, 6, 7, 8, 9, 10,
+            11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+            28
+        ],
+        # Sorting Network For N = 32, with Depth = 14
+        [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+            19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0, 2, 1, 3, 4,
+            6, 5, 7, 8, 10, 9, 11, 12, 14, 13, 15, 16, 18, 17, 19, 20, 22, 21,
+            23, 24, 26, 25, 27, 28, 30, 29, 31, 0, 4, 1, 5, 2, 6, 3, 7, 8, 12,
+            9, 13, 10, 14, 11, 15, 16, 20, 17, 21, 18, 22, 19, 23, 24, 28, 25,
+            29, 26, 30, 27, 31, 0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14,
+            7, 15, 16, 24, 17, 25, 18, 26, 19, 27, 20, 28, 21, 29, 22, 30, 23,
+            31, 0, 16, 1, 8, 2, 4, 3, 12, 5, 10, 6, 9, 7, 14, 11, 13, 15, 31,
+            17, 24, 18, 20, 19, 28, 21, 26, 22, 25, 23, 30, 27, 29, 1, 2, 3, 5,
+            4, 8, 6, 22, 7, 11, 9, 25, 10, 12, 13, 14, 17, 18, 19, 21, 20, 24,
+            23, 27, 26, 28, 29, 30, 1, 17, 2, 18, 3, 19, 4, 20, 5, 10, 7, 23,
+            8, 24, 11, 27, 12, 28, 13, 29, 14, 30, 21, 26, 3, 17, 4, 16, 5, 21,
+            6, 18, 7, 9, 8, 20, 10, 26, 11, 23, 13, 25, 14, 28, 15, 27, 22, 24,
+            1, 4, 3, 8, 5, 16, 7, 17, 9, 21, 10, 22, 11, 19, 12, 20, 14, 24,
+            15, 26, 23, 28, 27, 30, 2, 5, 7, 8, 9, 18, 11, 17, 12, 16, 13, 22,
+            14, 20, 15, 19, 23, 24, 26, 29, 2, 4, 6, 12, 9, 16, 10, 11, 13, 17,
+            14, 18, 15, 22, 19, 25, 20, 21, 27, 29, 5, 6, 8, 12, 9, 10, 11, 13,
+            14, 16, 15, 17, 18, 20, 19, 23, 21, 22, 25, 26, 3, 5, 6, 7, 8, 9,
+            10, 12, 11, 14, 13, 16, 15, 18, 17, 20, 19, 21, 22, 23, 24, 25, 26,
+            28, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+            20, 21, 22, 23, 24, 25, 26, 27, 28
+        ]
+    ]
+    return minimum_pairs
+
+
+######################################################################
+if __name__ == "__main__":
+    main()

@@ -64,11 +64,11 @@ Sorting Network Information:
 	Underlying Sort Type             : uint32_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 6
-	SIMD Instructions                : 2 / 25
+	SIMD Instructions                : 3 / 25
 	Optimization Preference          : space
 	SIMD Type                        : __m256i
-	SIMD Instruction Set(s) Used     : AVX, AVX2
-	SIMD Instruction Set(s) Excluded : None
+	SIMD Instruction Set(s) Used     : AVX2, SSE2, AVX
+	SIMD Instruction Set(s) Excluded : AVX512*
 	Aligned Load & Store             : True
 	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
@@ -107,37 +107,57 @@ Performance Notes:
 
 
 
-/* SIMD Sort */
-     __m256i __attribute__((const)) 
+ void fill_works(__m256i v) {
+      sarr<TYPE, N> t;
+      memcpy(t.arr, &v, 32);
+      int i = N;for (; i < 8; ++i) {
+          assert(t.arr[i] == uint32_t(0xffffffff));
+ }
+}
 
+/* SIMD Sort */
+ __m256i __attribute__((const)) 
 bitonic_8_uint32_t_vec(__m256i v) {
       
+      /* Pairs: ([6, 7], [7, 6], [4, 5], [5, 4]) */
+      /* Perm:  ( 6,  7,  4,  5) */
       __m256i perm0 = _mm256_shuffle_epi32(v, uint8_t(0xb1));
       __m256i min0 = _mm256_min_epu32(v, perm0);
       __m256i max0 = _mm256_max_epu32(v, perm0);
       __m256i v0 = _mm256_blend_epi32(max0, min0, 0x55);
       
+      /* Pairs: ([4, 7], [5, 6], [6, 5], [7, 4]) */
+      /* Perm:  ( 4,  5,  6,  7) */
       __m256i perm1 = _mm256_shuffle_epi32(v0, uint8_t(0x1b));
       __m256i min1 = _mm256_min_epu32(v0, perm1);
       __m256i max1 = _mm256_max_epu32(v0, perm1);
       __m256i v1 = _mm256_blend_epi32(max1, min1, 0x33);
       
+      /* Pairs: ([6, 7], [7, 6], [4, 5], [5, 4]) */
+      /* Perm:  ( 6,  7,  4,  5) */
       __m256i perm2 = _mm256_shuffle_epi32(v1, uint8_t(0xb1));
       __m256i min2 = _mm256_min_epu32(v1, perm2);
       __m256i max2 = _mm256_max_epu32(v1, perm2);
       __m256i v2 = _mm256_blend_epi32(max2, min2, 0x55);
       
-      __m256i _tmp0 = _mm256_permute4x64_epi64(v2, 0x4e);
-      __m256i perm3 = _mm256_shuffle_epi32(_tmp0, uint8_t(0x1b));
+      /* Pairs: ([0, 7], [1, 6], [2, 5], [3, 4], [4, 3], [5, 2], [6, 1], [7, 
+                 0]) */
+      /* Perm:  ( 0,  1,  2,  3,  4,  5,  6,  7) */
+      __m256i _tmp1 = _mm256_permute4x64_epi64(v2, 0x4e);
+      __m256i perm3 = _mm256_shuffle_epi32(_tmp1, uint8_t(0x1b));
       __m256i min3 = _mm256_min_epu32(v2, perm3);
       __m256i max3 = _mm256_max_epu32(v2, perm3);
       __m256i v3 = _mm256_blend_epi32(max3, min3, 0xf);
       
+      /* Pairs: ([5, 7], [4, 6], [7, 5], [6, 4]) */
+      /* Perm:  ( 5,  4,  7,  6) */
       __m256i perm4 = _mm256_shuffle_epi32(v3, uint8_t(0x4e));
       __m256i min4 = _mm256_min_epu32(v3, perm4);
       __m256i max4 = _mm256_max_epu32(v3, perm4);
       __m256i v4 = _mm256_blend_epi32(max4, min4, 0x33);
       
+      /* Pairs: ([6, 7], [7, 6], [4, 5], [5, 4]) */
+      /* Perm:  ( 6,  7,  4,  5) */
       __m256i perm5 = _mm256_shuffle_epi32(v4, uint8_t(0xb1));
       __m256i min5 = _mm256_min_epu32(v4, perm5);
       __m256i max5 = _mm256_max_epu32(v4, perm5);
@@ -149,16 +169,25 @@ bitonic_8_uint32_t_vec(__m256i v) {
 
 
 /* Wrapper For SIMD Sort */
-     void inline __attribute__((always_inline)) 
-
+ void inline __attribute__((always_inline)) 
 bitonic_8_uint32_t(uint32_t * const 
-                                 arr) {
+                             arr) {
       
-      __m256i v = _mm256_load_si256((__m256i *)arr);
-      
+      __m256i _tmp0 = _mm256_set1_epi32(uint32_t(0xffffffff));
+      asm volatile("vpblendd %[load_mask], (%[arr]), %[fill_v], %[fill_v]\n"
+                   : [ fill_v ] "+x" (_tmp0)
+                   : [ arr ] "r" (arr), [ load_mask ] "i" (0xff)
+                   :);
+      __m256i v = _tmp0;
+      fill_works(v);
       v = bitonic_8_uint32_t_vec(v);
       
-      _mm256_store_si256((__m256i *)arr, v);
+      fill_works(v);_mm256_maskstore_epi32((int32_t * const)arr, 
+                                            _mm256_set_epi32(0x80000000, 
+                                            0x80000000, 0x80000000, 
+                                            0x80000000, 0x80000000, 
+                                            0x80000000, 0x80000000, 
+                                            0x80000000), v);
       
  }
 

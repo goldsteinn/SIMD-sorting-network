@@ -68,7 +68,7 @@ Sorting Network Information:
 	Optimization Preference          : space
 	SIMD Type                        : __m64
 	SIMD Instruction Set(s) Used     : MMX, SSSE3, SSE
-	SIMD Instruction Set(s) Excluded : None
+	SIMD Instruction Set(s) Excluded : AVX512*
 	Aligned Load & Store             : True
 	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
@@ -110,10 +110,11 @@ typedef __m64 _aliasing_m64_ __attribute__((aligned(8), may_alias));
 
 
 /* SIMD Sort */
-     __m64 __attribute__((const)) 
-
+ __m64 __attribute__((const)) 
 batcher_4_uint8_t_vec(__m64 v) {
       
+      /* Pairs: ([7,7], [6,6], [5,5], [4,4], [1,3], [0,2]) */
+      /* Perm:  ( 7,  6,  5,  4,  1,  0,  3,  2) */
       __m64 perm0 = _mm_shuffle_pi16(v, 0xe1);
       __m64 min0 = _mm_min_pu8(v, perm0);
       __m64 max0 = _mm_max_pu8(v, perm0);
@@ -121,6 +122,8 @@ batcher_4_uint8_t_vec(__m64 v) {
       __m64 v0 = _mm_or_si64(_mm_and_si64(_tmp0, min0), 
                                           _mm_andnot_si64(_tmp0, max0));
       
+      /* Pairs: ([7,7], [6,6], [5,5], [4,4], [2,3], [0,1]) */
+      /* Perm:  ( 7,  6,  5,  4,  2,  3,  0,  1) */
       __m64 perm1 = _mm_shuffle_pi8(v0, _mm_set_pi8(7, 6, 5, 4, 2, 3, 0, 
                                                     1));
       __m64 min1 = _mm_min_pu8(v0, perm1);
@@ -129,6 +132,8 @@ batcher_4_uint8_t_vec(__m64 v) {
       __m64 v1 = _mm_or_si64(_mm_and_si64(_tmp1, min1), 
                                           _mm_andnot_si64(_tmp1, max1));
       
+      /* Pairs: ([7,7], [6,6], [5,5], [4,4], [3,3], [1,2], [0,0]) */
+      /* Perm:  ( 7,  6,  5,  4,  3,  1,  2,  0) */
       __m64 perm2 = _mm_shuffle_pi8(v1, _mm_set_pi8(7, 6, 5, 4, 3, 1, 2, 
                                                     0));
       __m64 min2 = _mm_min_pu8(v1, perm2);
@@ -143,10 +148,9 @@ batcher_4_uint8_t_vec(__m64 v) {
 
 
 /* Wrapper For SIMD Sort */
-     void inline __attribute__((always_inline)) 
-
+ void inline __attribute__((always_inline)) 
 batcher_4_uint8_t(uint8_t * const arr) 
-                                 {
+                             {
       
       __m64 v = (*((_aliasing_m64_ *)arr));
       

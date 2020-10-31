@@ -64,12 +64,15 @@ Sorting Network Information:
 	Underlying Sort Type             : int16_t
 	Network Generation Algorithm     : bitonic
 	Network Depth                    : 15
-	SIMD Instructions                : 3 / 75
+	SIMD Instructions                : 2 / 75
+	Optimization Preference          : space
 	SIMD Type                        : __m512i
-	SIMD Instruction Set(s) Used     : AVX512f, AVX512bw, AVX, AVX512vl
+	SIMD Instruction Set(s) Used     : AVX512f, AVX512bw
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
+	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
+	Scaled Sorting Network           : False
 
 Performance Notes:
 1) If you are sorting an array where there IS valid memory up to 
@@ -104,111 +107,192 @@ Performance Notes:
 
 
 
-void fill_works(__m512i v) {
-sarr<TYPE, N> t;
-memcpy(t.arr, &v, 64);
-int i = N;for (; i < 32; ++i) {
-assert(t.arr[i] == int16_t(0x7fff));
-}
-}
-
 /* SIMD Sort */
-__m512i __attribute__((const)) bitonic_22_int16_t_vec(__m512i v) {
+     __m512i __attribute__((const)) 
 
-__m512i perm0 = _mm512_shuffle_epi8(v, _mm512_set_epi8(63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 41, 40, 43, 42, 39, 38, 35, 34, 37, 36, 33, 32, 29, 28, 31, 30, 27, 26, 23, 22, 25, 24, 19, 18, 21, 20, 17, 16, 13, 12, 15, 14, 11, 10, 7, 6, 9, 8, 5, 4, 1, 0, 3, 2));
-__m512i min0 = _mm512_min_epi16(v, perm0);
-__m512i max0 = _mm512_max_epi16(v, perm0);
-__m512i v0 = _mm512_mask_mov_epi16(max0, 0x124a49, min0);
-
-__m512i perm1 = _mm512_shuffle_epi8(v0, _mm512_set_epi8(63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 39, 38, 41, 40, 43, 42, 37, 36, 33, 32, 35, 34, 31, 30, 27, 26, 29, 28, 25, 24, 23, 22, 21, 20, 17, 16, 19, 18, 11, 10, 13, 12, 15, 14, 5, 4, 7, 6, 9, 8, 3, 2, 1, 0));
-__m512i min1 = _mm512_min_epi16(v0, perm1);
-__m512i max1 = _mm512_max_epi16(v0, perm1);
-__m512i v1 = _mm512_mask_mov_epi16(max1, 0x92124, min1);
-
-__m512i perm2 = _mm512_shuffle_epi8(v1, _mm512_set_epi8(63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 39, 38, 41, 40, 35, 34, 37, 36, 33, 32, 29, 28, 31, 30, 23, 22, 25, 24, 27, 26, 19, 18, 21, 20, 17, 16, 15, 14, 11, 10, 13, 12, 3, 2, 5, 4, 7, 6, 9, 8, 1, 0));
-__m512i min2 = _mm512_min_epi16(v1, perm2);
-__m512i max2 = _mm512_max_epi16(v1, perm2);
-__m512i v2 = _mm512_mask_mov_epi16(max2, 0xa4a26, min2);
-
-__m512i perm3 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 17, 18, 19, 20, 21, 16, 13, 12, 15, 14, 11, 10, 5, 6, 7, 8, 9, 4, 0, 1, 2, 3), v2);
-__m512i min3 = _mm512_min_epi16(v2, perm3);
-__m512i max3 = _mm512_max_epi16(v2, perm3);
-__m512i v3 = _mm512_mask_mov_epi16(max3, 0x63063, min3);
-
-__m512i perm4 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 20, 21, 17, 16, 19, 18, 14, 15, 12, 13, 11, 8, 7, 10, 9, 5, 6, 4, 2, 3, 0, 1), v3);
-__m512i min4 = _mm512_min_epi16(v3, perm4);
-__m512i max4 = _mm512_max_epi16(v3, perm4);
-__m512i v4 = _mm512_mask_mov_epi16(max4, 0x1351a5, min4);
-
-__m512i perm5 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 13, 14, 18, 19, 16, 17, 15, 20, 21, 12, 11, 9, 10, 7, 8, 1, 2, 4, 3, 5, 6, 0), v4);
-__m512i min5 = _mm512_min_epi16(v4, perm5);
-__m512i max5 = _mm512_max_epi16(v4, perm5);
-__m512i v5 = _mm512_mask_mov_epi16(max5, 0x56286, min5);
-
-__m512i perm6 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 15, 12, 13, 14, 19, 16, 17, 18, 11, 6, 5, 3, 0, 10, 9, 4, 8, 2, 1, 7), v5);
-__m512i min6 = _mm512_min_epi16(v5, perm6);
-__m512i max6 = _mm512_max_epi16(v5, perm6);
-__m512i v6 = _mm512_mask_mov_epi16(max6, 0xf069, min6);
-
-__m512i perm7 = _mm512_shuffle_epi8(v6, _mm512_set_epi8(63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 39, 38, 41, 40, 43, 42, 33, 32, 35, 34, 37, 36, 23, 22, 25, 24, 27, 26, 29, 28, 31, 30, 17, 16, 19, 18, 21, 20, 9, 8, 7, 6, 11, 10, 15, 14, 13, 12, 1, 0, 3, 2, 5, 4));
-__m512i min7 = _mm512_min_epi16(v6, perm7);
-__m512i max7 = _mm512_max_epi16(v6, perm7);
-__m512i v7 = _mm512_mask_mov_epi16(max7, 0x91919, min7);
-
-__m512i perm8 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 19, 20, 18, 15, 16, 17, 14, 11, 12, 13, 10, 7, 8, 9, 6, 4, 5, 3, 1, 2, 0), v7);
-__m512i min8 = _mm512_min_epi16(v7, perm8);
-__m512i max8 = _mm512_max_epi16(v7, perm8);
-__m512i v8 = _mm512_mask_mov_epi16(max8, 0x88892, min8);
-
-__m512i perm9 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 17, 18, 15, 16, 13, 14, 11, 12, 9, 10, 7, 8, 5, 6, 3, 4, 2, 1, 0), v8);
-__m512i min9 = _mm512_min_epi16(v8, perm9);
-__m512i max9 = _mm512_max_epi16(v8, perm9);
-__m512i v9 = _mm512_mask_mov_epi16(max9, 0x2aaa8, min9);
-
-__m512i perm10 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 5, 6, 7, 8, 9, 10, 3, 4, 13, 12, 11, 16, 17, 18, 19, 20, 21, 14, 15, 2, 1, 0), v9);
-__m512i min10 = _mm512_min_epi16(v9, perm10);
-__m512i max10 = _mm512_max_epi16(v9, perm10);
-__m512i v10 = _mm512_mask_mov_epi16(max10, 0x7f8, min10);
-
-__m512i perm11 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 17, 16, 19, 18, 21, 20, 15, 14, 5, 6, 7, 2, 1, 0, 11, 12, 13, 4, 3, 10, 9, 8), v10);
-__m512i min11 = _mm512_min_epi16(v10, perm11);
-__m512i max11 = _mm512_max_epi16(v10, perm11);
-__m512i v11 = _mm512_mask_mov_epi16(max11, 0x300e7, min11);
-
-__m512i perm12 = _mm512_shuffle_epi8(v11, _mm512_set_epi8(63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 41, 40, 43, 42, 35, 34, 33, 32, 39, 38, 37, 36, 23, 22, 17, 16, 19, 18, 21, 20, 31, 30, 25, 24, 27, 26, 29, 28, 7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8));
-__m512i min12 = _mm512_min_epi16(v11, perm12);
-__m512i max12 = _mm512_max_epi16(v11, perm12);
-__m512i v12 = _mm512_mask_mov_epi16(max12, 0x130f0f, min12);
-
-__m512i perm13 = _mm512_shuffle_epi8(v12, _mm512_set_epi8(63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 37, 36, 39, 38, 33, 32, 35, 34, 27, 26, 25, 24, 31, 30, 29, 28, 19, 18, 17, 16, 23, 22, 21, 20, 11, 10, 9, 8, 15, 14, 13, 12, 3, 2, 1, 0, 7, 6, 5, 4));
-__m512i min13 = _mm512_min_epi16(v12, perm13);
-__m512i max13 = _mm512_max_epi16(v12, perm13);
-__m512i v13 = _mm512_mask_mov_epi16(max13, 0x53333, min13);
-
-__m512i perm14 = _mm512_shuffle_epi8(v13, _mm512_set_epi8(63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 29, 28, 31, 30, 25, 24, 27, 26, 21, 20, 23, 22, 17, 16, 19, 18, 13, 12, 15, 14, 9, 8, 11, 10, 5, 4, 7, 6, 1, 0, 3, 2));
-__m512i min14 = _mm512_min_epi16(v13, perm14);
-__m512i max14 = _mm512_max_epi16(v13, perm14);
-__m512i v14 = _mm512_mask_mov_epi16(max14, 0x5555, min14);
-
-return v14;
-}
+bitonic_22_int16_t_vec(__m512i v) {
+      
+      __m512i perm0 = _mm512_shuffle_epi8(v, _mm512_set_epi8(63, 62, 61, 60, 
+                                          59, 58, 57, 56, 55, 54, 53, 52, 51, 
+                                          50, 49, 48, 47, 46, 45, 44, 41, 40, 
+                                          43, 42, 39, 38, 35, 34, 37, 36, 33, 
+                                          32, 29, 28, 31, 30, 27, 26, 23, 22, 
+                                          25, 24, 19, 18, 21, 20, 17, 16, 13, 
+                                          12, 15, 14, 11, 10, 7, 6, 9, 8, 5, 
+                                          4, 1, 0, 3, 2));
+      __m512i min0 = _mm512_min_epi16(v, perm0);
+      __m512i max0 = _mm512_max_epi16(v, perm0);
+      __m512i v0 = _mm512_mask_mov_epi16(max0, 0x124a49, min0);
+      
+      __m512i perm1 = _mm512_shuffle_epi8(v0, _mm512_set_epi8(63, 62, 61, 60, 
+                                          59, 58, 57, 56, 55, 54, 53, 52, 51, 
+                                          50, 49, 48, 47, 46, 45, 44, 39, 38, 
+                                          41, 40, 43, 42, 37, 36, 33, 32, 35, 
+                                          34, 31, 30, 27, 26, 29, 28, 25, 24, 
+                                          23, 22, 21, 20, 17, 16, 19, 18, 11, 
+                                          10, 13, 12, 15, 14, 5, 4, 7, 6, 9, 
+                                          8, 3, 2, 1, 0));
+      __m512i min1 = _mm512_min_epi16(v0, perm1);
+      __m512i max1 = _mm512_max_epi16(v0, perm1);
+      __m512i v1 = _mm512_mask_mov_epi16(max1, 0x92124, min1);
+      
+      __m512i perm2 = _mm512_shuffle_epi8(v1, _mm512_set_epi8(63, 62, 61, 60, 
+                                          59, 58, 57, 56, 55, 54, 53, 52, 51, 
+                                          50, 49, 48, 47, 46, 45, 44, 43, 42, 
+                                          39, 38, 41, 40, 35, 34, 37, 36, 33, 
+                                          32, 29, 28, 31, 30, 23, 22, 25, 24, 
+                                          27, 26, 19, 18, 21, 20, 17, 16, 15, 
+                                          14, 11, 10, 13, 12, 3, 2, 5, 4, 7, 
+                                          6, 9, 8, 1, 0));
+      __m512i min2 = _mm512_min_epi16(v1, perm2);
+      __m512i max2 = _mm512_max_epi16(v1, perm2);
+      __m512i v2 = _mm512_mask_mov_epi16(max2, 0xa4a26, min2);
+      
+      __m512i perm3 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 
+                                               28, 27, 26, 25, 24, 23, 22, 
+                                               17, 18, 19, 20, 21, 16, 13, 
+                                               12, 15, 14, 11, 10, 5, 6, 7, 
+                                               8, 9, 4, 0, 1, 2, 3), v2);
+      __m512i min3 = _mm512_min_epi16(v2, perm3);
+      __m512i max3 = _mm512_max_epi16(v2, perm3);
+      __m512i v3 = _mm512_mask_mov_epi16(max3, 0x63063, min3);
+      
+      __m512i perm4 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 
+                                               28, 27, 26, 25, 24, 23, 22, 
+                                               20, 21, 17, 16, 19, 18, 14, 
+                                               15, 12, 13, 11, 8, 7, 10, 9, 
+                                               5, 6, 4, 2, 3, 0, 1), v3);
+      __m512i min4 = _mm512_min_epi16(v3, perm4);
+      __m512i max4 = _mm512_max_epi16(v3, perm4);
+      __m512i v4 = _mm512_mask_mov_epi16(max4, 0x1351a5, min4);
+      
+      __m512i perm5 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 
+                                               28, 27, 26, 25, 24, 23, 22, 
+                                               13, 14, 18, 19, 16, 17, 15, 
+                                               20, 21, 12, 11, 9, 10, 7, 8, 
+                                               1, 2, 4, 3, 5, 6, 0), v4);
+      __m512i min5 = _mm512_min_epi16(v4, perm5);
+      __m512i max5 = _mm512_max_epi16(v4, perm5);
+      __m512i v5 = _mm512_mask_mov_epi16(max5, 0x56286, min5);
+      
+      __m512i perm6 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 
+                                               28, 27, 26, 25, 24, 23, 22, 
+                                               21, 20, 15, 12, 13, 14, 19, 
+                                               16, 17, 18, 11, 6, 5, 3, 0, 
+                                               10, 9, 4, 8, 2, 1, 7), v5);
+      __m512i min6 = _mm512_min_epi16(v5, perm6);
+      __m512i max6 = _mm512_max_epi16(v5, perm6);
+      __m512i v6 = _mm512_mask_mov_epi16(max6, 0xf069, min6);
+      
+      __m512i perm7 = _mm512_shuffle_epi8(v6, _mm512_set_epi8(63, 62, 61, 60, 
+                                          59, 58, 57, 56, 55, 54, 53, 52, 51, 
+                                          50, 49, 48, 47, 46, 45, 44, 39, 38, 
+                                          41, 40, 43, 42, 33, 32, 35, 34, 37, 
+                                          36, 23, 22, 25, 24, 27, 26, 29, 28, 
+                                          31, 30, 17, 16, 19, 18, 21, 20, 9, 
+                                          8, 7, 6, 11, 10, 15, 14, 13, 12, 1, 
+                                          0, 3, 2, 5, 4));
+      __m512i min7 = _mm512_min_epi16(v6, perm7);
+      __m512i max7 = _mm512_max_epi16(v6, perm7);
+      __m512i v7 = _mm512_mask_mov_epi16(max7, 0x91919, min7);
+      
+      __m512i perm8 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 
+                                               28, 27, 26, 25, 24, 23, 22, 
+                                               21, 19, 20, 18, 15, 16, 17, 
+                                               14, 11, 12, 13, 10, 7, 8, 9, 
+                                               6, 4, 5, 3, 1, 2, 0), v7);
+      __m512i min8 = _mm512_min_epi16(v7, perm8);
+      __m512i max8 = _mm512_max_epi16(v7, perm8);
+      __m512i v8 = _mm512_mask_mov_epi16(max8, 0x88892, min8);
+      
+      __m512i perm9 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 
+                                               28, 27, 26, 25, 24, 23, 22, 
+                                               21, 20, 19, 17, 18, 15, 16, 
+                                               13, 14, 11, 12, 9, 10, 7, 8, 
+                                               5, 6, 3, 4, 2, 1, 0), v8);
+      __m512i min9 = _mm512_min_epi16(v8, perm9);
+      __m512i max9 = _mm512_max_epi16(v8, perm9);
+      __m512i v9 = _mm512_mask_mov_epi16(max9, 0x2aaa8, min9);
+      
+      __m512i perm10 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 
+                                                28, 27, 26, 25, 24, 23, 22, 
+                                                5, 6, 7, 8, 9, 10, 3, 4, 13, 
+                                                12, 11, 16, 17, 18, 19, 20, 
+                                                21, 14, 15, 2, 1, 0), v9);
+      __m512i min10 = _mm512_min_epi16(v9, perm10);
+      __m512i max10 = _mm512_max_epi16(v9, perm10);
+      __m512i v10 = _mm512_mask_mov_epi16(max10, 0x7f8, min10);
+      
+      __m512i perm11 = _mm512_permutexvar_epi16(_mm512_set_epi16(31, 30, 29, 
+                                                28, 27, 26, 25, 24, 23, 22, 
+                                                17, 16, 19, 18, 21, 20, 15, 
+                                                14, 5, 6, 7, 2, 1, 0, 11, 12, 
+                                                13, 4, 3, 10, 9, 8), v10);
+      __m512i min11 = _mm512_min_epi16(v10, perm11);
+      __m512i max11 = _mm512_max_epi16(v10, perm11);
+      __m512i v11 = _mm512_mask_mov_epi16(max11, 0x300e7, min11);
+      
+      __m512i perm12 = _mm512_shuffle_epi8(v11, _mm512_set_epi8(63, 62, 61, 
+                                           60, 59, 58, 57, 56, 55, 54, 53, 
+                                           52, 51, 50, 49, 48, 47, 46, 45, 
+                                           44, 41, 40, 43, 42, 35, 34, 33, 
+                                           32, 39, 38, 37, 36, 23, 22, 17, 
+                                           16, 19, 18, 21, 20, 31, 30, 25, 
+                                           24, 27, 26, 29, 28, 7, 6, 5, 4, 3, 
+                                           2, 1, 0, 15, 14, 13, 12, 11, 10, 
+                                           9, 8));
+      __m512i min12 = _mm512_min_epi16(v11, perm12);
+      __m512i max12 = _mm512_max_epi16(v11, perm12);
+      __m512i v12 = _mm512_mask_mov_epi16(max12, 0x130f0f, min12);
+      
+      __m512i perm13 = _mm512_shuffle_epi8(v12, _mm512_set_epi8(63, 62, 61, 
+                                           60, 59, 58, 57, 56, 55, 54, 53, 
+                                           52, 51, 50, 49, 48, 47, 46, 45, 
+                                           44, 43, 42, 41, 40, 37, 36, 39, 
+                                           38, 33, 32, 35, 34, 27, 26, 25, 
+                                           24, 31, 30, 29, 28, 19, 18, 17, 
+                                           16, 23, 22, 21, 20, 11, 10, 9, 8, 
+                                           15, 14, 13, 12, 3, 2, 1, 0, 7, 6, 
+                                           5, 4));
+      __m512i min13 = _mm512_min_epi16(v12, perm13);
+      __m512i max13 = _mm512_max_epi16(v12, perm13);
+      __m512i v13 = _mm512_mask_mov_epi16(max13, 0x53333, min13);
+      
+      __m512i perm14 = _mm512_shuffle_epi8(v13, _mm512_set_epi8(63, 62, 61, 
+                                           60, 59, 58, 57, 56, 55, 54, 53, 
+                                           52, 51, 50, 49, 48, 47, 46, 45, 
+                                           44, 43, 42, 41, 40, 39, 38, 37, 
+                                           36, 35, 34, 33, 32, 29, 28, 31, 
+                                           30, 25, 24, 27, 26, 21, 20, 23, 
+                                           22, 17, 16, 19, 18, 13, 12, 15, 
+                                           14, 9, 8, 11, 10, 5, 4, 7, 6, 1, 
+                                           0, 3, 2));
+      __m512i min14 = _mm512_min_epi16(v13, perm14);
+      __m512i max14 = _mm512_max_epi16(v13, perm14);
+      __m512i v14 = _mm512_mask_mov_epi16(max14, 0x5555, min14);
+      
+      return v14;
+ }
 
 
 
 /* Wrapper For SIMD Sort */
-void inline __attribute__((always_inline)) bitonic_22_int16_t(int16_t * const arr) {
+     void inline __attribute__((always_inline)) 
 
-__m512i _tmp0 = _mm512_set1_epi16(int16_t(0x7fff));
-__m512i v = _mm512_mask_loadu_epi16(_tmp0, 0x3fffff, arr);
-fill_works(v);
-v = bitonic_22_int16_t_vec(v);
-
-fill_works(v);_mm512_mask_storeu_epi16((void *)arr, 0x3fffff, v);
-
-}
+bitonic_22_int16_t(int16_t * const arr) 
+                                 {
+      
+      __m512i v = _mm512_load_si512((__m512i *)arr);
+      
+      v = bitonic_22_int16_t_vec(v);
+      
+      _mm512_store_si512((__m512i *)arr, v);
+      
+ }
 
 
 #endif
+
 
 
 

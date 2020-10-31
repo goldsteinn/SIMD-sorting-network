@@ -64,11 +64,11 @@ Sorting Network Information:
 	Underlying Sort Type             : int8_t
 	Network Generation Algorithm     : batcher
 	Network Depth                    : 8
-	SIMD Instructions                : 2 / 40
+	SIMD Instructions                : 5 / 47
 	Optimization Preference          : space
 	SIMD Type                        : __m128i
-	SIMD Instruction Set(s) Used     : SSE2, SSSE3, SSE4.1, AVX2, AVX512vl, AVX512bw
-	SIMD Instruction Set(s) Excluded : None
+	SIMD Instruction Set(s) Used     : SSE4.1, SSE2, SSSE3, AVX2
+	SIMD Instruction Set(s) Excluded : AVX512*
 	Aligned Load & Store             : True
 	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
@@ -107,58 +107,99 @@ Performance Notes:
 
 
 
-/* SIMD Sort */
-     __m128i __attribute__((const)) 
+ void fill_works(__m128i v) {
+      sarr<TYPE, N> t;
+      memcpy(t.arr, &v, 16);
+      int i = N;for (; i < 16; ++i) {
+          assert(t.arr[i] == int8_t(0x7f));
+ }
+}
 
+/* SIMD Sort */
+ __m128i __attribute__((const)) 
 batcher_9_int8_t_vec(__m128i v) {
       
+      /* Pairs: ([15,15], [14,14], [13,13], [12,12], [11,11], [10,10], [9,9], 
+                 [0,8], [3,7], [2,6], [1,5], [7,3], [6,2], [5,1], [8,0]) */
+      /* Perm:  (15, 14, 13, 12, 11, 10,  9,  0,  3,  2,  1,  7,  6,  5,  8) 
+                 */
       __m128i perm0 = _mm_shuffle_epi8(v, _mm_set_epi8(15, 14, 13, 12, 11, 
                                        10, 9, 0, 3, 2, 1, 4, 7, 6, 5, 8));
       __m128i min0 = _mm_min_epi8(v, perm0);
       __m128i max0 = _mm_max_epi8(v, perm0);
       __m128i v0 = _mm_blend_epi32(max0, min0, 0x1);
       
+      /* Pairs: ([15,15], [14,14], [13,13], [12,12], [11,11], [10,10], [9,9], 
+                 [8,8], [5,7], [7,5], [0,4], [1,3], [3,1], [4,0]) */
+      /* Perm:  (15, 14, 13, 12, 11, 10,  9,  8,  5,  7,  0,  1,  3,  4) */
       __m128i perm1 = _mm_shuffle_epi8(v0, _mm_set_epi8(15, 14, 13, 12, 11, 
                                        10, 9, 8, 5, 6, 7, 0, 1, 2, 3, 4));
       __m128i min1 = _mm_min_epi8(v0, perm1);
       __m128i max1 = _mm_max_epi8(v0, perm1);
-      __m128i v1 = _mm_mask_mov_epi8(max1, 0x23, min1);
+      __m128i v1 = _mm_blendv_epi8(max1, min1, _mm_set_epi8(0, 0, 0, 0, 0, 0, 
+                                   0, 0, 0, 0, 128, 0, 0, 0, 128, 128));
       
+      /* Pairs: ([15,15], [14,14], [13,13], [12,12], [11,11], [10,10], [9,9], 
+                 [4,8], [7,7], [3,5], [8,4], [5,3], [0,2], [2,0]) */
+      /* Perm:  (15, 14, 13, 12, 11, 10,  9,  4,  7,  3,  8,  5,  0,  2) */
       __m128i perm2 = _mm_shuffle_epi8(v1, _mm_set_epi8(15, 14, 13, 12, 11, 
                                        10, 9, 4, 7, 6, 3, 8, 5, 0, 1, 2));
       __m128i min2 = _mm_min_epi8(v1, perm2);
       __m128i max2 = _mm_max_epi8(v1, perm2);
-      __m128i v2 = _mm_mask_mov_epi8(max2, 0x19, min2);
+      __m128i v2 = _mm_blendv_epi8(max2, min2, _mm_set_epi8(0, 0, 0, 0, 0, 0, 
+                                   0, 0, 0, 0, 0, 128, 128, 0, 0, 128));
       
+      /* Pairs: ([15,15], [14,14], [13,13], [12,12], [11,11], [10,10], [9,9], 
+                 [2,8], [7,7], [4,6], [6,4], [8,2], [0,1], [1,0]) */
+      /* Perm:  (15, 14, 13, 12, 11, 10,  9,  2,  7,  4,  6,  8,  0,  1) */
       __m128i perm3 = _mm_shuffle_epi8(v2, _mm_set_epi8(15, 14, 13, 12, 11, 
                                        10, 9, 2, 7, 4, 5, 6, 3, 8, 0, 1));
       __m128i min3 = _mm_min_epi8(v2, perm3);
       __m128i max3 = _mm_max_epi8(v2, perm3);
-      __m128i v3 = _mm_mask_mov_epi8(max3, 0x15, min3);
+      __m128i v3 = _mm_blendv_epi8(max3, min3, _mm_set_epi8(0, 0, 0, 0, 0, 0, 
+                                   0, 0, 0, 0, 0, 128, 0, 128, 0, 128));
       
+      /* Pairs: ([15,15], [14,14], [13,13], [12,12], [11,11], [10,10], [9,9], 
+                 [6,8], [7,7], [8,6], [2,4], [4,2]) */
+      /* Perm:  (15, 14, 13, 12, 11, 10,  9,  6,  7,  8,  2,  4) */
       __m128i perm4 = _mm_shuffle_epi8(v3, _mm_set_epi8(15, 14, 13, 12, 11, 
                                        10, 9, 6, 7, 8, 5, 2, 3, 4, 1, 0));
       __m128i min4 = _mm_min_epi8(v3, perm4);
       __m128i max4 = _mm_max_epi8(v3, perm4);
-      __m128i v4 = _mm_mask_mov_epi8(max4, 0x44, min4);
+      __m128i v4 = _mm_blendv_epi8(max4, min4, _mm_set_epi8(0, 0, 0, 0, 0, 0, 
+                                   0, 0, 0, 128, 0, 0, 0, 128, 0, 0));
       
+      /* Pairs: ([15,15], [14,14], [13,13], [12,12], [11,11], [10,10], [9,9], 
+                 [1,8], [6,7], [7,6], [4,5], [5,4], [2,3], [3,2], [8,1]) */
+      /* Perm:  (15, 14, 13, 12, 11, 10,  9,  1,  6,  7,  4,  5,  2,  3,  8) 
+                 */
       __m128i perm5 = _mm_shuffle_epi8(v4, _mm_set_epi8(15, 14, 13, 12, 11, 
                                        10, 9, 1, 6, 7, 4, 5, 2, 3, 8, 0));
       __m128i min5 = _mm_min_epi8(v4, perm5);
       __m128i max5 = _mm_max_epi8(v4, perm5);
-      __m128i v5 = _mm_mask_mov_epi8(max5, 0x56, min5);
+      __m128i v5 = _mm_blendv_epi8(max5, min5, _mm_set_epi8(0, 0, 0, 0, 0, 0, 
+                                   0, 0, 0, 128, 0, 128, 0, 128, 128, 0));
       
+      /* Pairs: ([15,15], [14,14], [13,13], [12,12], [11,11], [10,10], [9,9], 
+                 [5,8], [7,7], [3,6], [8,5], [1,4], [6,3], [4,1]) */
+      /* Perm:  (15, 14, 13, 12, 11, 10,  9,  5,  7,  3,  8,  1,  6,  4) */
       __m128i perm6 = _mm_shuffle_epi8(v5, _mm_set_epi8(15, 14, 13, 12, 11, 
                                        10, 9, 5, 7, 3, 8, 1, 6, 2, 4, 0));
       __m128i min6 = _mm_min_epi8(v5, perm6);
       __m128i max6 = _mm_max_epi8(v5, perm6);
-      __m128i v6 = _mm_mask_mov_epi8(max6, 0x2a, min6);
+      __m128i v6 = _mm_blendv_epi8(max6, min6, _mm_set_epi8(0, 0, 0, 0, 0, 0, 
+                                   0, 0, 0, 0, 128, 0, 128, 0, 128, 0));
       
+      /* Pairs: ([15,15], [14,14], [13,13], [12,12], [11,11], [10,10], [9,9], 
+                 [7,8], [8,7], [5,6], [6,5], [3,4], [4,3], [1,2], [2,1]) */
+      /* Perm:  (15, 14, 13, 12, 11, 10,  9,  7,  8,  5,  6,  3,  4,  1,  2) 
+                 */
       __m128i perm7 = _mm_shuffle_epi8(v6, _mm_set_epi8(15, 14, 13, 12, 11, 
                                        10, 9, 7, 8, 5, 6, 3, 4, 1, 2, 0));
       __m128i min7 = _mm_min_epi8(v6, perm7);
       __m128i max7 = _mm_max_epi8(v6, perm7);
-      __m128i v7 = _mm_mask_mov_epi8(max7, 0xaa, min7);
+      __m128i v7 = _mm_blendv_epi8(max7, min7, _mm_set_epi8(0, 0, 0, 0, 0, 0, 
+                                   0, 0, 128, 0, 128, 0, 128, 0, 128, 0));
       
       return v7;
  }
@@ -166,15 +207,25 @@ batcher_9_int8_t_vec(__m128i v) {
 
 
 /* Wrapper For SIMD Sort */
-     void inline __attribute__((always_inline)) 
-
+ void inline __attribute__((always_inline)) 
 batcher_9_int8_t(int8_t * const arr) {
       
-      __m128i v = _mm_load_si128((__m128i *)arr);
-      
+      __m128i _tmp0 = _mm_set1_epi8(int8_t(0x7f));
+      __m128i _tmp1 = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 128, 128, 128, 128, 
+                                   128, 128, 128, 128, 128);
+      asm volatile("vpblendvb %[load_mask], (%[arr]), %[fill_v], %[fill_v]\n"
+                   : [ fill_v ] "+x" (_tmp0)
+                   : [ arr ] "r" (arr), [ load_mask ] "x" (_tmp1)
+                   :);
+      __m128i v = _tmp0;
+      fill_works(v);
       v = batcher_9_int8_t_vec(v);
       
-      _mm_store_si128((__m128i *)arr, v);
+      fill_works(v);_mm_maskstore_epi32((int32_t * const)arr, 
+                                         _mm_set_epi32(0x0, 0x0, 0x80000000, 
+                                         0x80000000), v);
+      const uint32_t _tmp2 = _mm_extract_epi32(v, 2);
+      __builtin_memcpy(arr + 8, &_tmp2, 1);;
       
  }
 

@@ -11,7 +11,7 @@ types = [
 ]
 sizes = [1, 2, 4, 8, 1, 2, 4, 8]
 max_b = [32, 64]
-algorithms = ["batcher", "bitonic"]
+algorithms = ["best", "bitonic", "oddeven", "bosenelson", "batcher"]
 extra_flags = [
     "--clang-format 1231231 ", "--clang-format 1231231 -i",
     "--clang-format 1231231 -O space", "--clang-format 1231231 -O space -i",
@@ -52,21 +52,33 @@ for max_bytes in max_b:
                     print("Running: {}".format(cmd))
                     os.system(cmd)
 
+                    
+                    true_N = 0
+                    true_alg = ""
                     sort_impl = ""
                     for lines in open("export_tests/.tmp"):
+                        if "Sort Size" in lines and ":" in lines:
+                            tmp = lines.split()
+                            true_N = int(tmp[len(tmp) - 1])
+                        if "Network Generation Algorithm" in lines and ":" in lines:
+                            tmp = lines.split()
+                            true_alg = tmp[len(tmp) - 1]
+
                         sort_impl += lines
 
+
                     export_driver_impl = ""
-                    for lines in open("export_driver.cc"):
+                    for lines in open("export_driver.cc"):                            
                         export_driver_impl += lines
 
                     export_driver_impl = export_driver_impl.replace(
                         "[SORT_IMPL]", sort_impl)
                     export_driver_impl = export_driver_impl.replace(
                         "[TYPE]", types[i])
-                    export_driver_impl = export_driver_impl.replace("[N]", str(n))
+                    export_driver_impl = export_driver_impl.replace(
+                        "[N]", str(n))
 
-                    sname = "{}_{}_{}".format(a, str(n), types[i])
+                    sname = "{}_{}_{}".format(true_alg, str(true_N), types[i])
                     export_driver_impl = export_driver_impl.replace(
                         "[SORT_NAME]", sname)
 
