@@ -64,10 +64,10 @@ Sorting Network Information:
 	Underlying Sort Type             : uint8_t
 	Network Generation Algorithm     : bosenelson
 	Network Depth                    : 60
-	SIMD Instructions                : 3 / 300
+	SIMD Instructions                : 2 / 300
 	Optimization Preference          : space
 	SIMD Type                        : __m512i
-	SIMD Instruction Set(s) Used     : AVX512f, AVX512bw, AVX, AVX512vbmi, AVX512vl
+	SIMD Instruction Set(s) Used     : AVX512f, AVX512vbmi, AVX512bw
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Integer Aligned Load & Store     : True
@@ -106,14 +106,6 @@ Performance Notes:
 #include <stdint.h>
 
 
-
- void fill_works(__m512i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 64);
-      int i = N;for (; i < 64; ++i) {
-          assert(t.arr[i] == uint8_t(0xff));
- }
-}
 
 /* SIMD Sort */
  __m512i __attribute__((const)) 
@@ -1793,13 +1785,11 @@ bosenelson_60_uint8_t_vec(__m512i v) {
 bosenelson_60_uint8_t(uint8_t * const 
                              arr) {
       
-      __m512i _tmp0 = _mm512_set1_epi8(uint8_t(0xff));
-      __m512i v = _mm512_mask_loadu_epi8(_tmp0, 0xfffffffffffffff, arr);
-      fill_works(v);
+      __m512i v = _mm512_load_si512((__m512i *)arr);
+      
       v = bosenelson_60_uint8_t_vec(v);
       
-      fill_works(v);_mm512_mask_storeu_epi8((void *)arr, 0xfffffffffffffff, 
-                                             v);
+      _mm512_store_si512((__m512i *)arr, v);
       
  }
 

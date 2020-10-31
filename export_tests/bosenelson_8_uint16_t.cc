@@ -67,7 +67,7 @@ Sorting Network Information:
 	SIMD Instructions                : 2 / 33
 	Optimization Preference          : space
 	SIMD Type                        : __m128i
-	SIMD Instruction Set(s) Used     : AVX2, SSE2, SSE4.1, SSSE3, AVX512bw, AVX512vl
+	SIMD Instruction Set(s) Used     : SSE2, SSE4.1, AVX2, SSSE3
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Integer Aligned Load & Store     : True
@@ -106,14 +106,6 @@ Performance Notes:
 #include <stdint.h>
 
 
-
- void fill_works(__m128i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 16);
-      int i = N;for (; i < 8; ++i) {
-          assert(t.arr[i] == uint16_t(0xffff));
- }
-}
 
 /* SIMD Sort */
  __m128i __attribute__((const)) 
@@ -183,16 +175,11 @@ bosenelson_8_uint16_t_vec(__m128i v) {
 bosenelson_8_uint16_t(uint16_t * const 
                              arr) {
       
-      __m128i _tmp0 = _mm_set1_epi16(uint16_t(0xffff));
-      asm volatile("vpblendd %[load_mask], (%[arr]), %[fill_v], %[fill_v]\n"
-                   : [ fill_v ] "+x" (_tmp0)
-                   : [ arr ] "r" (arr), [ load_mask ] "i" (0xf)
-                   :);
-      __m128i v = _tmp0;
-      fill_works(v);
+      __m128i v = _mm_load_si128((__m128i *)arr);
+      
       v = bosenelson_8_uint16_t_vec(v);
       
-      fill_works(v);_mm_mask_storeu_epi16((void *)arr, 0xff, v);
+      _mm_store_si128((__m128i *)arr, v);
       
  }
 

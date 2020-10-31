@@ -52,7 +52,7 @@ struct sarr {
 
 #define TYPE uint8_t
 #define N 4
-#define SORT_NAME best_4_uint8_t
+#define SORT_NAME batcher_4_uint8_t
 
 #ifndef _SIMD_SORT_batcher_4_uint8_t_H_
 #define _SIMD_SORT_batcher_4_uint8_t_H_
@@ -64,14 +64,14 @@ Sorting Network Information:
 	Underlying Sort Type             : uint8_t
 	Network Generation Algorithm     : batcher
 	Network Depth                    : 3
-	SIMD Instructions                : 1 / 20
+	SIMD Instructions                : 0 / 20
 	Optimization Preference          : space
 	SIMD Type                        : __m64
 	SIMD Instruction Set(s) Used     : MMX, SSSE3, SSE
-	SIMD Instruction Set(s) Excluded : AVX512*
-	Aligned Load & Store             : False
-	Integer Aligned Load & Store     : False
-	Full Load & Store                : False
+	SIMD Instruction Set(s) Excluded : None
+	Aligned Load & Store             : True
+	Integer Aligned Load & Store     : True
+	Full Load & Store                : True
 	Scaled Sorting Network           : False
 
 Performance Notes:
@@ -106,15 +106,8 @@ Performance Notes:
 #include <immintrin.h>
 #include <stdint.h>
 
+typedef __m64 _aliasing_m64_ __attribute__((aligned(8), may_alias));
 
-
- void fill_works(__m64 v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 8);
-      int i = N;for (; i < 8; ++i) {
-          assert(t.arr[i] == uint8_t(0xff));
- }
-}
 
 /* SIMD Sort */
  __m64 __attribute__((const)) 
@@ -125,9 +118,9 @@ batcher_4_uint8_t_vec(__m64 v) {
       __m64 perm0 = _mm_shuffle_pi16(v, 0xe1);
       __m64 min0 = _mm_min_pu8(v, perm0);
       __m64 max0 = _mm_max_pu8(v, perm0);
-      __m64 _tmp1 = (__m64)(0xffffUL);
-      __m64 v0 = _mm_or_si64(_mm_and_si64(_tmp1, min0), 
-                                          _mm_andnot_si64(_tmp1, max0));
+      __m64 _tmp0 = (__m64)(0xffffUL);
+      __m64 v0 = _mm_or_si64(_mm_and_si64(_tmp0, min0), 
+                                          _mm_andnot_si64(_tmp0, max0));
       
       /* Pairs: ([7,7], [6,6], [5,5], [4,4], [2,3], [0,1]) */
       /* Perm:  ( 7,  6,  5,  4,  2,  3,  0,  1) */
@@ -135,9 +128,9 @@ batcher_4_uint8_t_vec(__m64 v) {
                                                     1));
       __m64 min1 = _mm_min_pu8(v0, perm1);
       __m64 max1 = _mm_max_pu8(v0, perm1);
-      __m64 _tmp2 = (__m64)(0xff00ffUL);
-      __m64 v1 = _mm_or_si64(_mm_and_si64(_tmp2, min1), 
-                                          _mm_andnot_si64(_tmp2, max1));
+      __m64 _tmp1 = (__m64)(0xff00ffUL);
+      __m64 v1 = _mm_or_si64(_mm_and_si64(_tmp1, min1), 
+                                          _mm_andnot_si64(_tmp1, max1));
       
       /* Pairs: ([7,7], [6,6], [5,5], [4,4], [3,3], [1,2], [0,0]) */
       /* Perm:  ( 7,  6,  5,  4,  3,  1,  2,  0) */
@@ -145,9 +138,9 @@ batcher_4_uint8_t_vec(__m64 v) {
                                                     0));
       __m64 min2 = _mm_min_pu8(v1, perm2);
       __m64 max2 = _mm_max_pu8(v1, perm2);
-      __m64 _tmp3 = (__m64)(0xff00UL);
-      __m64 v2 = _mm_or_si64(_mm_and_si64(_tmp3, min2), 
-                                          _mm_andnot_si64(_tmp3, max2));
+      __m64 _tmp2 = (__m64)(0xff00UL);
+      __m64 v2 = _mm_or_si64(_mm_and_si64(_tmp2, min2), 
+                                          _mm_andnot_si64(_tmp2, max2));
       
       return v2;
  }
@@ -159,13 +152,11 @@ batcher_4_uint8_t_vec(__m64 v) {
 batcher_4_uint8_t(uint8_t * const arr) 
                              {
       
-      __m64 _tmp0 = _mm_set1_pi8(uint8_t(0xff));
-      __builtin_memcpy(&_tmp0, arr, 4);
-      __m64 v = _tmp0;
-      fill_works(v);
+      __m64 v = (*((_aliasing_m64_ *)arr));
+      
       v = batcher_4_uint8_t_vec(v);
       
-      fill_works(v);__builtin_memcpy(arr, &v, 4);
+      (*((_aliasing_m64_ *)arr)) = v;
       
  }
 

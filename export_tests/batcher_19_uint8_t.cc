@@ -64,10 +64,10 @@ Sorting Network Information:
 	Underlying Sort Type             : uint8_t
 	Network Generation Algorithm     : batcher
 	Network Depth                    : 14
-	SIMD Instructions                : 3 / 70
+	SIMD Instructions                : 2 / 70
 	Optimization Preference          : space
 	SIMD Type                        : __m256i
-	SIMD Instruction Set(s) Used     : AVX512vl, AVX512bw, SSE2, AVX512vbmi, AVX, AVX2
+	SIMD Instruction Set(s) Used     : AVX, AVX512vbmi, AVX512vl, AVX2, AVX512bw
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Integer Aligned Load & Store     : True
@@ -106,14 +106,6 @@ Performance Notes:
 #include <stdint.h>
 
 
-
- void fill_works(__m256i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 32);
-      int i = N;for (; i < 32; ++i) {
-          assert(t.arr[i] == uint8_t(0xff));
- }
-}
 
 /* SIMD Sort */
  __m256i __attribute__((const)) 
@@ -357,12 +349,11 @@ batcher_19_uint8_t_vec(__m256i v) {
 batcher_19_uint8_t(uint8_t * const arr) 
                              {
       
-      __m256i _tmp0 = _mm256_set1_epi8(uint8_t(0xff));
-      __m256i v = _mm256_mask_loadu_epi8(_tmp0, 0x7ffff, arr);
-      fill_works(v);
+      __m256i v = _mm256_load_si256((__m256i *)arr);
+      
       v = batcher_19_uint8_t_vec(v);
       
-      fill_works(v);_mm256_mask_storeu_epi8((void *)arr, 0x7ffff, v);
+      _mm256_store_si256((__m256i *)arr, v);
       
  }
 

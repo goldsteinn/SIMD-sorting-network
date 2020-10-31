@@ -64,14 +64,14 @@ Sorting Network Information:
 	Underlying Sort Type             : uint8_t
 	Network Generation Algorithm     : minimum
 	Network Depth                    : 8
-	SIMD Instructions                : 4 / 47
-	Optimization Preference          : uop
+	SIMD Instructions                : 2 / 40
+	Optimization Preference          : space
 	SIMD Type                        : __m128i
-	SIMD Instruction Set(s) Used     : AVX2, SSE2, SSSE3, SSE4.1
-	SIMD Instruction Set(s) Excluded : AVX512*
-	Aligned Load & Store             : False
-	Integer Aligned Load & Store     : False
-	Full Load & Store                : False
+	SIMD Instruction Set(s) Used     : SSE2, SSSE3, SSE4.1, AVX512vl, AVX512bw
+	SIMD Instruction Set(s) Excluded : None
+	Aligned Load & Store             : True
+	Integer Aligned Load & Store     : True
+	Full Load & Store                : True
 	Scaled Sorting Network           : False
 
 Performance Notes:
@@ -129,9 +129,7 @@ minimum_12_uint8_t_vec(__m128i v) {
                                        11, 6, 10, 8, 3, 1, 5, 0, 4, 2));
       __m128i min1 = _mm_min_epu8(v0, perm1);
       __m128i max1 = _mm_max_epu8(v0, perm1);
-      __m128i v1 = _mm_blendv_epi8(max1, min1, _mm_set_epi8(0, 0, 0, 0, 0, 0, 
-                                   128, 0, 128, 128, 0, 0, 128, 0, 128, 
-                                   128));
+      __m128i v1 = _mm_mask_mov_epi8(max1, 0x2cb, min1);
       
       /* Pairs: ([15,15], [14,14], [13,13], [12,12], [10,11], [2,9], [8,8], 
                  [4,7], [5,6], [3,3], [0,1]) */
@@ -141,9 +139,7 @@ minimum_12_uint8_t_vec(__m128i v) {
                                        11, 2, 8, 4, 5, 6, 7, 3, 9, 0, 1));
       __m128i min2 = _mm_min_epu8(v1, perm2);
       __m128i max2 = _mm_max_epu8(v1, perm2);
-      __m128i v2 = _mm_blendv_epi8(max2, min2, _mm_set_epi8(0, 0, 0, 0, 0, 
-                                   128, 0, 0, 0, 0, 128, 128, 0, 128, 0, 
-                                   128));
+      __m128i v2 = _mm_mask_mov_epi8(max2, 0x435, min2);
       
       /* Pairs: ([15,15], [14,14], [13,13], [12,12], [11,11], [8,10], [4,9], 
                  [2,7], [6,6], [5,5], [1,3], [0,0]) */
@@ -153,8 +149,7 @@ minimum_12_uint8_t_vec(__m128i v) {
                                        8, 4, 10, 2, 6, 5, 9, 1, 7, 3, 0));
       __m128i min3 = _mm_min_epu8(v2, perm3);
       __m128i max3 = _mm_max_epu8(v2, perm3);
-      __m128i v3 = _mm_blendv_epi8(max3, min3, _mm_set_epi8(0, 0, 0, 0, 0, 0, 
-                                   0, 128, 0, 0, 0, 128, 0, 128, 128, 0));
+      __m128i v3 = _mm_mask_mov_epi8(max3, 0x116, min3);
       
       /* Pairs: ([15,15], [14,14], [13,13], [12,12], [10,11], [8,9], [6,7], 
                  [4,5], [2,3], [0,1]) */
@@ -164,9 +159,7 @@ minimum_12_uint8_t_vec(__m128i v) {
                                        11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1));
       __m128i min4 = _mm_min_epu8(v3, perm4);
       __m128i max4 = _mm_max_epu8(v3, perm4);
-      __m128i v4 = _mm_blendv_epi8(max4, min4, _mm_set_epi8(0, 0, 0, 0, 0, 
-                                   128, 0, 128, 0, 128, 0, 128, 0, 128, 0, 
-                                   128));
+      __m128i v4 = _mm_mask_mov_epi8(max4, 0x555, min4);
       
       /* Pairs: ([15,15], [14,14], [13,13], [12,12], [11,11], [9,10], [6,8], 
                  [7,7], [3,5], [4,4], [1,2], [0,0]) */
@@ -176,8 +169,7 @@ minimum_12_uint8_t_vec(__m128i v) {
                                        9, 10, 6, 7, 8, 3, 4, 5, 1, 2, 0));
       __m128i min5 = _mm_min_epu8(v4, perm5);
       __m128i max5 = _mm_max_epu8(v4, perm5);
-      __m128i v5 = _mm_blendv_epi8(max5, min5, _mm_set_epi8(0, 0, 0, 0, 0, 0, 
-                                   128, 0, 0, 128, 0, 0, 128, 0, 128, 0));
+      __m128i v5 = _mm_mask_mov_epi8(max5, 0x24a, min5);
       
       /* Pairs: ([15,15], [14,14], [13,13], [12,12], [11,11], [10,10], [7,9], 
                  [5,8], [3,6], [2,4], [1,1], [0,0]) */
@@ -187,8 +179,7 @@ minimum_12_uint8_t_vec(__m128i v) {
                                        10, 7, 5, 9, 3, 8, 2, 6, 4, 1, 0));
       __m128i min6 = _mm_min_epu8(v5, perm6);
       __m128i max6 = _mm_max_epu8(v5, perm6);
-      __m128i v6 = _mm_blendv_epi8(max6, min6, _mm_set_epi8(0, 0, 0, 0, 0, 0, 
-                                   0, 0, 128, 0, 128, 0, 128, 128, 0, 0));
+      __m128i v6 = _mm_mask_mov_epi8(max6, 0xac, min6);
       
       /* Pairs: ([15,15], [14,14], [13,13], [12,12], [11,11], [9,10], [7,8], 
                  [5,6], [3,4], [1,2], [0,0]) */
@@ -198,8 +189,7 @@ minimum_12_uint8_t_vec(__m128i v) {
                                        9, 10, 7, 8, 5, 6, 3, 4, 1, 2, 0));
       __m128i min7 = _mm_min_epu8(v6, perm7);
       __m128i max7 = _mm_max_epu8(v6, perm7);
-      __m128i v7 = _mm_blendv_epi8(max7, min7, _mm_set_epi8(0, 0, 0, 0, 0, 0, 
-                                   128, 0, 128, 0, 128, 0, 128, 0, 128, 0));
+      __m128i v7 = _mm_mask_mov_epi8(max7, 0x2aa, min7);
       
       return v7;
  }
@@ -211,13 +201,11 @@ minimum_12_uint8_t_vec(__m128i v) {
 minimum_12_uint8_t(uint8_t * const arr) 
                              {
       
-      __m128i v = _mm_maskload_epi32((int32_t * const)arr, _mm_set_epi32(0x0, 
-                                      0x80000000, 0x80000000, 0x80000000));
+      __m128i v = _mm_load_si128((__m128i *)arr);
       
       v = minimum_12_uint8_t_vec(v);
       
-      _mm_maskstore_epi32((int32_t * const)arr, _mm_set_epi32(0x0, 
-                           0x80000000, 0x80000000, 0x80000000), v);
+      _mm_store_si128((__m128i *)arr, v);
       
  }
 

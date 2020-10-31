@@ -67,7 +67,7 @@ Sorting Network Information:
 	SIMD Instructions                : 2 / 27
 	Optimization Preference          : space
 	SIMD Type                        : __m256i
-	SIMD Instruction Set(s) Used     : AVX2, SSE2, AVX, AVX512f, AVX512vl
+	SIMD Instruction Set(s) Used     : AVX, AVX2
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Integer Aligned Load & Store     : True
@@ -106,14 +106,6 @@ Performance Notes:
 #include <stdint.h>
 
 
-
- void fill_works(__m256i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 32);
-      int i = N;for (; i < 8; ++i) {
-          assert(t.arr[i] == uint32_t(0xffffffff));
- }
-}
 
 /* SIMD Sort */
  __m256i __attribute__((const)) 
@@ -174,16 +166,11 @@ oddeven_8_uint32_t_vec(__m256i v) {
 oddeven_8_uint32_t(uint32_t * const 
                              arr) {
       
-      __m256i _tmp0 = _mm256_set1_epi32(uint32_t(0xffffffff));
-      asm volatile("vpblendd %[load_mask], (%[arr]), %[fill_v], %[fill_v]\n"
-                   : [ fill_v ] "+x" (_tmp0)
-                   : [ arr ] "r" (arr), [ load_mask ] "i" (0xff)
-                   :);
-      __m256i v = _tmp0;
-      fill_works(v);
+      __m256i v = _mm256_load_si256((__m256i *)arr);
+      
       v = oddeven_8_uint32_t_vec(v);
       
-      fill_works(v);_mm256_mask_store_epi32((void *)arr, 0xff, v);
+      _mm256_store_si256((__m256i *)arr, v);
       
  }
 

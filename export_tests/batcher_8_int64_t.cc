@@ -108,27 +108,34 @@ Performance Notes:
 
 
 /* SIMD Sort */
-     __m512i __attribute__((const)) 
-
+ __m512i __attribute__((const)) 
 batcher_8_int64_t_vec(__m512i v) {
       
+      /* Pairs: ([3,7], [2,6], [1,5], [0,4]) */
+      /* Perm:  ( 3,  2,  1,  0,  7,  6,  5,  4) */
       __m512i perm0 = _mm512_permutexvar_epi64(_mm512_set_epi64(3, 2, 1, 0, 
                                                7, 6, 5, 4), v);
       __m512i min0 = _mm512_min_epi64(v, perm0);
       __m512i max0 = _mm512_max_epi64(v, perm0);
       __m512i v0 = _mm512_mask_mov_epi64(max0, 0xf, min0);
       
+      /* Pairs: ([5,7], [4,6], [1,3], [0,2]) */
+      /* Perm:  ( 5,  4,  7,  6,  1,  0,  3,  2) */
       __m512i perm1 = _mm512_permutex_epi64(v0, 0x4e);
       __m512i min1 = _mm512_min_epi64(v0, perm1);
       __m512i max1 = _mm512_max_epi64(v0, perm1);
       __m512i v1 = _mm512_mask_mov_epi64(max1, 0x33, min1);
       
+      /* Pairs: ([6,7], [3,5], [2,4], [0,1]) */
+      /* Perm:  ( 6,  7,  3,  2,  5,  4,  0,  1) */
       __m512i perm2 = _mm512_permutexvar_epi64(_mm512_set_epi64(6, 7, 3, 2, 
                                                5, 4, 0, 1), v1);
       __m512i min2 = _mm512_min_epi64(v1, perm2);
       __m512i max2 = _mm512_max_epi64(v1, perm2);
       __m512i v2 = _mm512_mask_mov_epi64(max2, 0x4d, min2);
       
+      /* Pairs: ([7,7], [6,6], [4,5], [2,3], [1,1], [0,0]) */
+      /* Perm:  ( 7,  6,  4,  5,  2,  3,  1,  0) */
       __m512i perm3 = _mm512_shuffle_epi8(v2, _mm512_set_epi8(63, 62, 61, 60, 
                                           59, 58, 57, 56, 55, 54, 53, 52, 51, 
                                           50, 49, 48, 39, 38, 37, 36, 35, 34, 
@@ -141,12 +148,16 @@ batcher_8_int64_t_vec(__m512i v) {
       __m512i max3 = _mm512_max_epi64(v2, perm3);
       __m512i v3 = _mm512_mask_mov_epi64(max3, 0x14, min3);
       
+      /* Pairs: ([7,7], [3,6], [5,5], [1,4], [2,2], [0,0]) */
+      /* Perm:  ( 7,  3,  5,  1,  6,  2,  4,  0) */
       __m512i perm4 = _mm512_permutexvar_epi64(_mm512_set_epi64(7, 3, 5, 1, 
                                                6, 2, 4, 0), v3);
       __m512i min4 = _mm512_min_epi64(v3, perm4);
       __m512i max4 = _mm512_max_epi64(v3, perm4);
       __m512i v4 = _mm512_mask_mov_epi64(max4, 0xa, min4);
       
+      /* Pairs: ([7,7], [5,6], [3,4], [1,2], [0,0]) */
+      /* Perm:  ( 7,  5,  6,  3,  4,  1,  2,  0) */
       __m512i perm5 = _mm512_permutexvar_epi64(_mm512_set_epi64(7, 5, 6, 3, 
                                                4, 1, 2, 0), v4);
       __m512i min5 = _mm512_min_epi64(v4, perm5);
@@ -159,10 +170,9 @@ batcher_8_int64_t_vec(__m512i v) {
 
 
 /* Wrapper For SIMD Sort */
-     void inline __attribute__((always_inline)) 
-
+ void inline __attribute__((always_inline)) 
 batcher_8_int64_t(int64_t * const arr) 
-                                 {
+                             {
       
       __m512i v = _mm512_load_si512((__m512i *)arr);
       

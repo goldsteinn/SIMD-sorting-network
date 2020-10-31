@@ -64,10 +64,10 @@ Sorting Network Information:
 	Underlying Sort Type             : uint16_t
 	Network Generation Algorithm     : bosenelson
 	Network Depth                    : 7
-	SIMD Instructions                : 3 / 33
+	SIMD Instructions                : 2 / 33
 	Optimization Preference          : space
 	SIMD Type                        : __m128i
-	SIMD Instruction Set(s) Used     : AVX512vl, AVX512bw, SSE2, SSSE3, SSE4.1, AVX2
+	SIMD Instruction Set(s) Used     : SSE2, SSSE3, SSE4.1, AVX2
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Integer Aligned Load & Store     : True
@@ -106,14 +106,6 @@ Performance Notes:
 #include <stdint.h>
 
 
-
- void fill_works(__m128i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 16);
-      int i = N;for (; i < 8; ++i) {
-          assert(t.arr[i] == uint16_t(0xffff));
- }
-}
 
 /* SIMD Sort */
  __m128i __attribute__((const)) 
@@ -183,12 +175,11 @@ bosenelson_7_uint16_t_vec(__m128i v) {
 bosenelson_7_uint16_t(uint16_t * const 
                              arr) {
       
-      __m128i _tmp0 = _mm_set1_epi16(uint16_t(0xffff));
-      __m128i v = _mm_mask_loadu_epi16(_tmp0, 0x7f, arr);
-      fill_works(v);
+      __m128i v = _mm_load_si128((__m128i *)arr);
+      
       v = bosenelson_7_uint16_t_vec(v);
       
-      fill_works(v);_mm_mask_storeu_epi16((void *)arr, 0x7f, v);
+      _mm_store_si128((__m128i *)arr, v);
       
  }
 

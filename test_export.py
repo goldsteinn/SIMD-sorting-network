@@ -11,7 +11,7 @@ types = [
 ]
 sizes = [1, 2, 4, 8, 1, 2, 4, 8]
 max_b = [32, 64]
-algorithms = ["best", "bitonic", "oddeven", "bosenelson", "batcher"]
+algorithms = ["best", "bitonic", "oddeven", "bosenelson", "batcher", "minimum"]
 extra_flags = [
     "--clang-format 1231231 ", "--clang-format 1231231 -i",
     "--clang-format 1231231 -O space", "--clang-format 1231231 -O space -i",
@@ -39,6 +39,8 @@ for max_bytes in max_b:
             if n < skip_to:
                 continue
             for a in algorithms:
+                if a == "minimum" and n >= 32:
+                    continue
                 for f in extra_flags:
                     os.system("rm -f export_tests/.tmp")
                     cmd = ""
@@ -78,9 +80,11 @@ for max_bytes in max_b:
                     export_driver_impl = export_driver_impl.replace(
                         "[N]", str(n))
 
-                    sname = "{}_{}_{}".format(true_alg, str(true_N), types[i])
+                    func_name = "{}_{}_{}".format(true_alg, str(true_N), types[i])
+                    sname = "{}_{}_{}".format(a, str(n), types[i])
+                    
                     export_driver_impl = export_driver_impl.replace(
-                        "[SORT_NAME]", sname)
+                        "[SORT_NAME]", func_name)
 
                     fname = "export_tests/" + sname + ".cc"
                     f = open(fname, "w+")

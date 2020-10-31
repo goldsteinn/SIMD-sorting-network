@@ -64,10 +64,10 @@ Sorting Network Information:
 	Underlying Sort Type             : uint8_t
 	Network Generation Algorithm     : oddeven
 	Network Depth                    : 10
-	SIMD Instructions                : 3 / 49
+	SIMD Instructions                : 2 / 49
 	Optimization Preference          : space
 	SIMD Type                        : __m128i
-	SIMD Instruction Set(s) Used     : AVX512vl, AVX512bw, SSE2, SSSE3, SSE4.1, AVX2
+	SIMD Instruction Set(s) Used     : SSE2, SSSE3, AVX512vl, AVX512bw, SSE4.1, AVX2
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Integer Aligned Load & Store     : True
@@ -106,14 +106,6 @@ Performance Notes:
 #include <stdint.h>
 
 
-
- void fill_works(__m128i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 16);
-      int i = N;for (; i < 16; ++i) {
-          assert(t.arr[i] == uint8_t(0xff));
- }
-}
 
 /* SIMD Sort */
  __m128i __attribute__((const)) 
@@ -228,12 +220,11 @@ oddeven_13_uint8_t_vec(__m128i v) {
 oddeven_13_uint8_t(uint8_t * const arr) 
                              {
       
-      __m128i _tmp0 = _mm_set1_epi8(uint8_t(0xff));
-      __m128i v = _mm_mask_loadu_epi8(_tmp0, 0x1fff, arr);
-      fill_works(v);
+      __m128i v = _mm_load_si128((__m128i *)arr);
+      
       v = oddeven_13_uint8_t_vec(v);
       
-      fill_works(v);_mm_mask_storeu_epi8((void *)arr, 0x1fff, v);
+      _mm_store_si128((__m128i *)arr, v);
       
  }
 

@@ -64,13 +64,13 @@ Sorting Network Information:
 	Underlying Sort Type             : int8_t
 	Network Generation Algorithm     : minimum
 	Network Depth                    : 9
-	SIMD Instructions                : 3 / 45
+	SIMD Instructions                : 2 / 45
 	Optimization Preference          : space
 	SIMD Type                        : __m128i
-	SIMD Instruction Set(s) Used     : AVX512vl, AVX512f, SSE2, SSSE3, SSE4.1, AVX512bw
+	SIMD Instruction Set(s) Used     : SSE2, SSSE3, SSE4.1, AVX512vl, AVX512bw
 	SIMD Instruction Set(s) Excluded : None
-	Aligned Load & Store             : False
-	Integer Aligned Load & Store     : False
+	Aligned Load & Store             : True
+	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
 	Scaled Sorting Network           : False
 
@@ -107,99 +107,121 @@ Performance Notes:
 
 
 
-void fill_works(__m128i v) {
-sarr<TYPE, N> t;
-memcpy(t.arr, &v, 16);
-int i = N;for (; i < 16; ++i) {
-assert(t.arr[i] == int8_t(0x7f));
-}
-}
-
 /* SIMD Sort */
-__m128i __attribute__((const)) minimum_16_int8_t_vec(__m128i v) {
-
-/* Pairs: ([10,15], [11,14], [3,13], [2,12], [8,9], [6,7], [0,5], [1,4]) */
-/* Perm:  (10, 11,  3,  2, 14, 15,  8,  9,  6,  7,  0,  1, 13, 12,  4,  5) */
-__m128i perm0 = _mm_shuffle_epi8(v, _mm_set_epi8(10, 11, 3, 2, 14, 15, 8, 9, 6, 7, 0, 1, 13, 12, 4, 5));
-__m128i min0 = _mm_min_epi8(v, perm0);
-__m128i max0 = _mm_max_epi8(v, perm0);
-__m128i v0 = _mm_mask_mov_epi8(max0, 0xd4f, min0);
-
-/* Pairs: ([13,15], [5,14], [9,12], [8,11], [1,10], [4,7], [3,6], [0,2]) */
-/* Perm:  (13,  5, 15,  9,  8,  1, 12, 11,  4,  3, 14,  7,  6,  0, 10,  2) */
-__m128i perm1 = _mm_shuffle_epi8(v0, _mm_set_epi8(13, 5, 15, 9, 8, 1, 12, 11, 4, 3, 14, 7, 6, 0, 10, 2));
-__m128i min1 = _mm_min_epi8(v0, perm1);
-__m128i max1 = _mm_max_epi8(v0, perm1);
-__m128i v1 = _mm_mask_mov_epi8(max1, 0x233b, min1);
-
-/* Pairs: ([7,15], [12,14], [4,13], [2,11], [6,10], [5,9], [0,8], [1,3]) */
-/* Perm:  ( 7, 12,  4, 14,  2,  6,  5,  0, 15, 10,  9, 13,  1, 11,  3,  8) */
-__m128i perm2 = _mm_shuffle_epi8(v1, _mm_set_epi8(7, 12, 4, 14, 2, 6, 5, 0, 15, 10, 9, 13, 1, 11, 3, 8));
-__m128i min2 = _mm_min_epi8(v1, perm2);
-__m128i max2 = _mm_max_epi8(v1, perm2);
-__m128i v2 = _mm_mask_mov_epi8(max2, 0x10f7, min2);
-
-/* Pairs: ([14,15], [11,13], [7,12], [9,10], [3,8], [5,6], [2,4], [0,1]) */
-/* Perm:  (14, 15, 11,  7, 13,  9, 10,  3, 12,  5,  6,  2,  8,  4,  0,  1) */
-__m128i perm3 = _mm_shuffle_epi8(v2, _mm_set_epi8(14, 15, 11, 7, 13, 9, 10, 3, 12, 5, 6, 2, 8, 4, 0, 1));
-__m128i min3 = _mm_min_epi8(v2, perm3);
-__m128i max3 = _mm_max_epi8(v2, perm3);
-__m128i v3 = _mm_mask_mov_epi8(max3, 0x4aad, min3);
-
-/* Pairs: ([15,15], [12,14], [10,13], [7,11], [6,9], [4,8], [2,5], [1,3], [0,0]) */
-/* Perm:  (15, 12, 10, 14,  7, 13,  6,  4, 11,  9,  2,  8,  1,  5,  3,  0) */
-__m128i perm4 = _mm_shuffle_epi8(v3, _mm_set_epi8(15, 12, 10, 14, 7, 13, 6, 4, 11, 9, 2, 8, 1, 5, 3, 0));
-__m128i min4 = _mm_min_epi8(v3, perm4);
-__m128i max4 = _mm_max_epi8(v3, perm4);
-__m128i v4 = _mm_mask_mov_epi8(max4, 0x14d6, min4);
-
-/* Pairs: ([15,15], [13,14], [10,12], [4,11], [7,9], [6,8], [3,5], [1,2], [0,0]) */
-/* Perm:  (15, 13, 14, 10,  4, 12,  7,  6,  9,  8,  3, 11,  5,  1,  2,  0) */
-__m128i perm5 = _mm_shuffle_epi8(v4, _mm_set_epi8(15, 13, 14, 10, 4, 12, 7, 6, 9, 8, 3, 11, 5, 1, 2, 0));
-__m128i min5 = _mm_min_epi8(v4, perm5);
-__m128i max5 = _mm_max_epi8(v4, perm5);
-__m128i v5 = _mm_mask_mov_epi8(max5, 0x24da, min5);
-
-/* Pairs: ([15,15], [14,14], [12,13], [10,11], [8,9], [6,7], [4,5], [2,3], [1,1], [0,0]) */
-/* Perm:  (15, 14, 12, 13, 10, 11,  8,  9,  6,  7,  4,  5,  2,  3,  1,  0) */
-__m128i perm6 = _mm_shuffle_epi8(v5, _mm_set_epi8(15, 14, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 1, 0));
-__m128i min6 = _mm_min_epi8(v5, perm6);
-__m128i max6 = _mm_max_epi8(v5, perm6);
-__m128i v6 = _mm_mask_mov_epi8(max6, 0x1554, min6);
-
-/* Pairs: ([15,15], [14,14], [13,13], [12,12], [9,11], [8,10], [5,7], [4,6], [3,3], [2,2], [1,1], [0,0]) */
-/* Perm:  (15, 14, 13, 12,  9,  8, 11, 10,  5,  4,  7,  6,  3,  2,  1,  0) */
-__m128i perm7 = _mm_shufflehi_epi16(_mm_shufflelo_epi16(v6, 0xb4), 0xe1);
-__m128i min7 = _mm_min_epi8(v6, perm7);
-__m128i max7 = _mm_max_epi8(v6, perm7);
-__m128i v7 = _mm_blend_epi16(max7, min7, 0x14);
-
-/* Pairs: ([15,15], [14,14], [13,13], [11,12], [9,10], [7,8], [5,6], [3,4], [2,2], [1,1], [0,0]) */
-/* Perm:  (15, 14, 13, 11, 12,  9, 10,  7,  8,  5,  6,  3,  4,  2,  1,  0) */
-__m128i perm8 = _mm_shuffle_epi8(v7, _mm_set_epi8(15, 14, 13, 11, 12, 9, 10, 7, 8, 5, 6, 3, 4, 2, 1, 0));
-__m128i min8 = _mm_min_epi8(v7, perm8);
-__m128i max8 = _mm_max_epi8(v7, perm8);
-__m128i v8 = _mm_mask_mov_epi8(max8, 0xaa8, min8);
-
-return v8;
-}
+ __m128i __attribute__((const)) 
+minimum_16_int8_t_vec(__m128i v) {
+      
+      /* Pairs: ([10,15], [11,14], [3,13], [2,12], [8,9], [6,7], [0,5], 
+                 [1,4]) */
+      /* Perm:  (10, 11,  3,  2, 14, 15,  8,  9,  6,  7,  0,  1, 13, 12,  4,  
+                 5) */
+      __m128i perm0 = _mm_shuffle_epi8(v, _mm_set_epi8(10, 11, 3, 2, 14, 15, 
+                                       8, 9, 6, 7, 0, 1, 13, 12, 4, 5));
+      __m128i min0 = _mm_min_epi8(v, perm0);
+      __m128i max0 = _mm_max_epi8(v, perm0);
+      __m128i v0 = _mm_mask_mov_epi8(max0, 0xd4f, min0);
+      
+      /* Pairs: ([13,15], [5,14], [9,12], [8,11], [1,10], [4,7], [3,6], 
+                 [0,2]) */
+      /* Perm:  (13,  5, 15,  9,  8,  1, 12, 11,  4,  3, 14,  7,  6,  0, 10,  
+                 2) */
+      __m128i perm1 = _mm_shuffle_epi8(v0, _mm_set_epi8(13, 5, 15, 9, 8, 1, 
+                                       12, 11, 4, 3, 14, 7, 6, 0, 10, 2));
+      __m128i min1 = _mm_min_epi8(v0, perm1);
+      __m128i max1 = _mm_max_epi8(v0, perm1);
+      __m128i v1 = _mm_mask_mov_epi8(max1, 0x233b, min1);
+      
+      /* Pairs: ([7,15], [12,14], [4,13], [2,11], [6,10], [5,9], [0,8], 
+                 [1,3]) */
+      /* Perm:  ( 7, 12,  4, 14,  2,  6,  5,  0, 15, 10,  9, 13,  1, 11,  3,  
+                 8) */
+      __m128i perm2 = _mm_shuffle_epi8(v1, _mm_set_epi8(7, 12, 4, 14, 2, 6, 
+                                       5, 0, 15, 10, 9, 13, 1, 11, 3, 8));
+      __m128i min2 = _mm_min_epi8(v1, perm2);
+      __m128i max2 = _mm_max_epi8(v1, perm2);
+      __m128i v2 = _mm_mask_mov_epi8(max2, 0x10f7, min2);
+      
+      /* Pairs: ([14,15], [11,13], [7,12], [9,10], [3,8], [5,6], [2,4], 
+                 [0,1]) */
+      /* Perm:  (14, 15, 11,  7, 13,  9, 10,  3, 12,  5,  6,  2,  8,  4,  0,  
+                 1) */
+      __m128i perm3 = _mm_shuffle_epi8(v2, _mm_set_epi8(14, 15, 11, 7, 13, 9, 
+                                       10, 3, 12, 5, 6, 2, 8, 4, 0, 1));
+      __m128i min3 = _mm_min_epi8(v2, perm3);
+      __m128i max3 = _mm_max_epi8(v2, perm3);
+      __m128i v3 = _mm_mask_mov_epi8(max3, 0x4aad, min3);
+      
+      /* Pairs: ([15,15], [12,14], [10,13], [7,11], [6,9], [4,8], [2,5], 
+                 [1,3], [0,0]) */
+      /* Perm:  (15, 12, 10, 14,  7, 13,  6,  4, 11,  9,  2,  8,  1,  5,  3,  
+                 0) */
+      __m128i perm4 = _mm_shuffle_epi8(v3, _mm_set_epi8(15, 12, 10, 14, 7, 
+                                       13, 6, 4, 11, 9, 2, 8, 1, 5, 3, 0));
+      __m128i min4 = _mm_min_epi8(v3, perm4);
+      __m128i max4 = _mm_max_epi8(v3, perm4);
+      __m128i v4 = _mm_mask_mov_epi8(max4, 0x14d6, min4);
+      
+      /* Pairs: ([15,15], [13,14], [10,12], [4,11], [7,9], [6,8], [3,5], 
+                 [1,2], [0,0]) */
+      /* Perm:  (15, 13, 14, 10,  4, 12,  7,  6,  9,  8,  3, 11,  5,  1,  2,  
+                 0) */
+      __m128i perm5 = _mm_shuffle_epi8(v4, _mm_set_epi8(15, 13, 14, 10, 4, 
+                                       12, 7, 6, 9, 8, 3, 11, 5, 1, 2, 0));
+      __m128i min5 = _mm_min_epi8(v4, perm5);
+      __m128i max5 = _mm_max_epi8(v4, perm5);
+      __m128i v5 = _mm_mask_mov_epi8(max5, 0x24da, min5);
+      
+      /* Pairs: ([15,15], [14,14], [12,13], [10,11], [8,9], [6,7], [4,5], 
+                 [2,3], [1,1], [0,0]) */
+      /* Perm:  (15, 14, 12, 13, 10, 11,  8,  9,  6,  7,  4,  5,  2,  3,  1,  
+                 0) */
+      __m128i perm6 = _mm_shuffle_epi8(v5, _mm_set_epi8(15, 14, 12, 13, 10, 
+                                       11, 8, 9, 6, 7, 4, 5, 2, 3, 1, 0));
+      __m128i min6 = _mm_min_epi8(v5, perm6);
+      __m128i max6 = _mm_max_epi8(v5, perm6);
+      __m128i v6 = _mm_mask_mov_epi8(max6, 0x1554, min6);
+      
+      /* Pairs: ([15,15], [14,14], [13,13], [12,12], [9,11], [8,10], [5,7], 
+                 [4,6], [3,3], [2,2], [1,1], [0,0]) */
+      /* Perm:  (15, 14, 13, 12,  9,  8, 11, 10,  5,  4,  7,  6,  3,  2,  1,  
+                 0) */
+      __m128i perm7 = _mm_shufflehi_epi16(_mm_shufflelo_epi16(v6, 0xb4), 
+                                          0xe1);
+      __m128i min7 = _mm_min_epi8(v6, perm7);
+      __m128i max7 = _mm_max_epi8(v6, perm7);
+      __m128i v7 = _mm_blend_epi16(max7, min7, 0x14);
+      
+      /* Pairs: ([15,15], [14,14], [13,13], [11,12], [9,10], [7,8], [5,6], 
+                 [3,4], [2,2], [1,1], [0,0]) */
+      /* Perm:  (15, 14, 13, 11, 12,  9, 10,  7,  8,  5,  6,  3,  4,  2,  1,  
+                 0) */
+      __m128i perm8 = _mm_shuffle_epi8(v7, _mm_set_epi8(15, 14, 13, 11, 12, 
+                                       9, 10, 7, 8, 5, 6, 3, 4, 2, 1, 0));
+      __m128i min8 = _mm_min_epi8(v7, perm8);
+      __m128i max8 = _mm_max_epi8(v7, perm8);
+      __m128i v8 = _mm_mask_mov_epi8(max8, 0xaa8, min8);
+      
+      return v8;
+ }
 
 
 
 /* Wrapper For SIMD Sort */
-void inline __attribute__((always_inline)) minimum_16_int8_t(int8_t * const arr) {
-
-__m128i _tmp0 = _mm_set1_epi8(int8_t(0x7f));
-__m128i v = _mm_mask_loadu_epi32(_tmp0, 0xf, (int32_t * const)arr);
-fill_works(v);
-v = minimum_16_int8_t_vec(v);
-
-fill_works(v);_mm_mask_storeu_epi8((void *)arr, 0xffff, v);
-
-}
+ void inline __attribute__((always_inline)) 
+minimum_16_int8_t(int8_t * const arr) 
+                             {
+      
+      __m128i v = _mm_load_si128((__m128i *)arr);
+      
+      v = minimum_16_int8_t_vec(v);
+      
+      _mm_store_si128((__m128i *)arr, v);
+      
+ }
 
 
 #endif
+
 
 
 

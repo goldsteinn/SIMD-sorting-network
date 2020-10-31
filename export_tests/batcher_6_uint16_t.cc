@@ -64,11 +64,11 @@ Sorting Network Information:
 	Underlying Sort Type             : uint16_t
 	Network Generation Algorithm     : batcher
 	Network Depth                    : 6
-	SIMD Instructions                : 3 / 28
+	SIMD Instructions                : 2 / 28
 	Optimization Preference          : space
 	SIMD Type                        : __m128i
-	SIMD Instruction Set(s) Used     : AVX2, SSE2, SSE4.1, SSSE3
-	SIMD Instruction Set(s) Excluded : AVX512*
+	SIMD Instruction Set(s) Used     : SSE2, SSE4.1, AVX2, SSSE3
+	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Integer Aligned Load & Store     : True
 	Full Load & Store                : True
@@ -107,36 +107,25 @@ Performance Notes:
 
 
 
- void fill_works(__m128i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 16);
-      int i = N;for (; i < 8; ++i) {
-          assert(t.arr[i] == uint16_t(0xffff));
- }
-}
-
 /* SIMD Sort */
  __m128i __attribute__((const)) 
 batcher_6_uint16_t_vec(__m128i v) {
       
-      /* Pairs: ([7, 7], [6, 6], [1, 5], [0, 4], [3, 3], [2, 2], [5, 1], [4, 
-                 0]) */
+      /* Pairs: ([7,7], [6,6], [1,5], [0,4], [3,3], [2,2]) */
       /* Perm:  ( 7,  6,  1,  0,  3,  2,  5,  4) */
       __m128i perm0 = _mm_shuffle_epi32(v, uint8_t(0xc6));
       __m128i min0 = _mm_min_epu16(v, perm0);
       __m128i max0 = _mm_max_epu16(v, perm0);
       __m128i v0 = _mm_blend_epi32(max0, min0, 0x1);
       
-      /* Pairs: ([7, 7], [6, 6], [5, 5], [4, 4], [1, 3], [0, 2], [3, 1], [2, 
-                 0]) */
+      /* Pairs: ([7,7], [6,6], [5,5], [4,4], [1,3], [0,2]) */
       /* Perm:  ( 7,  6,  5,  4,  1,  0,  3,  2) */
       __m128i perm1 = _mm_shuffle_epi32(v0, uint8_t(0xe1));
       __m128i min1 = _mm_min_epu16(v0, perm1);
       __m128i max1 = _mm_max_epu16(v0, perm1);
       __m128i v1 = _mm_blend_epi32(max1, min1, 0x1);
       
-      /* Pairs: ([7, 7], [6, 6], [3, 5], [2, 4], [5, 3], [4, 2], [0, 1], [1, 
-                 0]) */
+      /* Pairs: ([7,7], [6,6], [3,5], [2,4], [0,1]) */
       /* Perm:  ( 7,  6,  3,  2,  5,  4,  0,  1) */
       __m128i perm2 = _mm_shuffle_epi8(v1, _mm_set_epi8(15, 14, 13, 12, 7, 6, 
                                        5, 4, 11, 10, 9, 8, 1, 0, 3, 2));
@@ -144,8 +133,7 @@ batcher_6_uint16_t_vec(__m128i v) {
       __m128i max2 = _mm_max_epu16(v1, perm2);
       __m128i v2 = _mm_blend_epi16(max2, min2, 0xd);
       
-      /* Pairs: ([7, 7], [6, 6], [4, 5], [5, 4], [2, 3], [3, 2], [1, 1], [0, 
-                 0]) */
+      /* Pairs: ([7,7], [6,6], [4,5], [2,3], [1,1], [0,0]) */
       /* Perm:  ( 7,  6,  4,  5,  2,  3,  1,  0) */
       __m128i perm3 = _mm_shufflehi_epi16(_mm_shufflelo_epi16(v2, 0xb4), 
                                           0xe1);
@@ -153,8 +141,7 @@ batcher_6_uint16_t_vec(__m128i v) {
       __m128i max3 = _mm_max_epu16(v2, perm3);
       __m128i v3 = _mm_blend_epi16(max3, min3, 0x14);
       
-      /* Pairs: ([7, 7], [6, 6], [5, 5], [1, 4], [3, 3], [2, 2], [4, 1], [0, 
-                 0]) */
+      /* Pairs: ([7,7], [6,6], [5,5], [1,4], [3,3], [2,2], [0,0]) */
       /* Perm:  ( 7,  6,  5,  1,  3,  2,  4,  0) */
       __m128i perm4 = _mm_shuffle_epi8(v3, _mm_set_epi8(15, 14, 13, 12, 11, 
                                        10, 3, 2, 7, 6, 5, 4, 9, 8, 1, 0));
@@ -162,8 +149,7 @@ batcher_6_uint16_t_vec(__m128i v) {
       __m128i max4 = _mm_max_epu16(v3, perm4);
       __m128i v4 = _mm_blend_epi16(max4, min4, 0x2);
       
-      /* Pairs: ([7, 7], [6, 6], [5, 5], [3, 4], [4, 3], [1, 2], [2, 1], [0, 
-                 0]) */
+      /* Pairs: ([7,7], [6,6], [5,5], [3,4], [1,2], [0,0]) */
       /* Perm:  ( 7,  6,  5,  3,  4,  1,  2,  0) */
       __m128i perm5 = _mm_shuffle_epi8(v4, _mm_set_epi8(15, 14, 13, 12, 11, 
                                        10, 7, 6, 9, 8, 3, 2, 5, 4, 1, 0));
@@ -181,18 +167,11 @@ batcher_6_uint16_t_vec(__m128i v) {
 batcher_6_uint16_t(uint16_t * const 
                              arr) {
       
-      __m128i _tmp0 = _mm_set1_epi16(uint16_t(0xffff));
-      asm volatile("vpblendd %[load_mask], (%[arr]), %[fill_v], %[fill_v]\n"
-                   : [ fill_v ] "+x" (_tmp0)
-                   : [ arr ] "r" (arr), [ load_mask ] "i" (0x7)
-                   :);
-      __m128i v = _tmp0;
-      fill_works(v);
+      __m128i v = _mm_load_si128((__m128i *)arr);
+      
       v = batcher_6_uint16_t_vec(v);
       
-      fill_works(v);_mm_maskstore_epi32((int32_t * const)arr, 
-                                         _mm_set_epi32(0x0, 0x80000000, 
-                                         0x80000000, 0x80000000), v);
+      _mm_store_si128((__m128i *)arr, v);
       
  }
 

@@ -64,7 +64,7 @@ Sorting Network Information:
 	Underlying Sort Type             : uint8_t
 	Network Generation Algorithm     : bosenelson
 	Network Depth                    : 7
-	SIMD Instructions                : 1 / 48
+	SIMD Instructions                : 0 / 48
 	Optimization Preference          : space
 	SIMD Type                        : __m64
 	SIMD Instruction Set(s) Used     : MMX, SSSE3, SSE
@@ -109,14 +109,6 @@ Performance Notes:
 typedef __m64 _aliasing_m64_ __attribute__((aligned(8), may_alias));
 
 
- void fill_works(__m64 v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 8);
-      int i = N;for (; i < 8; ++i) {
-          assert(t.arr[i] == uint8_t(0xff));
- }
-}
-
 /* SIMD Sort */
  __m64 __attribute__((const)) 
 bosenelson_7_uint8_t_vec(__m64 v) {
@@ -126,9 +118,9 @@ bosenelson_7_uint8_t_vec(__m64 v) {
       __m64 perm0 = _mm_shuffle_pi8(v, _mm_set_pi8(7, 5, 6, 3, 4, 1, 2, 0));
       __m64 min0 = _mm_min_pu8(v, perm0);
       __m64 max0 = _mm_max_pu8(v, perm0);
-      __m64 _tmp1 = (__m64)(0xff00ff00ff00UL);
-      __m64 v0 = _mm_or_si64(_mm_and_si64(_tmp1, min0), 
-                                          _mm_andnot_si64(_tmp1, max0));
+      __m64 _tmp0 = (__m64)(0xff00ff00ff00UL);
+      __m64 v0 = _mm_or_si64(_mm_and_si64(_tmp0, min0), 
+                                          _mm_andnot_si64(_tmp0, max0));
       
       /* Pairs: ([7,7], [4,6], [3,5], [0,2], [1,1]) */
       /* Perm:  ( 7,  4,  3,  6,  5,  0,  1,  2) */
@@ -136,9 +128,9 @@ bosenelson_7_uint8_t_vec(__m64 v) {
                                                     2));
       __m64 min1 = _mm_min_pu8(v0, perm1);
       __m64 max1 = _mm_max_pu8(v0, perm1);
-      __m64 _tmp2 = (__m64)(0xffff0000ffUL);
-      __m64 v1 = _mm_or_si64(_mm_and_si64(_tmp2, min1), 
-                                          _mm_andnot_si64(_tmp2, max1));
+      __m64 _tmp1 = (__m64)(0xffff0000ffUL);
+      __m64 v1 = _mm_or_si64(_mm_and_si64(_tmp1, min1), 
+                                          _mm_andnot_si64(_tmp1, max1));
       
       /* Pairs: ([7,7], [2,6], [4,5], [3,3], [0,1]) */
       /* Perm:  ( 7,  2,  4,  5,  3,  6,  0,  1) */
@@ -146,18 +138,18 @@ bosenelson_7_uint8_t_vec(__m64 v) {
                                                     1));
       __m64 min2 = _mm_min_pu8(v1, perm2);
       __m64 max2 = _mm_max_pu8(v1, perm2);
-      __m64 _tmp3 = (__m64)(0xff00ff00ffUL);
-      __m64 v2 = _mm_or_si64(_mm_and_si64(_tmp3, min2), 
-                                          _mm_andnot_si64(_tmp3, max2));
+      __m64 _tmp2 = (__m64)(0xff00ff00ffUL);
+      __m64 v2 = _mm_or_si64(_mm_and_si64(_tmp2, min2), 
+                                          _mm_andnot_si64(_tmp2, max2));
       
       /* Pairs: ([7,7], [6,6], [1,5], [0,4], [3,3], [2,2]) */
       /* Perm:  ( 7,  6,  1,  0,  3,  2,  5,  4) */
       __m64 perm3 = _mm_shuffle_pi16(v2, 0xc6);
       __m64 min3 = _mm_min_pu8(v2, perm3);
       __m64 max3 = _mm_max_pu8(v2, perm3);
-      __m64 _tmp4 = (__m64)(0xffffUL);
-      __m64 v3 = _mm_or_si64(_mm_and_si64(_tmp4, min3), 
-                                          _mm_andnot_si64(_tmp4, max3));
+      __m64 _tmp3 = (__m64)(0xffffUL);
+      __m64 v3 = _mm_or_si64(_mm_and_si64(_tmp3, min3), 
+                                          _mm_andnot_si64(_tmp3, max3));
       
       /* Pairs: ([7,7], [6,6], [2,5], [4,4], [0,3], [1,1]) */
       /* Perm:  ( 7,  6,  2,  4,  0,  5,  1,  3) */
@@ -165,9 +157,9 @@ bosenelson_7_uint8_t_vec(__m64 v) {
                                                     3));
       __m64 min4 = _mm_min_pu8(v3, perm4);
       __m64 max4 = _mm_max_pu8(v3, perm4);
-      __m64 _tmp5 = (__m64)(0xff00ffUL);
-      __m64 v4 = _mm_or_si64(_mm_and_si64(_tmp5, min4), 
-                                          _mm_andnot_si64(_tmp5, max4));
+      __m64 _tmp4 = (__m64)(0xff00ffUL);
+      __m64 v4 = _mm_or_si64(_mm_and_si64(_tmp4, min4), 
+                                          _mm_andnot_si64(_tmp4, max4));
       
       /* Pairs: ([7,7], [6,6], [5,5], [2,4], [1,3], [0,0]) */
       /* Perm:  ( 7,  6,  5,  2,  1,  4,  3,  0) */
@@ -175,9 +167,9 @@ bosenelson_7_uint8_t_vec(__m64 v) {
                                                     0));
       __m64 min5 = _mm_min_pu8(v4, perm5);
       __m64 max5 = _mm_max_pu8(v4, perm5);
-      __m64 _tmp6 = (__m64)(0xffff00UL);
-      __m64 v5 = _mm_or_si64(_mm_and_si64(_tmp6, min5), 
-                                          _mm_andnot_si64(_tmp6, max5));
+      __m64 _tmp5 = (__m64)(0xffff00UL);
+      __m64 v5 = _mm_or_si64(_mm_and_si64(_tmp5, min5), 
+                                          _mm_andnot_si64(_tmp5, max5));
       
       /* Pairs: ([7,7], [6,6], [5,5], [4,4], [2,3], [1,1], [0,0]) */
       /* Perm:  ( 7,  6,  5,  4,  2,  3,  1,  0) */
@@ -185,9 +177,9 @@ bosenelson_7_uint8_t_vec(__m64 v) {
                                                     0));
       __m64 min6 = _mm_min_pu8(v5, perm6);
       __m64 max6 = _mm_max_pu8(v5, perm6);
-      __m64 _tmp7 = (__m64)(0xff0000UL);
-      __m64 v6 = _mm_or_si64(_mm_and_si64(_tmp7, min6), 
-                                          _mm_andnot_si64(_tmp7, max6));
+      __m64 _tmp6 = (__m64)(0xff0000UL);
+      __m64 v6 = _mm_or_si64(_mm_and_si64(_tmp6, min6), 
+                                          _mm_andnot_si64(_tmp6, max6));
       
       return v6;
  }
@@ -199,13 +191,11 @@ bosenelson_7_uint8_t_vec(__m64 v) {
 bosenelson_7_uint8_t(uint8_t * const 
                              arr) {
       
-      __m64 _tmp0 = _mm_set1_pi8(uint8_t(0xff));
-      __builtin_memcpy(&_tmp0, arr, 7);
-      __m64 v = _tmp0;
-      fill_works(v);
+      __m64 v = (*((_aliasing_m64_ *)arr));
+      
       v = bosenelson_7_uint8_t_vec(v);
       
-      fill_works(v);__builtin_memcpy(arr, &v, 7);
+      (*((_aliasing_m64_ *)arr)) = v;
       
  }
 

@@ -64,10 +64,10 @@ Sorting Network Information:
 	Underlying Sort Type             : int16_t
 	Network Generation Algorithm     : oddeven
 	Network Depth                    : 10
-	SIMD Instructions                : 3 / 49
+	SIMD Instructions                : 2 / 49
 	Optimization Preference          : space
 	SIMD Type                        : __m256i
-	SIMD Instruction Set(s) Used     : AVX512vl, AVX512bw, SSE2, AVX2, AVX
+	SIMD Instruction Set(s) Used     : AVX, AVX2, AVX512vl, AVX512bw
 	SIMD Instruction Set(s) Excluded : None
 	Aligned Load & Store             : True
 	Integer Aligned Load & Store     : True
@@ -106,14 +106,6 @@ Performance Notes:
 #include <stdint.h>
 
 
-
- void fill_works(__m256i v) {
-      sarr<TYPE, N> t;
-      memcpy(t.arr, &v, 32);
-      int i = N;for (; i < 16; ++i) {
-          assert(t.arr[i] == int16_t(0x7fff));
- }
-}
 
 /* SIMD Sort */
  __m256i __attribute__((const)) 
@@ -242,12 +234,11 @@ oddeven_13_int16_t_vec(__m256i v) {
 oddeven_13_int16_t(int16_t * const arr) 
                              {
       
-      __m256i _tmp0 = _mm256_set1_epi16(int16_t(0x7fff));
-      __m256i v = _mm256_mask_loadu_epi16(_tmp0, 0x1fff, arr);
-      fill_works(v);
+      __m256i v = _mm256_load_si256((__m256i *)arr);
+      
       v = oddeven_13_int16_t_vec(v);
       
-      fill_works(v);_mm256_mask_storeu_epi16((void *)arr, 0x1fff, v);
+      _mm256_store_si256((__m256i *)arr, v);
       
  }
 
