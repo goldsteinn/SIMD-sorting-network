@@ -41,7 +41,7 @@ extra_flags_ops = ["-O uop", "-i", "--aligned", "-e"]
 
 export_template_file = "export_template.cc"
 exporter_exe = "../export.py"
-test_dir = "texport_tests"
+test_dir = "export_tests"
 tmp_file = ".tmp"
 
 
