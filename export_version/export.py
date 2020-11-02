@@ -11,7 +11,6 @@ import subprocess
 import os
 
 
-
 def sig_exit(signum, empty):
     print("Exiting on Signal({})".format(str(signum)))
     sys.exit(-1)
@@ -114,6 +113,8 @@ EXTRA_MEMORY = False
 DO_FORMAT = False
 CLANG_FORMAT_EXE = ""
 USER_TYPE = None
+
+MIN_MAX_COUNT = 0
 
 
 def choose_if(Opt, weight1, weight2):
@@ -442,9 +443,17 @@ class SIMD_Min_Fallback_m64_s8(SIMD_Instruction):
                          Sign.SIGNED, 1, SIMD_m64(), ["MMX"], weight)
 
     def generate_instruction(self):
-        instruction = "__m64 [TMP0] = _mm_cmpgt_pi8([V2], [V1]);"
-        instruction += "\n"
-        instruction += "_mm_or_si64(_mm_and_si64([TMP0], [V1]), _mm_andnot_si64([TMP0], [V2]))"
+        global MIN_MAX_COUNT
+
+        cmp_tmp = "_cmp_tmp{}".format(int(MIN_MAX_COUNT / 2))
+        instruction = ""
+        if MIN_MAX_COUNT % 2 == 0:
+            instruction = "__m64 [CMP_TMP] = _mm_cmpgt_pi8([V1], [V2]);".replace(
+                "[CMP_TMP]", cmp_tmp)
+            instruction += "\n"
+        instruction += "_mm_or_si64(_mm_and_si64([CMP_TMP], [V2]), _mm_andnot_si64([CMP_TMP], [V1]))".replace(
+            "[CMP_TMP]", cmp_tmp)
+        MIN_MAX_COUNT += 1
         return instruction
 
 
@@ -454,11 +463,20 @@ class SIMD_Min_Fallback_m64_u16(SIMD_Instruction):
                          Sign.UNSIGNED, 2, SIMD_m64(), ["MMX"], weight)
 
     def generate_instruction(self):
-        instruction = "__m64 [TMP0] = _mm_set1_pi16(1 << 15);"
-        instruction += "\n"
-        instruction += "__m64 [TMP1] = _mm_cmpgt_pi16(_mm_xor_si64([V1], [TMP0]), _mm_xor_si64([V2], [TMP0]));"
-        instruction += "\n"
-        instruction += "_mm_or_si64(_mm_and_si64([TMP1], [V2]), _mm_andnot_si64([TMP1], [V1]))"
+        global MIN_MAX_COUNT
+
+        cmp_tmp = "_cmp_tmp{}".format(int(MIN_MAX_COUNT / 2))
+        instruction = ""
+        if MIN_MAX_COUNT % 2 == 0:
+            instruction = "__m64 [TMP0] = _mm_set1_pi16(1 << 15);"
+            instruction += "\n"
+            instruction += "__m64 [CMP_TMP] = _mm_cmpgt_pi16(_mm_xor_si64([V1], [TMP0]), _mm_xor_si64([V2], [TMP0]));".replace(
+                "[CMP_TMP]", cmp_tmp)
+            instruction += "\n"
+        instruction += "_mm_or_si64(_mm_and_si64([CMP_TMP], [V2]), _mm_andnot_si64([CMP_TMP], [V1]))".replace(
+            "[CMP_TMP]", cmp_tmp)
+
+        MIN_MAX_COUNT += 1
         return instruction
 
 
@@ -468,11 +486,20 @@ class SIMD_Min_Fallback_s64(SIMD_Instruction):
                          Sign.SIGNED, 8, simd_type, constraints, weight)
 
     def generate_instruction(self):
-        instruction = "{} [TMP0] = {}_cmpgt_epi64([V1], [V2]);".format(
-            self.simd_type.to_string(), self.simd_type.prefix())
-        instruction += "\n"
-        instruction += "{}_blendv_epi8([V1], [V2], [TMP0])".format(
-            self.simd_type.prefix())
+        global MIN_MAX_COUNT
+
+        cmp_tmp = "_cmp_tmp{}".format(int(MIN_MAX_COUNT / 2))
+        instruction = ""
+        if MIN_MAX_COUNT % 2 == 0:
+            instruction = "{} [CMP_TMP] = {}_cmpgt_epi64([V1], [V2]);".format(
+                self.simd_type.to_string(),
+                self.simd_type.prefix()).replace("[CMP_TMP]", cmp_tmp)
+            instruction += "\n"
+
+        instruction += "{}_blendv_epi8([V1], [V2], [CMP_TMP])".format(
+            self.simd_type.prefix()).replace("[CMP_TMP]", cmp_tmp)
+
+        MIN_MAX_COUNT += 1
         return instruction
 
 
@@ -482,14 +509,22 @@ class SIMD_Min_Fallback_u64(SIMD_Instruction):
                          Sign.UNSIGNED, 8, simd_type, constraints, weight)
 
     def generate_instruction(self):
-        instruction = "{} [TMP0] = {}_set1_epi64x((1UL) << 63);\n".format(
-            self.simd_type.to_string(), self.simd_type.prefix())
-        instruction += "{} [TMP1] = {}_cmpgt_epi64({}_xor_{}([V1], [TMP0]), {}_xor_{}([V2], [TMP0]));\n".format(
-            self.simd_type.to_string(), self.simd_type.prefix(),
-            self.simd_type.prefix(), self.simd_type.postfix(),
-            self.simd_type.prefix(), self.simd_type.postfix())
-        instruction += "{}_blendv_epi8([V1], [V2], [TMP1])".format(
-            self.simd_type.prefix())
+        global MIN_MAX_COUNT
+
+        cmp_tmp = "_cmp_tmp{}".format(int(MIN_MAX_COUNT / 2))
+        instruction = ""
+        if MIN_MAX_COUNT % 2 == 0:
+            instruction = "{} [TMP0] = {}_set1_epi64x((1UL) << 63);\n".format(
+                self.simd_type.to_string(), self.simd_type.prefix())
+            instruction += "{} [CMP_TMP] = {}_cmpgt_epi64({}_xor_{}([V1], [TMP0]), {}_xor_{}([V2], [TMP0]));\n".format(
+                self.simd_type.to_string(), self.simd_type.prefix(),
+                self.simd_type.prefix(), self.simd_type.postfix(),
+                self.simd_type.prefix(),
+                self.simd_type.postfix()).replace("[CMP_TMP]", cmp_tmp)
+
+        instruction += "{}_blendv_epi8([V1], [V2], [CMP_TMP])".format(
+            self.simd_type.prefix()).replace("[CMP_TMP]", cmp_tmp)
+        MIN_MAX_COUNT += 1
         return instruction
 
 
@@ -581,9 +616,18 @@ class SIMD_Max_Fallback_m64_s8(SIMD_Instruction):
                          Sign.SIGNED, 1, SIMD_m64(), ["MMX"], weight)
 
     def generate_instruction(self):
-        instruction = "__m64 [TMP0] = _mm_cmpgt_pi8([V1], [V2]);"
-        instruction += "\n"
-        instruction += "_mm_or_si64(_mm_and_si64([TMP0], [V1]), _mm_andnot_si64([TMP0], [V2]))"
+        global MIN_MAX_COUNT
+
+        cmp_tmp = "_cmp_tmp{}".format(int(MIN_MAX_COUNT / 2))
+        instruction = ""
+        if MIN_MAX_COUNT % 2 == 0:
+            instruction = "__m64 [CMP_TMP] = _mm_cmpgt_pi8([V1], [V2]);".replace(
+                "[CMP_TMP]", cmp_tmp)
+            instruction += "\n"
+        instruction += "_mm_or_si64(_mm_and_si64([CMP_TMP], [V1]), _mm_andnot_si64([CMP_TMP], [V2]))".replace(
+            "[CMP_TMP]", cmp_tmp)
+
+        MIN_MAX_COUNT += 1
         return instruction
 
 
@@ -593,11 +637,20 @@ class SIMD_Max_Fallback_m64_u16(SIMD_Instruction):
                          Sign.UNSIGNED, 2, SIMD_m64(), ["MMX"], weight)
 
     def generate_instruction(self):
-        instruction = "__m64 [TMP0] = _mm_set1_pi16(1 << 15);"
-        instruction += "\n"
-        instruction += "__m64 [TMP1] = _mm_cmpgt_pi16(_mm_xor_si64([V1], [TMP0]), _mm_xor_si64([V2], [TMP0]));"
-        instruction += "\n"
-        instruction += "_mm_or_si64(_mm_and_si64([TMP1], [V1]), _mm_andnot_si64([TMP1], [V2]))"
+        global MIN_MAX_COUNT
+
+        cmp_tmp = "_cmp_tmp{}".format(int(MIN_MAX_COUNT / 2))
+        instruction = ""
+        if MIN_MAX_COUNT % 2 == 0:
+            instruction = "__m64 [TMP0] = _mm_set1_pi16(1 << 15);"
+            instruction += "\n"
+            instruction += "__m64 [CMP_TMP] = _mm_cmpgt_pi16(_mm_xor_si64([V1], [TMP0]), _mm_xor_si64([V2], [TMP0]));".replace(
+                "[CMP_TMP]", cmp_tmp)
+            instruction += "\n"
+        instruction += "_mm_or_si64(_mm_and_si64([CMP_TMP], [V1]), _mm_andnot_si64([CMP_TMP], [V2]))".replace(
+            "[CMP_TMP]", cmp_tmp)
+
+        MIN_MAX_COUNT += 1
         return instruction
 
 
@@ -607,11 +660,19 @@ class SIMD_Max_Fallback_s64(SIMD_Instruction):
                          Sign.SIGNED, 8, simd_type, constraints, weight)
 
     def generate_instruction(self):
-        instruction = "{} [TMP0] = {}_cmpgt_epi64([V1], [V2]);".format(
-            self.simd_type.to_string(), self.simd_type.prefix())
-        instruction += "\n"
-        instruction += "{}_blendv_epi8([V2], [V1], [TMP0])".format(
-            self.simd_type.prefix())
+        global MIN_MAX_COUNT
+
+        cmp_tmp = "_cmp_tmp{}".format(int(MIN_MAX_COUNT / 2))
+        instruction = ""
+        if MIN_MAX_COUNT % 2 == 0:
+            instruction = "{} [CMP_TMP] = {}_cmpgt_epi64([V1], [V2]);".format(
+                self.simd_type.to_string(),
+                self.simd_type.prefix()).replace("[CMP_TMP]", cmp_tmp)
+            instruction += "\n"
+        instruction += "{}_blendv_epi8([V2], [V1], [CMP_TMP])".format(
+            self.simd_type.prefix()).replace("[CMP_TMP]", cmp_tmp)
+
+        MIN_MAX_COUNT += 1
         return instruction
 
 
@@ -621,14 +682,22 @@ class SIMD_Max_Fallback_u64(SIMD_Instruction):
                          Sign.UNSIGNED, 8, simd_type, constraints, weight)
 
     def generate_instruction(self):
-        instruction = "{} [TMP0] = {}_set1_epi64x((1UL) << 63);\n".format(
-            self.simd_type.to_string(), self.simd_type.prefix())
-        instruction += "{} [TMP1] = {}_cmpgt_epi64({}_xor_{}([V1], [TMP0]), {}_xor_{}([V2], [TMP0]));\n".format(
-            self.simd_type.to_string(), self.simd_type.prefix(),
-            self.simd_type.prefix(), self.simd_type.postfix(),
-            self.simd_type.prefix(), self.simd_type.postfix())
-        instruction += "{}_blendv_epi8([V2], [V1], [TMP1])".format(
-            self.simd_type.prefix())
+        global MIN_MAX_COUNT
+
+        cmp_tmp = "_cmp_tmp{}".format(int(MIN_MAX_COUNT / 2))
+        instruction = ""
+        if MIN_MAX_COUNT % 2 == 0:
+            instruction = "{} [TMP0] = {}_set1_epi64x((1UL) << 63);\n".format(
+                self.simd_type.to_string(), self.simd_type.prefix())
+            instruction += "{} [CMP_TMP] = {}_cmpgt_epi64({}_xor_{}([V1], [TMP0]), {}_xor_{}([V2], [TMP0]));\n".format(
+                self.simd_type.to_string(), self.simd_type.prefix(),
+                self.simd_type.prefix(), self.simd_type.postfix(),
+                self.simd_type.prefix(),
+                self.simd_type.postfix()).replace("[CMP_TMP]", cmp_tmp)
+        instruction += "{}_blendv_epi8([V2], [V1], [CMP_TMP])".format(
+            self.simd_type.prefix()).replace("[CMP_TMP]", cmp_tmp)
+
+        MIN_MAX_COUNT += 1
         return instruction
 
 
@@ -2927,7 +2996,6 @@ class Output_Formatter():
         return fmt_output
 
 
-
 class Output_Generator():
     def __init__(self, header_info, CAS_info, algorithm_name, depth, N,
                  scaled_N, sort_type):
@@ -3042,8 +3110,7 @@ class Output_Generator():
         return head
 
     def get_content(self):
-        return self.CAS_info.get().replace(
-                              "[FUNCNAME]", self.sort_to_str)
+        return self.CAS_info.get().replace("[FUNCNAME]", self.sort_to_str)
 
     def get_tail(self):
         tail = "\n\n"
@@ -3331,14 +3398,13 @@ class Compare_Exchange_Generator():
         if do_full is True and self.simd_type.sizeof() == 8:
             header.aliasing_m64 = True
 
-        
         self.SIMD_load = instruction_filter(
-            SIMD_Load(N, sort_type, did_scale_N).instructions,
-            self.sort_type, self.simd_type, ALIGNED_ACCESS, do_full)
+            SIMD_Load(N, sort_type, did_scale_N).instructions, self.sort_type,
+            self.simd_type, ALIGNED_ACCESS, do_full)
 
         self.SIMD_store = instruction_filter(
-            SIMD_Store(N, sort_type, did_scale_N).instructions,
-            self.sort_type, self.simd_type, ALIGNED_ACCESS, do_full)
+            SIMD_Store(N, sort_type, did_scale_N).instructions, self.sort_type,
+            self.simd_type, ALIGNED_ACCESS, do_full)
 
     def Generate_Instructions(self):
         best_load = best_instruction(self.SIMD_load)
@@ -3729,7 +3795,7 @@ class Best():
     def create_orders(self):
         all_weights = copy.deepcopy(self.options)
         all_weights = sorted(all_weights, key=lambda w: w.val())
-                
+
         self.pairs = copy.deepcopy(all_weights[0].algorithm.create_pairs())
         self.name = all_weights[0].algorithm.name
         self.N = all_weights[0].algorithm.N
@@ -3796,7 +3862,7 @@ class Network():
 
 
 class Builder():
-    def __init__(self, N, sort_type, algorithm_name, network_N = None):
+    def __init__(self, N, sort_type, algorithm_name, network_N=None):
         algorithm_name = algorithm_name.lower()
         header.reset()
         self.N = N
@@ -3811,20 +3877,20 @@ class Builder():
         network_N = self.network.network_N
         self.network_N = network_N
         self.network_name = self.network.algorithm.name
-        
+
         self.did_scale_N = network_N != self.N
 
         header.reset()
         self.cas_generator = Compare_Exchange_Generator(
-            self.network_pairs, N, self.did_scale_N,
-            self.network.sort_type)
+            self.network_pairs, N, self.did_scale_N, self.network.sort_type)
 
         self.cas_info = self.cas_generator.Generate_Instructions()
 
     def Stats(self):
         full_output = Output_Generator(header, self.cas_info,
                                        self.algorithm_name, self.network.depth,
-                                       self.N, self.did_scale_N, self.sort_type)
+                                       self.N, self.did_scale_N,
+                                       self.sort_type)
         return full_output.get_info()
 
     def Build(self):
