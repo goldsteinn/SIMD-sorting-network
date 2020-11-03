@@ -2998,11 +2998,12 @@ class Output_Formatter():
 
 class Output_Generator():
     def __init__(self, header_info, CAS_info, algorithm_name, depth, N,
-                 scaled_N, sort_type):
+                 raw_N, sort_type):
         self.header_info = header_info
         self.CAS_info = CAS_info
         self.algorithm_name = algorithm_name
         self.N = N
+        self.raw_N = raw_N
         self.depth = depth
         self.sort_type = sort_type
 
@@ -3014,7 +3015,10 @@ class Output_Generator():
         self.logic_ops = self.CAS_info_str.count(
             self.simd_type.prefix()) - self.loadnstore_ops
 
-        self.sort_to_str = "{}_{}_{}".format(algorithm_name, N,
+        self.sort_to_str_vec = "{}_{}_{}_vec".format(algorithm_name, N,
+                                             sort_type.to_string())
+
+        self.sort_to_str = "{}_{}_{}".format(algorithm_name, raw_N,
                                              sort_type.to_string())
 
         full_load_and_store = EXTRA_MEMORY
@@ -3035,7 +3039,8 @@ class Output_Generator():
         self.impl_info = [
             "Sorting Network Information:",
             "\tSort Size                        : {}".format(
-                self.N), "\tUnderlying Sort Type             : {}".format(
+                self.raw_N),
+            "\tUnderlying Sort Type             : {}".format(
                     self.sort_type.to_string()),
             "\tNetwork Generation Algorithm     : {}".format(algorithm_name),
             "\tNetwork Depth                    : {}".format(depth),
@@ -3053,9 +3058,10 @@ class Output_Generator():
             "\tInteger Aligned Load & Store     : {}".format(
                 str(ALIGNED_ACCESS)),
             "\tFull Load & Store                : {}".format(
-                str(full_load_and_store)),
-            "\tScaled Sorting Network           : {}".format(str(scaled_N))
+                str(full_load_and_store))
         ]
+        if self.raw_N != self.N:
+            self.impl_info.insert(2, "\tScaled Sort Size                 : {}".format(self.N))
 
         self.perf_notes = [
             "Performance Notes:",
@@ -3110,7 +3116,7 @@ class Output_Generator():
         return head
 
     def get_content(self):
-        return self.CAS_info.get().replace("[FUNCNAME]", self.sort_to_str)
+        return self.CAS_info.get().replace("[FUNCNAME]", self.sort_to_str).replace("[FUNCNAME_VEC]", self.sort_to_str_vec)
 
     def get_tail(self):
         tail = "\n\n"
@@ -3230,7 +3236,7 @@ class CAS_Output_Generator():
     def get_wrapper_content(self):
         content = self.load
         content += "\n"
-        content += "[V] = [FUNCNAME]_vec([V]);".replace("[V]", self.v_name)
+        content += "[V] = [FUNCNAME_VEC]([V]);".replace("[V]", self.v_name)
         content += "\n"
         content += "\n"
         content += self.store
@@ -3243,7 +3249,7 @@ class CAS_Output_Generator():
     def get_inner_head(self):
         head = "/* SIMD Sort */"
         head += "\n"
-        head += "[VTYPE] __attribute__((const)) [FUNCNAME]_vec([VTYPE] [V]) {".replace(
+        head += "[VTYPE] __attribute__((const)) [FUNCNAME_VEC]([VTYPE] [V]) {".replace(
             "[VTYPE]", self.simd_type.to_string()).replace("[V]", self.v_name)
         head += "\n"
         return head
@@ -3889,14 +3895,14 @@ class Builder():
     def Stats(self):
         full_output = Output_Generator(header, self.cas_info,
                                        self.algorithm_name, self.network.depth,
-                                       self.N, self.did_scale_N,
+                                       self.network_N, self.N,
                                        self.sort_type)
         return full_output.get_info()
 
     def Build(self):
         full_output = Output_Generator(header, self.cas_info,
                                        self.network_name, self.network.depth,
-                                       self.network_N, self.did_scale_N,
+                                       self.network_N, self.N, 
                                        self.sort_type)
         if DO_FORMAT is True:
             output_fmt = Output_Formatter(full_output.get())

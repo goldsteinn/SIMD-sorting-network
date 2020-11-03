@@ -107,7 +107,7 @@ for max_bytes in max_b:
                     true_T = ""
                     sort_impl = ""
                     for lines in open(tmp_file_full):
-                        if "Sort Size" in lines and ":" in lines:
+                        if "Sort Size" in lines and ":" in lines and "Scaled" not in lines:
                             tmp = lines.split()
                             true_N = int(tmp[len(tmp) - 1])
                         if "Network Generation Algorithm" in lines and ":" in lines:

@@ -82,7 +82,6 @@ Sorting Network Information:
         Aligned Load & Store             : True
         Integer Aligned Load & Store     : True
         Full Load & Store                : True
-        Scaled Sorting Network           : False
 
 Performance Notes:
 1) If you are sorting an array where there IS valid memory up to
