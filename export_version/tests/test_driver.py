@@ -35,7 +35,7 @@ for i in range(1, len(sys.argv)):
 
 use_manual_cmdline = len(sys.argv) > 1
 
-algorithms = ["best", "bitonic", "oddeven", "bosenelson", "batcher", "minimum"]
+algorithms = ["bitonic", "oddeven", "bosenelson", "batcher", "minimum", "best"]
 
 extra_flags_ops = ["-O uop", "-i", "--aligned", "-e"]
 
@@ -69,6 +69,7 @@ def get_flags(foptions):
 
 
 extra_flags = get_flags(extra_flags_ops)
+extra_flags.insert(0, "")
 
 signal.signal(signal.SIGINT, sig_exit)
 
@@ -102,6 +103,7 @@ for max_bytes in max_b:
                     print(running, end="", flush=True)
                     os.system(cmd)
 
+                    call_N = 0
                     true_N = 0
                     true_alg = ""
                     true_T = ""
@@ -110,6 +112,9 @@ for max_bytes in max_b:
                         if "Sort Size" in lines and ":" in lines and "Scaled" not in lines:
                             tmp = lines.split()
                             true_N = int(tmp[len(tmp) - 1])
+                        if "Sort Size" in lines and ":" in lines and "Scaled" in lines:
+                            tmp = lines.split()
+                            call_N = int(tmp[len(tmp) - 1])
                         if "Network Generation Algorithm" in lines and ":" in lines:
                             tmp = lines.split()
                             true_alg = tmp[len(tmp) - 1]
@@ -118,6 +123,8 @@ for max_bytes in max_b:
                             true_T = tmp[len(tmp) - 1]
 
                         sort_impl += lines
+                    if call_N == 0:
+                        call_N = true_N
 
                     export_driver_impl = ""
                     for lines in open(export_template_file):
@@ -130,11 +137,13 @@ for max_bytes in max_b:
                     export_driver_impl = export_driver_impl.replace(
                         "[N]", str(true_N))
 
-                    func_name = "{}_{}_{}".format(true_alg, str(true_N),
+                    func_name = "{}_{}_{}".format(true_alg, str(call_N),
                                                   true_T)
-                    
-                    sname = cmd_flags.replace("--", "-").replace(" -", "-").replace(" ", "_").replace("-", "_")
-          
+
+                    sname = cmd_flags.replace("--",
+                                              "-").replace(" -", "-").replace(
+                                                  " ", "_").replace("-", "_")
+
                     export_driver_impl = export_driver_impl.replace(
                         "[SORT_NAME]", func_name)
 
