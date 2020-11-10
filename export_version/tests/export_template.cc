@@ -64,6 +64,9 @@ struct sarr {
 #define N         [N]
 #define SORT_NAME [SORT_NAME]
 
+template<typename T, uint32_t n>
+struct vsort;
+
 [SORT_IMPL]
 
 

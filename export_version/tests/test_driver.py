@@ -97,6 +97,7 @@ for max_bytes in max_b:
                         cmd_flags = "-N {} -T {} {} --algorithm {}".format(
                             n, types[i], f, a)
 
+                    cmd_flags += " --template "
                     cmd = cmd.format(exporter_exe, cmd_flags)
 
                     running = "Running: {}".format(cmd_flags)
@@ -145,7 +146,7 @@ for max_bytes in max_b:
                                                   " ", "_").replace("-", "_")
 
                     export_driver_impl = export_driver_impl.replace(
-                        "[SORT_NAME]", func_name)
+                        "[SORT_NAME]", "vsort<{}, {}>::sort".format(true_T, n))
 
                     fname = test_dir + "/" + sname + ".cc"
                     f = open(fname, "w+")

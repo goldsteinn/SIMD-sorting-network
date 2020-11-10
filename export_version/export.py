@@ -90,6 +90,30 @@ parser.add_argument(
     help=
     "Set executable path for clang-format, default will use whats in your PATH"
 )
+parser.add_argument(
+    "--name",
+    action="store",
+    default="",
+    help=
+    "set function name for output, the memory version will be \"<name>\", the vec version will be \"<name>_vec\". Defaults to <algorithm_name>_<sort_size>_<type_size><type_sign>"
+)
+
+parser.add_argument("--outfile",
+                    action="store",
+                    default="",
+                    help="set output file. default is stdout")
+parser.add_argument(
+    "--fmode",
+    action="store",
+    default="",
+    help="set to either \"a\" (append) or \"w\" (write) for file mode")
+parser.add_argument(
+    "--template",
+    action="store_true",
+    default=False,
+    help=
+    "set to store output function in specialized template class. If specified template name will be \"func\" and memory sort will be \"sort\" and vec will be \"sort_vec\". The default template name will be \"vsort\""
+)
 
 
 def err_assert(check, msg):
@@ -105,6 +129,10 @@ class Optimization(Enum):
 
 
 # forward declaraction
+SORT_FUNC_NAME = ""
+TEMPLATED = False
+OUTFILE = ""
+FMODE = ""
 INSTRUCTION_OPT = Optimization.SPACE
 SIMD_RESTRICTIONS = ""
 ALIGNED_ACCESS = False
@@ -143,6 +171,29 @@ def arr_to_csv(arr, HEX=None):
         else:
             arr_str += str(arr[i])
     return arr_str
+
+def arr_to_padd_str(arr, padding):
+    plen = len(padding) - padding.count("\t")
+
+    out = ""
+    cur_len = plen
+    for a in arr:
+        new_line = False
+        if len(a) + 2 + cur_len > 64:
+            out += "\n"
+            new_line = True
+            for i in range(0, padding.count("\t")):
+                out += "\t"
+            for i in range(0, plen):
+                out += " "
+            cur_len = plen
+        if len(out) != 0 and new_line is False:
+            out += ", "
+        out += a
+        cur_len += len(a)
+    return out
+
+
 
 
 class Headers():
@@ -1566,6 +1617,104 @@ class SIMD_rotate(SIMD_Instruction):
                                            self.build_rotate_tail())
 
 
+class SIMD_Shuffle_Rotate(SIMD_Instruction):
+    def __init__(self, T_size, perm, simd_type, constraints, weight):
+        super().__init__("Override Error: " + self.__class__.__name__,
+                         Sign.NOT_SIGNED, T_size, simd_type, constraints,
+                         weight)
+
+        self.perm = copy.deepcopy(perm)
+        self.smask = None
+        self.r_ins = ""
+        self.adjusted_weight = False
+
+    def match(self, match_info):
+        return self.has_support() and self.match_sort_type(
+            match_info.sort_type) and self.match_simd_type(
+                match_info.simd_type) and (self.shuffle_mask() is True)
+
+    def create_mod_perm(self, scaled_perm, perm_mask):
+        modified_perm_list = []
+        for i in range(0, len(scaled_perm)):
+            modified_perm_list.append(int(-1))
+
+        for l in range(0, self.simd_type.sizeof(), 16):
+            for i in range(0, 8, 2):
+                to_idx = 3 - int(i / 2)
+                from_idx = 3 - ((perm_mask >> i) & 0x3)
+                for j in range(0, 4):
+                    tidx = to_idx * 4 + j + l
+                    fidx = from_idx * 4 + j + l
+                    modified_perm_list[tidx] = scaled_perm[fidx]
+
+        for i in range(0, len(modified_perm_list)):
+            err_assert(
+                modified_perm_list[i] != int(-1),
+                "index {} not correctly set\n\t{}\n\t{}\n\t{}".format(
+                    i, perm_mask, str(self.perm), str(modified_perm_list)))
+
+        return modified_perm_list
+
+    def shuffle_mask(self):
+        scaled_perm = scale_perm(self.T_size, 1, self.perm)
+        if grouped_by_lanes(4, 1, scaled_perm) is False or grouped_by_lanes(
+                16, 1, scaled_perm) is False:
+            return False
+
+        possibility = None
+        ppmask = None
+        all_perms = itertools.permutations([0, 1, 2, 3])
+        for perm_lists in list(all_perms):
+            pmask = perm_lists[0]
+            pmask |= perm_lists[1] << 2
+            pmask |= perm_lists[2] << 4
+            pmask |= perm_lists[3] << 6
+            if pmask == 0xe4:
+                continue
+
+            mplist = self.create_mod_perm(scaled_perm, pmask)
+
+            rotate = SIMD_rotate(1, mplist, self.simd_type,
+                                 ["AVX512f", "AVX512vl"], 0)
+            if rotate.match(
+                    Match_Info(Sort_Type(1, Sign.UNSIGNED),
+                               self.simd_type)) is False:
+                continue
+
+            if rotate.weight != 0:
+                if possibility is None:
+                    possibility = rotate
+                    ppmask = pmask
+                continue
+
+            self.smask = pmask
+            self.r_ins = rotate.generate_instruction()
+            return True
+
+        if possibility is not None:
+            if self.adjusted_weight is False:
+                self.weight += possibility.weight
+                self.adjusted_weight = True
+            self.smask = ppmask
+            self.r_ins = possibility.generate_instruction()
+            return True
+        return False
+
+    def generate_instruction(self):
+        err_assert(self.smask is not None, "something went wrong")
+        err_assert(self.r_ins != "", "something went wrong")
+
+        mask_t = "uint8_t"
+        if self.simd_type.sizeof() == 64:
+            mask_t = "_MM_PERM_ENUM"
+        instruction = "{} [TMP0] = {}_shuffle_epi32([V1], [MASK_T]([SHUFFLE_MASK]));".format(
+            self.simd_type.to_string(), self.simd_type.prefix()).replace(
+                "[MASK_T]", mask_t).replace("[SHUFFLE_MASK]",
+                                            str(hex(self.smask)))
+        instruction += "\n"
+        return instruction + self.r_ins.replace("[V1]", "[TMP0]")
+
+
 class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
     def __init__(self, T_size, prev_perm, perm, simd_type, constraints,
                  weight):
@@ -1700,8 +1849,9 @@ class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
             else:
                 perms.append([])
             ll_weight.append(0)
-            ibase.append("_mm256_permute2x128_si256([ARG1], [ARG2], [SHUFFLE_MASK])")
-            
+            ibase.append(
+                "_mm256_permute2x128_si256([ARG1], [ARG2], [SHUFFLE_MASK])")
+
             r, pmask, mweight, p = self.shuffle_mask_inner(8, False)
             rets.append(r)
             pmasks.append(pmask)
@@ -1723,7 +1873,8 @@ class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
             else:
                 perms.append([])
             ll_weight.append(0)
-            ibase.append("_mm512_shuffle_i64x2([ARG1], [ARG2], [SHUFFLE_MASK])")
+            ibase.append(
+                "_mm512_shuffle_i64x2([ARG1], [ARG2], [SHUFFLE_MASK])")
 
             r, pmask, mweight, p = self.shuffle_mask_inner(8, False)
             rets.append(r)
@@ -1752,13 +1903,14 @@ class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
         for i in range(0, len(rets)):
             if rets[i] is False:
                 continue
-            
+
             has_one = True
             if best_w_idx == int(-1):
                 best_w_idx = i
                 continue
 
-            if (mweights[i] + ll_weight[i]) < (mweights[best_w_idx] + ll_weight[best_w_idx]):
+            if (mweights[i] + ll_weight[i]) < (mweights[best_w_idx] +
+                                               ll_weight[best_w_idx]):
                 best_w_idx = i
 
         if has_one is False:
@@ -1771,8 +1923,6 @@ class SIMD_Permute_Move_Lanes_Shuffle(SIMD_Instruction):
         self.perm_mask = pmasks[best_w_idx]
         self.instruction_base = ibase[best_w_idx]
         return int(0)
-        
-
 
     def ll_shuffle_mask(self, pperm, mperm):
         if len(pperm) != len(mperm):
@@ -2132,12 +2282,16 @@ class SIMD_Permute():
             SIMD_Shuffle_As_Epi8(1, perm, SIMD_m128(), ["SSSE3"],
                                  choose_if(Optimization.UOP, 1, 2)),
             SIMD_rotate(1, perm, SIMD_m128(), ["AVX512f", "AVX512vl"], 0),
+            SIMD_Shuffle_Rotate(1, perm, SIMD_m128(), ["AVX512f", "AVX512vl"],
+                                choose_if(Optimization.SPACE, 1, 2)),
             # __m128i epi16 ordering
             SIMD_Shuffle_As_Epi32(2, perm, SIMD_m128(), ["SSE2"], 0),
             SIMD_Shuffle_As_Epi16(2, perm, SIMD_m128(), ["SSE2"], 0),
             SIMD_Shuffle_As_Epi8(2, perm, SIMD_m128(), ["SSSE3"],
                                  choose_if(Optimization.UOP, 1, 2)),
             SIMD_rotate(2, perm, SIMD_m128(), ["AVX512f", "AVX512vl"], 0),
+            SIMD_Shuffle_Rotate(2, perm, SIMD_m128(), ["AVX512f", "AVX512vl"],
+                                choose_if(Optimization.SPACE, 1, 2)),
             # __m128i epi32 ordering
             SIMD_Shuffle_As_Epi32(4, perm, SIMD_m128(), ["SSE2"], 0),
             SIMD_rotate(4, perm, SIMD_m128(), ["AVX512f", "AVX512vl"], 0),
@@ -2149,6 +2303,8 @@ class SIMD_Permute():
             SIMD_Shuffle_As_Epi16(1, perm, SIMD_m256(), ["AVX2"], 0),
             SIMD_Shuffle_As_Epi8(1, perm, SIMD_m256(), ["AVX2"],
                                  choose_if(Optimization.UOP, 1, 2)),
+            SIMD_Shuffle_Rotate(1, perm, SIMD_m256(), ["AVX512f", "AVX512vl"],
+                                choose_if(Optimization.SPACE, 1, 2)),
             SIMD_rotate(1, perm, SIMD_m256(), ["AVX512f", "AVX512vl"], 0),
             SIMD_Shuffle2_Blend(1, prev_perm, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Permutex2_Blend(1, prev_perm, perm, SIMD_m256(),
@@ -2170,6 +2326,8 @@ class SIMD_Permute():
             SIMD_Shuffle_As_Epi16(2, perm, SIMD_m256(), ["AVX2"], 0),
             SIMD_Shuffle_As_Epi8(2, perm, SIMD_m256(), ["AVX2"],
                                  choose_if(Optimization.UOP, 1, 2)),
+            SIMD_Shuffle_Rotate(2, perm, SIMD_m256(), ["AVX512f", "AVX512vl"],
+                                choose_if(Optimization.SPACE, 1, 2)),
             SIMD_rotate(2, perm, SIMD_m256(), ["AVX512f", "AVX512vl"], 0),
             SIMD_Shuffle2_Blend(2, prev_perm, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Permutex2_Blend(2, prev_perm, perm, SIMD_m256(),
@@ -2191,6 +2349,8 @@ class SIMD_Permute():
             SIMD_Shuffle_As_Epi32(4, perm, SIMD_m256(), ["AVX2"], 0),
             SIMD_Shuffle_As_Epi8(4, perm, SIMD_m256(), ["AVX2"],
                                  choose_if(Optimization.UOP, 1, 2)),
+            SIMD_Shuffle_Rotate(4, perm, SIMD_m256(), ["AVX512f", "AVX512vl"],
+                                choose_if(Optimization.SPACE, 1, 2)),
             SIMD_rotate(4, perm, SIMD_m256(), ["AVX512f", "AVX512vl"], 0),
             SIMD_Shuffle2_Blend(4, prev_perm, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Permutex2_Blend(4, prev_perm, perm, SIMD_m256(),
@@ -2221,6 +2381,8 @@ class SIMD_Permute():
             SIMD_Shuffle_As_Epi16(1, perm, SIMD_m512(), ["AVX512bw"], 0),
             SIMD_Shuffle_As_Epi8(1, perm, SIMD_m512(), ["AVX512bw"],
                                  choose_if(Optimization.UOP, 1, 2)),
+            SIMD_Shuffle_Rotate(1, perm, SIMD_m512(), ["AVX512f", "AVX512vl"],
+                                choose_if(Optimization.SPACE, 1, 2)),
             SIMD_rotate(1, perm, SIMD_m512(), ["AVX512f", "AVX512vl"], 0),
             SIMD_Shuffle2_Blend(1, prev_perm, perm, SIMD_m512(),
                                 ["AVX512vl", "AVX512f"], 1),
@@ -2243,6 +2405,8 @@ class SIMD_Permute():
             SIMD_Shuffle_As_Epi16(2, perm, SIMD_m512(), ["AVX512bw"], 0),
             SIMD_Shuffle_As_Epi8(2, perm, SIMD_m512(), ["AVX512bw"],
                                  choose_if(Optimization.UOP, 1, 2)),
+            SIMD_Shuffle_Rotate(1, perm, SIMD_m512(), ["AVX512f", "AVX512vl"],
+                                choose_if(Optimization.SPACE, 1, 2)),
             SIMD_rotate(2, perm, SIMD_m512(), ["AVX512f", "AVX512vl"], 0),
             SIMD_Shuffle2_Blend(2, prev_perm, perm, SIMD_m512(),
                                 ["AVX512vl", "AVX512f"], 1),
@@ -2264,6 +2428,8 @@ class SIMD_Permute():
             SIMD_Shuffle_As_Epi32(4, perm, SIMD_m512(), ["AVX512f"], 0),
             SIMD_Shuffle_As_Epi8(4, perm, SIMD_m512(), ["AVX512bw"],
                                  choose_if(Optimization.UOP, 1, 2)),
+            SIMD_Shuffle_Rotate(4, perm, SIMD_m512(), ["AVX512f", "AVX512vl"],
+                                choose_if(Optimization.SPACE, 1, 2)),
             SIMD_rotate(4, perm, SIMD_m512(), ["AVX512f", "AVX512vl"], 0),
             SIMD_Shuffle2_Blend(4, prev_perm, perm, SIMD_m512(),
                                 ["AVX512vl", "AVX512f"], 1),
@@ -3506,9 +3672,14 @@ class Output_Formatter():
 class Output_Generator():
     def __init__(self, header_info, CAS_info, algorithm_name, depth, N, raw_N,
                  sort_type):
+
         self.header_info = header_info
         self.CAS_info = CAS_info
         self.algorithm_name = algorithm_name
+        self.vec_algorithm_name = algorithm_name
+        self.base_algorithm_name = algorithm_name
+        if N != raw_N:
+            self.base_algorithm_name = "best"
         self.N = N
         self.raw_N = raw_N
         self.depth = depth
@@ -3522,11 +3693,26 @@ class Output_Generator():
         self.logic_ops = self.CAS_info_str.count(
             self.simd_type.prefix()) - self.loadnstore_ops
 
-        self.sort_to_str_vec = "{}_{}_{}_vec".format(algorithm_name, N,
-                                                     sort_type.to_string())
+        global TEMPLATED
+        self.templated = TEMPLATED
 
-        self.sort_to_str = "{}_{}_{}".format(algorithm_name, N,
-                                             sort_type.to_string())
+        global SORT_FUNC_NAME
+        self.sort_to_str = SORT_FUNC_NAME
+        self.sort_to_str_v = self.sort_to_str + "_vec"
+        if self.sort_to_str == "":
+            if TEMPLATED is False:
+                sign = "s"
+                if sort_type.sign == Sign.UNSIGNED:
+                    sign = "u"
+                self.sort_to_str = "{}_{}_{}{}".format(self.base_algorithm_name,
+                                                   raw_N, sort_type.sizeof(),
+                                                   sign)
+                self.sort_to_str_v = "{}_{}_{}{}_vec".format(self.vec_algorithm_name,
+                                                         N, sort_type.sizeof(),
+                sign)
+            else:
+                self.sort_to_str = "vsort"
+                self.sort_to_str_v = ""
 
         full_load_and_store = EXTRA_MEMORY
         if full_load_and_store is False:
@@ -3556,7 +3742,7 @@ class Output_Generator():
             "\tSIMD Type                        : {}".format(
                 self.simd_type.to_string()),
             "\tSIMD Instruction Set(s) Used     : {}".format(
-                arr_to_csv(self.CAS_info.get_instruction_sets())),
+                arr_to_padd_str(self.CAS_info.get_instruction_sets(), "\tSIMD Instruction Set(s) Used     : ")),
             "\tSIMD Instruction Set(s) Excluded : {}".format(
                 simd_restrictions),
             "\tAligned Load & Store             : {}".format(
@@ -3585,7 +3771,7 @@ class Output_Generator():
             for w in words:
                 line_len += (len(w) + 1)
                 self.perf_notes[i] += w + " "
-                if line_len > 64:
+                if line_len > 56:
                     line_len = 0
                     self.perf_notes[i] += "\n"
 
@@ -3604,11 +3790,10 @@ class Output_Generator():
     def get(self):
         return self.get_header() + self.get_content() + self.get_tail()
 
+
     def get_header(self):
-        head = "#ifndef _SIMD_SORT_{}_H_".format(self.sort_to_str)
+        head = ""
         head += "\n"
-        head += "#define _SIMD_SORT_{}_H_".format(self.sort_to_str)
-        head += "\n\n"
         head += "/*"
         head += "\n\n"
         head += arr_to_str(self.impl_info)
@@ -3619,18 +3804,37 @@ class Output_Generator():
         head += "\n\n"
         head += self.header_info.get_headers(self.sort_type)
         head += "\n\n"
+        if self.templated is True:
+            head += "template<typename T, uint32_t n>"
+            head += "\n"
+            head += "struct {};".format("vsort" if SORT_FUNC_NAME == "" else SORT_FUNC_NAME)
+            head += "\n\n"
 
+            head += "template<>"
+            head += "\n"
+            head += "struct {}<{}, {}>".format(self.sort_to_str,
+                                              self.sort_type.to_string(),
+                                              self.raw_N)
+            head += " {"
+            head += "\n"
         return head
 
     def get_content(self):
-        return self.CAS_info.get().replace("[FUNCNAME]",
-                                           self.sort_to_str).replace(
-                                               "[FUNCNAME_VEC]",
-                                               self.sort_to_str_vec)
+        if self.templated is True:
+            return self.CAS_info.get().replace("[FUNCNAME]", "sort").replace(
+                "[FUNCNAME_VEC]", "sort_vec")
+        else:
+            return self.CAS_info.get().replace("[FUNCNAME]",
+                                               self.sort_to_str).replace(
+                                                   "[FUNCNAME_VEC]",
+                                                   self.sort_to_str_v)
 
     def get_tail(self):
-        tail = "\n\n"
-        tail += "#endif"
+        tail = ""
+        if self.templated is True:
+            tail += "};"
+            tail += "\n"
+        tail += "\n\n"
         return tail
 
 
@@ -3736,8 +3940,18 @@ class CAS_Output_Generator():
         self.store += ";\n"
 
     def get_wrapper_head(self):
-        head = "/* Wrapper For SIMD Sort */"
+        head = ""
+        global TEMPLATED
+        if TEMPLATED is False:
+            head += "#ifndef _SIMD_SORT_ARR_[FUNCNAME]_H_"
+            head += "\n"
+            head += "#define _SIMD_SORT_ARR_[FUNCNAME]_H_"
+            head += "\n\n"
+
+        head += "/* Wrapper For SIMD Sort */"
         head += "\n"
+        if TEMPLATED is True:
+            head += "static "
         head += "void inline __attribute__((always_inline)) [FUNCNAME]([VTYPE] * const [ARR]) {".replace(
             "[ARR]", self.arr_name).replace("[VTYPE]",
                                             self.sort_type.to_string())
@@ -3755,11 +3969,25 @@ class CAS_Output_Generator():
 
     def get_wrapper_tail(self):
         tail = "}\n"
+        global TEMPLATED
+        if TEMPLATED is False:
+            tail += "#endif"
+        tail += "\n"
         return tail
 
     def get_inner_head(self):
-        head = "/* SIMD Sort */"
+        head = ""
+        global TEMPLATED
+        if TEMPLATED is False:
+            head += "#ifndef _SIMD_SORT_VEC_[FUNCNAME_VEC]_H_"
+            head += "\n"
+            head += "#define _SIMD_SORT_VEC_[FUNCNAME_VEC]_H_"
+            head += "\n\n"
+
+        head += "/* SIMD Sort */"
         head += "\n"
+        if TEMPLATED is True:
+            head += "static "
         head += "[VTYPE] __attribute__((const)) [FUNCNAME_VEC]([VTYPE] [V]) {".replace(
             "[VTYPE]", self.simd_type.to_string()).replace("[V]", self.v_name)
         head += "\n"
@@ -3801,6 +4029,10 @@ class CAS_Output_Generator():
     def get_inner_tail(self):
         tail = "return [V];\n".replace("[V]", self.last_v_name)
         tail += "}\n"
+        global TEMPLATED
+        if TEMPLATED is False:
+            tail += "#endif"
+        tail += "\n"
         return tail
 
 
@@ -4159,7 +4391,7 @@ class Bitonic():
         self.name = "bitonic"
         self.N = N
         self.pairs = []
-
+        self.depth = None
     def bitonic_merge(self, lo, n, direction):
         if n > 1:
             m = next_p2(n) >> 1
@@ -4199,7 +4431,7 @@ class Batcher():
         self.name = "batcher"
         self.N = N
         self.pairs = []
-
+        self.depth = None
     def valid(self):
         return True
 
@@ -4229,7 +4461,7 @@ class Oddeven():
         self.name = "oddeven"
         self.N = N
         self.pairs = []
-
+        self.depth = None
     def add_pair(self, i, j):
         if i < self.N and j < self.N:
             self.pairs.append(i)
@@ -4265,7 +4497,7 @@ class Bosenelson():
         self.name = "bosenelson"
         self.N = N
         self.pairs = []
-
+        self.depth = None
     def bn_merge(self, i, length_i, j, length_j):
         if length_i == 1 and length_j == 1:
             self.pairs.append(i)
@@ -4315,7 +4547,7 @@ class Minimum():
         self.name = "minimum"
         self.N = N
         self.pairs = copy.deepcopy(min_pairs()[min(N, 32)])
-
+        self.depth = None
     def valid(self):
         return self.N <= 32
 
@@ -4345,6 +4577,7 @@ class Best():
         self.name = "best"
         self.N = N
         self.pairs = []
+        self.depth = None
 
         self.options = []
 
@@ -4380,12 +4613,13 @@ class Best():
 
         self.pairs = copy.deepcopy(all_weights[0].npairs)
         self.name = all_weights[0].algorithm.name
+        self.depth = all_weights[0].depth_weight
         self.N = all_weights[0].algorithm.N
 
     def create_pairs(self):
         self.create_options()
         self.create_orders()
-        return self.pairs
+        return self.pairs, self.depth
 
 
 class Algorithms():
@@ -4442,6 +4676,7 @@ class Network():
         transformer.group()
         transformer.permutation()
         self.depth = transformer.depth
+        self.algorithm.depth = self.depth
         return transformer.pairs
 
 
@@ -4459,7 +4694,8 @@ class Builder():
         self.network = Network(network_N, network_N > N, sort_type,
                                algorithm_name)
         if algorithm_name.lower() == "best":
-            self.network_pairs = self.network.create_pairs()
+            self.network_pairs, self.network.depth = self.network.create_pairs()
+
         else:
             self.network_pairs = self.network.get_network()
         network_N = self.network.network_N
@@ -4481,14 +4717,18 @@ class Builder():
         return full_output.get_info()
 
     def Build(self):
+
         full_output = Output_Generator(header, self.cas_info,
-                                       self.network_name, self.network.depth,
-                                       self.network_N, self.N, self.sort_type)
+                                           self.network_name, self.network.depth,
+                                           self.network_N, self.N, self.sort_type)
+        out = full_output.get()
+            
         if DO_FORMAT is True:
-            output_fmt = Output_Formatter(full_output.get())
+            output_fmt = Output_Formatter(out)
             return output_fmt.get_fmt_output()
         else:
-            return full_output.get()
+            return out
+
 
 
 ######################################################################
@@ -4502,8 +4742,19 @@ def main():
     global DO_FORMAT
     global CLANG_FORMAT_EXE
     global USER_TYPE
+    global SORT_FUNC_NAME
+    global TEMPLATED
+    global OUTFILE
+    global FMODE
+
 
     args = parser.parse_args()
+
+    FMODE = args.fmode
+    OUTFILE = args.outfile
+
+    SORT_FUNC_NAME = args.name
+    TEMPLATED = args.template
 
     user_opt = args.optimization
     err_assert(user_opt == "space" or user_opt == "uop",
@@ -4583,7 +4834,25 @@ def main():
         "\"algorithm\" flag doesn't match")
 
     network_builder = Builder(user_N, user_T, user_Algorithm)
-    print(network_builder.Build())
+
+    if OUTFILE == "":
+        print(network_builder.Build())
+    else:
+        mode = FMODE
+        if mode == "":
+            mode = "w+"
+        if mode != "a" and mode != "w" and mode != "w+" and mode != "a+":
+            err_assert(False, "\"fmode\": {} does not correspond to a valid file write mode flag")
+
+        try:
+            f = open(OUTFILE, mode)
+            f.write(network_builder.Build())
+            f.flush()
+            f.close()
+        except IOError:
+            err_assert(False, "Error writing to \"outfile\": {}".format(OUTFILE))
+
+
 
 
 ######################################################################
