@@ -146,7 +146,7 @@ for max_bytes in max_b:
                                                   " ", "_").replace("-", "_")
 
                     export_driver_impl = export_driver_impl.replace(
-                        "[SORT_NAME]", "vsort<{}, {}>::sort".format(true_T, n))
+                        "[SORT_NAME]", "vsort<{}, {}>::sort".format("TYPE", "N"))
 
                     fname = test_dir + "/" + sname + ".cc"
                     f = open(fname, "w+")
