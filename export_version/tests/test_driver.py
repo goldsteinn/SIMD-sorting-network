@@ -12,10 +12,9 @@ print(
     "To manually run a single test case; pass the test case flags as commandline arguments"
 )
 types = [
-    "uint8_t", "uint16_t", "uint32_t", "uint64_t", "int8_t", "int16_t",
-    "int32_t", "int64_t"
+    "uint8_t", "uint16_t", "uint32_t", "uint64_t"#, "int8_t", "int16_t", "int32_t", "int64_t"
 ]
-sizes = [1, 2, 4, 8, 1, 2, 4, 8]
+sizes = [1, 2, 4, 8]#, 1, 2, 4, 8]
 
 # Check to see if CPU supports AVX512 tests
 max_b = [32]

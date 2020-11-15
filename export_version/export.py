@@ -1414,6 +1414,8 @@ class SIMD_Shuffle2_As_PS(SIMD_Instruction):
         shuf_mask = shuf_epi32.shuffle_mask()
         if shuf_mask == int(-1):
             return int(-1)
+        if in_same_lanes(8, self.T_size, self.perm) is False:
+            return int(-1)
 
         blend_mask = int(-1)
         using_perm = None
