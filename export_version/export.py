@@ -1389,6 +1389,100 @@ class SIMD_Shuffle_As_si128(SIMD_Instruction):
             "[SHUFFLE_MASK]", str(hex(self.shuffle_mask())))
 
 
+class SIMD_Shuffle2_As_PS(SIMD_Instruction):
+    def __init__(self, T_size, perm, prev_perm, simd_type, constraints,
+                 weight):
+        super().__init__("Override Error: " + self.__class__.__name__,
+                         Sign.NOT_SIGNED, T_size, simd_type, constraints,
+                         weight)
+
+        self.shuf_mask = int(-1)
+        self.perm = copy.deepcopy(perm)
+        self.prev_perm = copy.deepcopy(prev_perm)
+        self.vargs = ["", ""]
+
+    def match(self, match_info):
+        return super().match(match_info) and (self.shuffle_mask() != int(-1))
+
+    def shuffle_mask(self):
+        if len(self.prev_perm) != len(self.perm):
+            return int(-1)
+
+        shuf_epi32 = SIMD_Shuffle_As_Epi32(self.T_size, self.perm,
+                                           self.simd_type, self.constraints,
+                                           self.weight)
+        shuf_mask = shuf_epi32.shuffle_mask()
+        if shuf_mask == int(-1):
+            return int(-1)
+
+        blend_mask = int(-1)
+        using_perm = None
+        if self.T_size < 4:
+            # this was already checked in shuffle mask creation but what the hell, right?
+            if can_shrink(self.T_size, 4, self.perm) is False:
+                return int(-1)
+
+            using_perm = shrink_perm(self.T_size, 4, self.perm)
+            blend_mask = blend_mask_lt_T(self.prev_perm, self.T_size, 4)
+        else:
+            using_perm = expand_perm(self.T_size, 4, self.perm)
+            blend_mask = blend_mask_ge_T(self.prev_perm, self.T_size,
+                                         4)
+
+        if blend_mask == int(-1):
+            return int(-1)
+
+        A_bit = int(-1)
+        B_bit = int(-1)
+
+        for i in range(0, len(using_perm), 2):
+            blend_bit = ((blend_mask >> (i)) & 0x3)
+            if blend_bit != 0x3 and blend_bit != 0:
+                return int(-1)
+            if i % 4 < 2:
+                if A_bit == int(-1):
+                    A_bit = blend_bit
+                elif A_bit != blend_bit:
+                    return int(-1)
+            else:
+                if B_bit == int(-1):
+                    B_bit = blend_bit
+                elif B_bit != blend_bit:
+                    return int(-1)
+
+            if A_bit == B_bit:
+                return int(-1)
+
+        if A_bit == 1:
+            self.vargs[0] = "[V1]"
+            self.vargs[1] = "[V2]"
+        else:
+            self.vargs[0] = "[V2]"
+            self.vargs[1] = "[V1]"
+
+        self.shuffle_mask = shuf_mask
+        return shuf_mask
+
+    def generate_instruction(self):
+        err_assert(self.shuffle_mask != int(-1), "no mask for instruction")
+        cast_to_ps = "{}_cast{}_ps".format(self.simd_type.prefix(),
+                                           self.simd_type.postfix())
+        cast_to_i = "{}_castps_{}".format(self.simd_type.prefix(),
+                                          self.simd_type.postfix())
+
+        instruction = "[CAST_TO_I]({}_shuffle_ps([CAST_TO_PS]([ARG1]), [CAST_TO_PS]([ARG2]), [SHUFFLE_MASK]))".format(
+            self.simd_type.prefix())
+        instruction = instruction.replace("[CAST_TO_I]", cast_to_i).replace(
+            "[CAST_TO_PS]", cast_to_ps)
+        instruction = instruction.replace("[ARG1]", self.vargs[0]).replace(
+            "[ARG2]", self.vargs[1])
+        instruction = instruction.replace("[SHUFFLE_MASK]",
+                                          str(hex(self.shuffle_mask)))
+        return instruction
+
+        self.vargs = ["", ""]
+
+
 class SIMD_Shuffle_As_Epi32(SIMD_Instruction):
     def __init__(self, T_size, perm, simd_type, constraints, weight):
         super().__init__("Override Error: " + self.__class__.__name__,
@@ -1562,8 +1656,8 @@ class SIMD_Alignr(SIMD_Instruction):
         if in_same_lanes(group_size, self.T_size, self.perm) is False:
             return False
 
-        cur_dst = ((
-            (len(self.perm) - 1)) - self.perm[0]) % int(group_size / self.T_size)
+        cur_dst = (((len(self.perm) - 1)) - self.perm[0]) % int(
+            group_size / self.T_size)
         for i in range(0, len(self.perm)):
             idst = (((len(self.perm) - 1) -
                      (i)) - self.perm[i]) % int(group_size / self.T_size)
@@ -1611,7 +1705,8 @@ class SIMD_Alignr(SIMD_Instruction):
         if self.simd_type.sizeof() != 8:
             epi = "e" + epi
         return "{}_alignr_{}8([ARG1], [ARG2], [SHIFT_WIDTH])".format(
-            self.simd_type.prefix(), epi).replace("[ARG1]", self.vargs[0]).replace(
+            self.simd_type.prefix(),
+            epi).replace("[ARG1]", self.vargs[0]).replace(
                 "[ARG2]",
                 self.vargs[1]).replace("[SHIFT_WIDTH]",
                                        str(self.shift_width * self.T_size))
@@ -2355,6 +2450,7 @@ class SIMD_Permute():
                 SIMD_m64(), ["MMX", "SSSE3"], 2),
             ###################################################################
             # __m128i epi8 ordering
+            SIMD_Shuffle2_As_PS(1, perm, prev_perm, SIMD_m128(), ["AVX"], 0),
             SIMD_Shuffle_As_Epi32(1, perm, SIMD_m128(), ["SSE2"], 1),
             SIMD_Alignr(1, perm, prev_perm, SIMD_m128(), ["SSE3"], 0),
             SIMD_Shuffle_As_Epi16(1, perm, SIMD_m128(), ["SSE2"], 1),
@@ -2364,6 +2460,7 @@ class SIMD_Permute():
             SIMD_Shuffle_Rotate(1, perm, SIMD_m128(), ["AVX512f", "AVX512vl"],
                                 choose_if(Optimization.SPACE, 2, 3)),
             # __m128i epi16 ordering
+            SIMD_Shuffle2_As_PS(2, perm, prev_perm, SIMD_m128(), ["AVX"], 0),
             SIMD_Shuffle_As_Epi32(2, perm, SIMD_m128(), ["SSE2"], 1),
             SIMD_Alignr(2, perm, prev_perm, SIMD_m128(), ["SSE3"], 0),
             SIMD_Shuffle_As_Epi16(2, perm, SIMD_m128(), ["SSE2"], 1),
@@ -2373,14 +2470,17 @@ class SIMD_Permute():
             SIMD_Shuffle_Rotate(2, perm, SIMD_m128(), ["AVX512f", "AVX512vl"],
                                 choose_if(Optimization.SPACE, 2, 3)),
             # __m128i epi32 ordering
+            SIMD_Shuffle2_As_PS(4, perm, prev_perm, SIMD_m128(), ["AVX"], 0),
             SIMD_Shuffle_As_Epi32(4, perm, SIMD_m128(), ["SSE2"], 1),
             SIMD_Alignr(4, perm, prev_perm, SIMD_m128(), ["SSE3"], 0),
             SIMD_rotate(4, perm, SIMD_m128(), ["AVX512f", "AVX512vl"], 1),
             # __m128i epi64 ordering
+            SIMD_Shuffle2_As_PS(8, perm, prev_perm, SIMD_m256(), ["AVX"], 0),
             SIMD_Shuffle_As_Epi32(8, perm, SIMD_m128(), ["SSE2"], 1),
             SIMD_Alignr(8, perm, prev_perm, SIMD_m128(), ["SSE3"], 0),
             ###################################################################
             # __m256i epi8 ordering
+            SIMD_Shuffle2_As_PS(1, perm, prev_perm, SIMD_m128(), ["AVX"], 0),
             SIMD_Shuffle_As_Epi32(1, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Alignr(1, perm, prev_perm, SIMD_m256(), ["AVX2"], 0),
             SIMD_Shuffle_As_Epi16(1, perm, SIMD_m256(), ["AVX2"], 1),
@@ -2404,8 +2504,9 @@ class SIMD_Permute():
                 choose_if(Optimization.UOP, 4, 5)),
             # this is a super poorly optimized case. irrelivant of what we select with Move_Lanes
             SIMD_Permutex_Fallback(1, perm, SIMD_m256(), ["AVX2", "AVX"], 50),
-            
+
             # __m256i epi16 ordering
+            SIMD_Shuffle2_As_PS(2, perm, prev_perm, SIMD_m256(), ["AVX"], 0),
             SIMD_Shuffle_As_Epi32(2, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Alignr(2, perm, prev_perm, SIMD_m256(), ["AVX2"], 0),
             SIMD_Shuffle_As_Epi16(2, perm, SIMD_m256(), ["AVX2"], 1),
@@ -2430,8 +2531,9 @@ class SIMD_Permute():
 
             # this is a super poorly optimized case. irrelivant of what we select with Move_Lanes
             SIMD_Permutex_Fallback(2, perm, SIMD_m256(), ["AVX2", "AVX"], 50),
-            
+
             # __m256i epi32 ordering
+            SIMD_Shuffle2_As_PS(4, perm, prev_perm, SIMD_m256(), ["AVX"], 0),
             SIMD_Shuffle_As_Epi32(4, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Alignr(4, perm, prev_perm, SIMD_m256(), ["AVX2"], 0),
             SIMD_Shuffle_As_Epi8(4, perm, SIMD_m256(), ["AVX2"],
@@ -2454,6 +2556,7 @@ class SIMD_Permute():
                 choose_if(Optimization.UOP, 4, 5)),
 
             # __m256i epi64 ordering
+            SIMD_Shuffle2_As_PS(8, perm, prev_perm, SIMD_m256(), ["AVX"], 0),
             SIMD_Shuffle_As_Epi32(8, perm, SIMD_m256(), ["AVX2"], 1),
             SIMD_Alignr(8, perm, prev_perm, SIMD_m256(), ["AVX2"], 0),
             SIMD_Shuffle2_Blend(8, prev_perm, perm, SIMD_m256(), ["AVX2"], 2),
@@ -2465,6 +2568,7 @@ class SIMD_Permute():
 
             ###################################################################
             # __m512i epi8 ordering
+            SIMD_Shuffle2_As_PS(1, perm, prev_perm, SIMD_m512(), ["AVX512f"], 0),
             SIMD_Shuffle_As_Epi32(1, perm, SIMD_m512(), ["AVX512f"], 1),
             SIMD_Alignr(1, perm, prev_perm, SIMD_m512(), ["AVX512bw"], 0),
             SIMD_Shuffle_As_Epi16(1, perm, SIMD_m512(), ["AVX512bw"], 1),
@@ -2490,6 +2594,7 @@ class SIMD_Permute():
                 1, perm, SIMD_m512(), ["AVX512vbmi", "AVX512f"],
                 choose_if(Optimization.UOP, 4, 5)),
             # __m512i epi16 ordering
+            SIMD_Shuffle2_As_PS(2, perm, prev_perm, SIMD_m512(), ["AVX512f"], 0),
             SIMD_Shuffle_As_Epi32(2, perm, SIMD_m512(), ["AVX512f"], 1),
             SIMD_Alignr(2, perm, prev_perm, SIMD_m512(), ["AVX512bw"], 0),
             SIMD_Shuffle_As_Epi16(2, perm, SIMD_m512(), ["AVX512bw"], 1),
@@ -2515,6 +2620,7 @@ class SIMD_Permute():
                 2, perm, SIMD_m512(), ["AVX512bw", "AVX512f"],
                 choose_if(Optimization.UOP, 4, 5)),
             # __m512i epi32 ordering
+            SIMD_Shuffle2_As_PS(4, perm, prev_perm, SIMD_m512(), ["AVX512f"], 0),
             SIMD_Shuffle_As_Epi32(4, perm, SIMD_m512(), ["AVX512f"], 1),
             SIMD_Alignr(4, perm, prev_perm, SIMD_m512(), ["AVX512bw"], 0),
             SIMD_Shuffle_As_Epi8(4, perm, SIMD_m512(), ["AVX512bw"],
@@ -2540,6 +2646,7 @@ class SIMD_Permute():
                 choose_if(Optimization.UOP, 4, 5)),
 
             # __m512i epi64 ordering
+            SIMD_Shuffle2_As_PS(8, perm, prev_perm, SIMD_m512(), ["AVX512f"], 0),
             SIMD_Shuffle_As_Epi32(8, perm, SIMD_m512(), ["AVX512f"], 1),
             SIMD_Alignr(8, perm, prev_perm, SIMD_m512(), ["AVX512bw"], 0),
             SIMD_Shuffle_As_Epi8(8, perm, SIMD_m512(), ["AVX512bw"],
