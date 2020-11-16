@@ -4202,6 +4202,7 @@ class CAS_Output_Generator():
                 err_assert(len(ordered_content) != 0, "about to have OOB")
                 tmp = ordered_content[len(ordered_content) - 1]
                 ordered_content[len(ordered_content) - 1] = comments
+                ordered_content.append("/* Reordering Permutate and Blend for shorted dependency chain */\n")
                 perm_pieces = perm.split("\n")
                 ordered_content.append(perm_pieces[0] + "\n")
                 ordered_content.append(tmp)
