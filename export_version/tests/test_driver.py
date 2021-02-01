@@ -17,9 +17,9 @@ types = [
 sizes = [1, 2, 4, 8, 1, 2, 4, 8]
 
 # Check to see if CPU supports AVX512 tests
-max_b = [32]
+max_b = [64, 32]
 avx512_flags = ["AVX512f", "AVX512vl", "AVX512bw", "AVX512vbmi"]
-add_64 = True
+add_64 = False #True
 for f in avx512_flags:
     if cpufeature.CPUFeature[f] is False:
         add_64 = False
