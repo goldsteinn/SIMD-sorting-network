@@ -842,7 +842,7 @@ class SIMD_Max():
                            Sign.UNSIGNED, 8,perm, is_2, is_mask_blend,
                            is_avx512, SIMD_m128(), ["AVX512vl", "AVX512f"], 0),
 
-            
+
             # Fallbacks
             SIMD_Max_Fallback_s64(SIMD_m128(), ["SSE4.2", "SSE4.1"], 2),
             SIMD_Max_Fallback_u64(SIMD_m128(), ["SSE2", "SSE4.2", "SSE4.1"],
@@ -910,7 +910,7 @@ class SIMD_Max():
                              SIMD_m512(), ["AVX512f"], 1),
             SIMD_Instruction("_mm512_mask_max_epu64([V1], [V2])", Sign.UNSIGNED, 8,
                              SIMD_m512(), ["AVX512f"], 1),
-            
+
             SIMD_Max_Blend("_mm512_mask_max_epi8([V0], [BLEND_MASK], [V1], [V2])",
                            Sign.SIGNED, 1,perm, is_2, is_mask_blend, is_avx512, SIMD_m512(),
                            ["AVX512bw"], 0),
@@ -1657,7 +1657,7 @@ class SIMD_Shuffle_As_Epi32(SIMD_Instruction):
         mask_t = "uint8_t"
         if self.simd_type.sizeof() == 64:
             mask_t = "_MM_PERM_ENUM"
-        return "{}_shuffle_epi32([V1], [MASK_T]([SHUFFLE_MASK]))".format(
+        return "{}_shuffle_epi32([V1], ([MASK_T])([SHUFFLE_MASK]))".format(
             self.simd_type.prefix()).replace("[MASK_T]", mask_t).replace(
                 "[SHUFFLE_MASK]", str(hex(self.shuffle_mask())))
 
@@ -2026,7 +2026,7 @@ class SIMD_Shuffle_Rotate(SIMD_Instruction):
         mask_t = "uint8_t"
         if self.simd_type.sizeof() == 64:
             mask_t = "_MM_PERM_ENUM"
-        instruction = "{} [TMP0] = {}_shuffle_epi32([V1], [MASK_T]([SHUFFLE_MASK]));".format(
+        instruction = "{} [TMP0] = {}_shuffle_epi32([V1], ([MASK_T])([SHUFFLE_MASK]));".format(
             self.simd_type.to_string(), self.simd_type.prefix()).replace(
                 "[MASK_T]", mask_t).replace("[SHUFFLE_MASK]",
                                             str(hex(self.smask)))
@@ -3963,6 +3963,7 @@ class Output_Formatter():
 
             stdout_data, stderr_data = sproc.communicate(
                 input=self.raw_output.encode(), timeout=2)
+            
             if sproc.returncode != 0:
                 return self.fallback_fmt()
             if len(stderr_data) != 0:
@@ -4334,8 +4335,7 @@ class CAS_Output_Generator():
 
         head += "/* Wrapper For SIMD Sort */"
         head += "\n"
-        if TEMPLATED is True:
-            head += "static "
+        head += "static "
         head += "void inline __attribute__((always_inline)) [FUNCNAME]([VTYPE] * const [ARR]) {".replace(
             "[ARR]", self.arr_name).replace("[VTYPE]",
                                             self.sort_type.to_string())
@@ -4370,8 +4370,7 @@ class CAS_Output_Generator():
 
         head += "/* SIMD Sort */"
         head += "\n"
-        if TEMPLATED is True:
-            head += "static "
+        head += "static "
         head += "[VTYPE] __attribute__((const)) [FUNCNAME_VEC]([VTYPE] [V]) {".replace(
             "[VTYPE]", self.simd_type.to_string()).replace("[V]", self.v_name)
         head += "\n"
@@ -4645,7 +4644,7 @@ class Compare_Exchange_Generator():
             self.simd_type)
 
         best_permutate = best_instruction(SIMD_permute)
-        
+
         self.total_blend_weight += best_blend.weight
         self.total_perm_weight += best_permutate.weight
 
